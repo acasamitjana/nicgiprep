@@ -1,0 +1,25 @@
+{
+    "session_id": "session identifier",
+    "session_description": "session description as in VISITS.csv file from the ADNI database",
+    "age": "",
+    "time_to_bl_days": "",
+    "time_to_bl_months": "",
+    "time_to_bl_years": "",
+    "dx": [
+        ""
+    ],
+    "phase": "",
+    "site": "",
+    "viscode": "",
+    "icv": "",
+    "fdg": "",
+    "abeta": "",
+    "ptau": "",
+    "ttau": "",
+    "mmse": "",
+    "cdrsb": "",
+    "adas11": "",
+    "adas13": "",
+    "faq": "",
+    "HPVol": ""
+}

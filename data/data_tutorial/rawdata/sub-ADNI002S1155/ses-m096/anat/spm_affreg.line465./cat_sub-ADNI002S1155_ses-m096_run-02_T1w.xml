@@ -1,0 +1,210 @@
+<?xml version="1.0" encoding="utf-8"?>
+<S>
+   <error>
+      <item/>
+      <item>insufficient image overlap</item>
+      <item>465 - error_message</item>
+      <item>172 - spm_affreg</item>
+      <item>248 - cat_main_registration</item>
+      <item>717 - cat_main1639</item>
+      <item>1296 - cat_run_job1639</item>
+      <item>40 - cat_run_newcatch</item>
+      <item>1268 - run_job</item>
+      <item>757 - cat_run</item>
+      <item>29 - cfg_run_cm</item>
+      <item>1717 - local_runcj</item>
+      <item>972 - cfg_util</item>
+      <item>469 - fill_run_job</item>
+      <item>247 - spm_jobman</item>
+      <item>101 - spm_standalone</item>
+   </error>
+   <filedata>
+      <path>/home/Data/ADNI/rawdata/sub-ADNI002S1155/ses-m096/anat</path>
+      <file>sub-ADNI002S1155_ses-m096_run-02_T1w</file>
+      <fname>/home/Data/ADNI/rawdata/sub-ADNI002S1155/ses-m096/anat/sub-ADNI002S1155_ses-m096_run-02_T1w.nii.gz</fname>
+      <F>/home/Data/ADNI/rawdata/sub-ADNI002S1155/ses-m096/anat/sub-ADNI002S1155_ses-m096_run-02_T1w.nii.gz</F>
+      <Fm>/home/Data/ADNI/rawdata/sub-ADNI002S1155/ses-m096/anat/msub-ADNI002S1155_ses-m096_run-02_T1w.nii</Fm>
+      <Fp0>/home/Data/ADNI/rawdata/sub-ADNI002S1155/ses-m096/anat/p0sub-ADNI002S1155_ses-m096_run-02_T1w.nii</Fp0>
+      <fnames>..DNI002S1155/ses-m096/anat/sub-ADNI002S1155_ses-m096_run-02_T1w</fnames>
+   </filedata>
+   <hardware>
+      <numcores>56</numcores>
+   </hardware>
+   <parameter>
+      <opts>
+         <tpm>
+            <item>/home/clara/cat12/CAT12.9_R2017b_MCR_Linux/spm12_mcr/home/gaser/gaser/spm/spm12/tpm/TPM.nii</item>
+         </tpm>
+         <ngaus>[1 1 2 3 4 2]</ngaus>
+         <affreg>mni</affreg>
+         <warpreg>[0 0.001 0.5 0.05 0.2]</warpreg>
+         <tol>0.0001</tol>
+         <accstr>0.5</accstr>
+         <biasstr>0.5</biasstr>
+         <biasreg>0.001</biasreg>
+         <biasfwhm>60</biasfwhm>
+         <samp>3</samp>
+         <redspmres>0</redspmres>
+         <fwhm>1</fwhm>
+         <biasacc>0</biasacc>
+      </opts>
+      <extopts>
+         <gcutstr>2</gcutstr>
+         <cleanupstr>0.5</cleanupstr>
+         <NCstr>-Inf</NCstr>
+         <LASstr>0.5</LASstr>
+         <BVCstr>0.5</BVCstr>
+         <regstr>0.5</regstr>
+         <WMHC>2</WMHC>
+         <WMHCstr>0.5</WMHCstr>
+         <SLC>0</SLC>
+         <mrf>1</mrf>
+         <restype>optimal</restype>
+         <resval>[1 0.3]</resval>
+         <bids_folder>../derivatives/CAT12.9_2556</bids_folder>
+         <bids_yes>0</bids_yes>
+         <nproc>56</nproc>
+         <species>human</species>
+         <APP>1070</APP>
+         <setCOM>1</setCOM>
+         <vox>1.5</vox>
+         <bb>12</bb>
+         <shootingsurf>Template_T1</shootingsurf>
+         <pth_templates>/home/clara/cat12/CAT12.9_R2017b_MCR_Linux/spm12_mcr/home/gaser/gaser/spm/spm12/toolbox/cat12/templates_MNI152NLin2009cAsym</pth_templates>
+         <darteltpm>
+            <item>/home/clara/cat12/CAT12.9_R2017b_MCR_Linux/spm12_mcr/home/gaser/gaser/spm/spm12/toolbox/cat12/templates_MNI152NLin2009cAsym/Template_1_Dartel.nii</item>
+         </darteltpm>
+         <shootingtpm>
+            <item>/home/clara/cat12/CAT12.9_R2017b_MCR_Linux/spm12_mcr/home/gaser/gaser/spm/spm12/toolbox/cat12/templates_MNI152NLin2009cAsym/Template_0_GS.nii</item>
+         </shootingtpm>
+         <shootingT1>
+            <item>/home/clara/cat12/CAT12.9_R2017b_MCR_Linux/spm12_mcr/home/gaser/gaser/spm/spm12/toolbox/cat12/templates_MNI152NLin2009cAsym/Template_T1_masked.nii</item>
+         </shootingT1>
+         <brainmask>
+            <item>/home/clara/cat12/CAT12.9_R2017b_MCR_Linux/spm12_mcr/home/gaser/gaser/spm/spm12/toolbox/cat12/templates_MNI152NLin2009cAsym/brainmask.nii</item>
+         </brainmask>
+         <T1>
+            <item>/home/clara/cat12/CAT12.9_R2017b_MCR_Linux/spm12_mcr/home/gaser/gaser/spm/spm12/toolbox/cat12/templates_MNI152NLin2009cAsym/T1.nii</item>
+         </T1>
+         <cat12atlas>
+            <item>/home/clara/cat12/CAT12.9_R2017b_MCR_Linux/spm12_mcr/home/gaser/gaser/spm/spm12/toolbox/cat12/templates_MNI152NLin2009cAsym/cat.nii</item>
+         </cat12atlas>
+         <pbtres>0.5</pbtres>
+         <SRP>22</SRP>
+         <reduce_mesh>1</reduce_mesh>
+         <vdist>2</vdist>
+         <pbtlas>0</pbtlas>
+         <thick_measure>1</thick_measure>
+         <thick_limit>5</thick_limit>
+         <close_parahipp>0</close_parahipp>
+         <scale_cortex>0.7</scale_cortex>
+         <add_parahipp>0.1</add_parahipp>
+         <colormap>BCGWHw</colormap>
+         <report/>
+         <verb>2</verb>
+         <ignoreErrors>1</ignoreErrors>
+         <expertgui>1</expertgui>
+         <subfolders>1</subfolders>
+         <experimental>0</experimental>
+         <print>2</print>
+         <send_info>1</send_info>
+         <gifti_dat>1</gifti_dat>
+         <new_release>0</new_release>
+         <lazy>0</lazy>
+         <affmod>0</affmod>
+         <regmethod>
+            <shooting>
+               <shootingtpm>
+                  <item>/home/clara/cat12/CAT12.9_R2017b_MCR_Linux/spm12_mcr/home/gaser/gaser/spm/spm12/toolbox/cat12/templates_MNI152NLin2009cAsym/Template_0_GS.nii</item>
+               </shootingtpm>
+               <regstr>0.5</regstr>
+            </shooting>
+         </regmethod>
+         <restypes>
+            <optimal>[1 0.3]</optimal>
+         </restypes>
+         <LASmyostr>0</LASmyostr>
+         <pbtmethod>pbt2x</pbtmethod>
+      </extopts>
+      <caterr>
+         <item>
+            <line>465</line>
+            <name>error_message</name>
+            <file>/home/clara/cat12/CAT12.9_R2017b_MCR_Linux/spm12_mcr/home/gaser/gaser/spm/spm12/toolbox/OldNorm/spm_affreg.m</file>
+         </item>
+         <item>
+            <line>172</line>
+            <name>spm_affreg</name>
+            <file>/home/clara/cat12/CAT12.9_R2017b_MCR_Linux/spm12_mcr/home/gaser/gaser/spm/spm12/toolbox/OldNorm/spm_affreg.m</file>
+         </item>
+         <item>
+            <line>248</line>
+            <name>cat_main_registration</name>
+            <file>/home/clara/cat12/CAT12.9_R2017b_MCR_Linux/spm12_mcr/home/gaser/gaser/spm/spm12/toolbox/cat12/cat_main_registration.m</file>
+         </item>
+         <item>
+            <line>717</line>
+            <name>cat_main1639</name>
+            <file>/home/clara/cat12/CAT12.9_R2017b_MCR_Linux/spm12_mcr/home/gaser/gaser/spm/spm12/toolbox/cat12/cat_main1639.m</file>
+         </item>
+         <item>
+            <line>1296</line>
+            <name>cat_run_job1639</name>
+            <file>/home/clara/cat12/CAT12.9_R2017b_MCR_Linux/spm12_mcr/home/gaser/gaser/spm/spm12/toolbox/cat12/cat_run_job1639.m</file>
+         </item>
+         <item>
+            <line>40</line>
+            <name>cat_run_newcatch</name>
+            <file>/home/clara/cat12/CAT12.9_R2017b_MCR_Linux/spm12_mcr/home/gaser/gaser/spm/spm12/toolbox/cat12/cat_run_newcatch.m</file>
+         </item>
+         <item>
+            <line>1268</line>
+            <name>run_job</name>
+            <file>/home/clara/cat12/CAT12.9_R2017b_MCR_Linux/spm12_mcr/home/gaser/gaser/spm/spm12/toolbox/cat12/cat_run.m</file>
+         </item>
+         <item>
+            <line>757</line>
+            <name>cat_run</name>
+            <file>/home/clara/cat12/CAT12.9_R2017b_MCR_Linux/spm12_mcr/home/gaser/gaser/spm/spm12/toolbox/cat12/cat_run.m</file>
+         </item>
+         <item>
+            <line>29</line>
+            <name>cfg_run_cm</name>
+            <file>/home/clara/cat12/CAT12.9_R2017b_MCR_Linux/spm12_mcr/home/gaser/gaser/spm/spm12/matlabbatch/private/cfg_run_cm.m</file>
+         </item>
+         <item>
+            <line>1717</line>
+            <name>local_runcj</name>
+            <file>/home/clara/cat12/CAT12.9_R2017b_MCR_Linux/spm12_mcr/home/gaser/gaser/spm/spm12/matlabbatch/cfg_util.m</file>
+         </item>
+         <item>
+            <line>972</line>
+            <name>cfg_util</name>
+            <file>/home/clara/cat12/CAT12.9_R2017b_MCR_Linux/spm12_mcr/home/gaser/gaser/spm/spm12/matlabbatch/cfg_util.m</file>
+         </item>
+         <item>
+            <line>469</line>
+            <name>fill_run_job</name>
+            <file>/home/clara/cat12/CAT12.9_R2017b_MCR_Linux/spm12_mcr/home/gaser/gaser/spm/spm12/spm_jobman.m</file>
+         </item>
+         <item>
+            <line>247</line>
+            <name>spm_jobman</name>
+            <file>/home/clara/cat12/CAT12.9_R2017b_MCR_Linux/spm12_mcr/home/gaser/gaser/spm/spm12/spm_jobman.m</file>
+         </item>
+         <item>
+            <line>101</line>
+            <name>spm_standalone</name>
+            <file>/home/clara/cat12/CAT12.9_R2017b_MCR_Linux/spm12_mcr/home/gaser/gaser/spm/spm12/spm_standalone.m</file>
+         </item>
+      </caterr>
+   </parameter>
+   <software>
+      <version_spm>7771</version_spm>
+      <version_matlab>9.3</version_matlab>
+      <system>LINUX</system>
+      <version_cat>12.9</version_cat>
+      <version_segment>2556</version_segment>
+      <revision_cat>2556</revision_cat>
+   </software>
+</S>

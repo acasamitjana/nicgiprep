@@ -1,0 +1,811 @@
+
+------------------------------------------------------------------------
+CAT12.9 r2556: 1/1:        ./anat/sub-ADNI002S1155_ses-m096_run-02_T1w.n
+------------------------------------------------------------------------
+SANLM denoising (medium)                                             25s
+Affine preprocessing (APP)                                        
+  Initialize                                                         11s
+  Estimate background                                                24s
+  Initial correction                                                 14s
+  Refine background                                                  11s
+  Final correction                                                   13s
+  Final scaling                                                      45s
+                                                                    125s
+Correct center-of-mass                                               10s
+Affine registration                                                  19s
+SPM preprocessing 1 (estimate 1 - TPM registration):                 78s
+SPM preprocessing 1 (estimate 2):                                    74s
+SPM preprocessing 2 (write)                                       
+  Write Segmentation                                                 25s
+  Update Segmentation                                                21s
+  Update Skull-Stripping                                             50s
+  Update probability maps                                            16s
+                                                                    112s
+Global intensity correction                                          20s
+SANLM denoising after intensity normalization (medium)                6s
+Fast Optimized Shooting registration                                  4s
+  Name           Size                    Bytes  Class     Attributes
+
+  F              5-D                   7676928  single              
+  a             56x68x56               1705984  single    complex   
+  i              1x1                         8  double              
+  j              1x1                         8  double              
+  m             56x68x56x3             5117952  single    complex   
+  v             56x68x56x3             2558976  single              
+  varargin       1x3                  10236304  cell                
+
+  Name           Size                    Bytes  Class     Attributes
+
+  F              5-D                   7676928  single              
+  a             56x68x56               1705984  single    complex   
+  i              1x1                         8  double              
+  j              1x1                         8  double              
+  m             56x68x56x3             5117952  single    complex   
+  v             56x68x56x3             2558976  single              
+  varargin       1x3                  10236304  cell                
+
+  Name           Size                    Bytes  Class     Attributes
+
+  F              5-D                   7676928  single              
+  a             56x68x56               1705984  single    complex   
+  i              1x1                         8  double              
+  j              1x1                         8  double              
+  m             56x68x56x3             5117952  single    complex   
+  v             56x68x56x3             2558976  single              
+  varargin       1x3                  10236304  cell                
+
+  Name           Size                    Bytes  Class     Attributes
+
+  F              5-D                  13251528  single              
+  a             67x82x67               2944784  single    complex   
+  i              1x1                         8  double              
+  j              1x1                         8  double              
+  m             67x82x67x3             8834352  single    complex   
+  v             67x82x67x3             4417176  single              
+  varargin       1x3                  17669104  cell                
+
+  Name           Size                    Bytes  Class     Attributes
+
+  F              5-D                  13251528  single              
+  a             67x82x67               2944784  single    complex   
+  i              1x1                         8  double              
+  j              1x1                         8  double              
+  m             67x82x67x3             8834352  single    complex   
+  v             67x82x67x3             4417176  single              
+  varargin       1x3                  17669104  cell                
+
+  Name           Size                    Bytes  Class     Attributes
+
+  F              5-D                  13251528  single              
+  a             67x82x67               2944784  single    complex   
+  i              1x1                         8  double              
+  j              1x1                         8  double              
+  m             67x82x67x3             8834352  single    complex   
+  v             67x82x67x3             4417176  single              
+  varargin       1x3                  17669104  cell                
+
+  Name           Size                    Bytes  Class     Attributes
+
+  F              5-D                  13251528  single              
+  a             67x82x67               2944784  single    complex   
+  i              1x1                         8  double              
+  j              1x1                         8  double              
+  m             67x82x67x3             8834352  single    complex   
+  v             67x82x67x3             4417176  single              
+  varargin       1x3                  17669104  cell                
+
+  Name           Size                    Bytes  Class     Attributes
+
+  F              5-D                  13251528  single              
+  a             67x82x67               2944784  single    complex   
+  i              1x1                         8  double              
+  j              1x1                         8  double              
+  m             67x82x67x3             8834352  single    complex   
+  v             67x82x67x3             4417176  single              
+  varargin       1x3                  17669104  cell                
+
+  Name           Size                    Bytes  Class     Attributes
+
+  F              5-D                  13251528  single              
+  a             67x82x67               2944784  single    complex   
+  i              1x1                         8  double              
+  j              1x1                         8  double              
+  m             67x82x67x3             8834352  single    complex   
+  v             67x82x67x3             4417176  single              
+  varargin       1x3                  17669104  cell                
+
+  Name           Size                    Bytes  Class     Attributes
+
+  F              5-D                  13251528  single              
+  a             67x82x67               2944784  single    complex   
+  i              1x1                         8  double              
+  j              1x1                         8  double              
+  m             67x82x67x3             8834352  single    complex   
+  v             67x82x67x3             4417176  single              
+  varargin       1x3                  17669104  cell                
+
+  Name           Size                    Bytes  Class     Attributes
+
+  F              5-D                  13251528  single              
+  a             67x82x67               2944784  single    complex   
+  i              1x1                         8  double              
+  j              1x1                         8  double              
+  m             67x82x67x3             8834352  single    complex   
+  v             67x82x67x3             4417176  single              
+  varargin       1x3                  17669104  cell                
+
+  Name           Size                    Bytes  Class     Attributes
+
+  F              5-D                  13251528  single              
+  a             67x82x67               2944784  single    complex   
+  i              1x1                         8  double              
+  j              1x1                         8  double              
+  m             67x82x67x3             8834352  single    complex   
+  v             67x82x67x3             4417176  single              
+  varargin       1x3                  17669104  cell                
+
+  Name           Size                     Bytes  Class     Attributes
+
+  F              5-D                   25909632  single              
+  a             84x102x84               5757696  single    complex   
+  i              1x1                          8  double              
+  j              1x1                          8  double              
+  m             84x102x84x3            17273088  single    complex   
+  v             84x102x84x3             8636544  single              
+  varargin       1x3                   34546576  cell                
+
+  Name           Size                     Bytes  Class     Attributes
+
+  F              5-D                   25909632  single              
+  a             84x102x84               5757696  single    complex   
+  i              1x1                          8  double              
+  j              1x1                          8  double              
+  m             84x102x84x3            17273088  single    complex   
+  v             84x102x84x3             8636544  single              
+  varargin       1x3                   34546576  cell                
+
+  Name           Size                     Bytes  Class     Attributes
+
+  F              5-D                   25909632  single              
+  a             84x102x84               5757696  single    complex   
+  i              1x1                          8  double              
+  j              1x1                          8  double              
+  m             84x102x84x3            17273088  single    complex   
+  v             84x102x84x3             8636544  single              
+  varargin       1x3                   34546576  cell                
+
+  Name           Size                     Bytes  Class     Attributes
+
+  F              5-D                   25909632  single              
+  a             84x102x84               5757696  single    complex   
+  i              1x1                          8  double              
+  j              1x1                          8  double              
+  m             84x102x84x3            17273088  single    complex   
+  v             84x102x84x3             8636544  single              
+  varargin       1x3                   34546576  cell                
+
+  Name           Size                     Bytes  Class     Attributes
+
+  F              5-D                   25909632  single              
+  a             84x102x84               5757696  single    complex   
+  i              1x1                          8  double              
+  j              1x1                          8  double              
+  m             84x102x84x3            17273088  single    complex   
+  v             84x102x84x3             8636544  single              
+  varargin       1x3                   34546576  cell                
+
+  Name           Size                     Bytes  Class     Attributes
+
+  F              5-D                   25909632  single              
+  a             84x102x84               5757696  single    complex   
+  i              1x1                          8  double              
+  j              1x1                          8  double              
+  m             84x102x84x3            17273088  single    complex   
+  v             84x102x84x3             8636544  single              
+  varargin       1x3                   34546576  cell                
+
+  Name           Size                     Bytes  Class     Attributes
+
+  F              5-D                   25909632  single              
+  a             84x102x84               5757696  single    complex   
+  i              1x1                          8  double              
+  j              1x1                          8  double              
+  m             84x102x84x3            17273088  single    complex   
+  v             84x102x84x3             8636544  single              
+  varargin       1x3                   34546576  cell                
+
+  Name           Size                     Bytes  Class     Attributes
+
+  F              5-D                   25909632  single              
+  a             84x102x84               5757696  single    complex   
+  i              1x1                          8  double              
+  j              1x1                          8  double              
+  m             84x102x84x3            17273088  single    complex   
+  v             84x102x84x3             8636544  single              
+  varargin       1x3                   34546576  cell                
+
+  Name           Size                     Bytes  Class     Attributes
+
+  F              5-D                   25909632  single              
+  a             84x102x84               5757696  single    complex   
+  i              1x1                          8  double              
+  j              1x1                          8  double              
+  m             84x102x84x3            17273088  single    complex   
+  v             84x102x84x3             8636544  single              
+  varargin       1x3                   34546576  cell                
+
+  Name           Size                     Bytes  Class     Attributes
+
+  F              5-D                   25909632  single              
+  a             84x102x84               5757696  single    complex   
+  i              1x1                          8  double              
+  j              1x1                          8  double              
+  m             84x102x84x3            17273088  single    complex   
+  v             84x102x84x3             8636544  single              
+  varargin       1x3                   34546576  cell                
+
+  Name           Size                     Bytes  Class     Attributes
+
+  F              5-D                   25909632  single              
+  a             84x102x84               5757696  single    complex   
+  i              1x1                          8  double              
+  j              1x1                          8  double              
+  m             84x102x84x3            17273088  single    complex   
+  v             84x102x84x3             8636544  single              
+  varargin       1x3                   34546576  cell                
+
+  Name           Size                     Bytes  Class     Attributes
+
+  F              5-D                   25909632  single              
+  a             84x102x84               5757696  single    complex   
+  i              1x1                          8  double              
+  j              1x1                          8  double              
+  m             84x102x84x3            17273088  single    complex   
+  v             84x102x84x3             8636544  single              
+  varargin       1x3                   34546576  cell                
+
+  Name           Size                     Bytes  Class     Attributes
+
+  F              5-D                   25909632  single              
+  a             84x102x84               5757696  single    complex   
+  i              1x1                          8  double              
+  j              1x1                          8  double              
+  m             84x102x84x3            17273088  single    complex   
+  v             84x102x84x3             8636544  single              
+  varargin       1x3                   34546576  cell                
+
+  Name           Size                     Bytes  Class     Attributes
+
+  F              5-D                   25909632  single              
+  a             84x102x84               5757696  single    complex   
+  i              1x1                          8  double              
+  j              1x1                          8  double              
+  m             84x102x84x3            17273088  single    complex   
+  v             84x102x84x3             8636544  single              
+  varargin       1x3                   34546576  cell                
+
+  Name           Size                     Bytes  Class     Attributes
+
+  F              5-D                   25909632  single              
+  a             84x102x84               5757696  single    complex   
+  i              1x1                          8  double              
+  j              1x1                          8  double              
+  m             84x102x84x3            17273088  single    complex   
+  v             84x102x84x3             8636544  single              
+  varargin       1x3                   34546576  cell                
+
+  Name           Size                     Bytes  Class     Attributes
+
+  F              5-D                   25909632  single              
+  a             84x102x84               5757696  single    complex   
+  i              1x1                          8  double              
+  j              1x1                          8  double              
+  m             84x102x84x3            17273088  single    complex   
+  v             84x102x84x3             8636544  single              
+  varargin       1x3                   34546576  cell                
+
+  Name           Size                     Bytes  Class     Attributes
+
+  F              5-D                   25909632  single              
+  a             84x102x84               5757696  single    complex   
+  i              1x1                          8  double              
+  j              1x1                          8  double              
+  m             84x102x84x3            17273088  single    complex   
+  v             84x102x84x3             8636544  single              
+  varargin       1x3                   34546576  cell                
+
+  Name           Size                     Bytes  Class     Attributes
+
+  F              5-D                   25909632  single              
+  a             84x102x84               5757696  single    complex   
+  i              1x1                          8  double              
+  j              1x1                          8  double              
+  m             84x102x84x3            17273088  single    complex   
+  v             84x102x84x3             8636544  single              
+  varargin       1x3                   34546576  cell                
+
+  Name           Size                     Bytes  Class     Attributes
+
+  F              5-D                   25909632  single              
+  a             84x102x84               5757696  single    complex   
+  i              1x1                          8  double              
+  j              1x1                          8  double              
+  m             84x102x84x3            17273088  single    complex   
+  v             84x102x84x3             8636544  single              
+  varargin       1x3                   34546576  cell                
+
+  Name           Size                     Bytes  Class     Attributes
+
+  F              5-D                   25909632  single              
+  a             84x102x84               5757696  single    complex   
+  i              1x1                          8  double              
+  j              1x1                          8  double              
+  m             84x102x84x3            17273088  single    complex   
+  v             84x102x84x3             8636544  single              
+  varargin       1x3                   34546576  cell                
+
+  Name           Size                     Bytes  Class     Attributes
+
+  F              5-D                   25909632  single              
+  a             84x102x84               5757696  single    complex   
+  i              1x1                          8  double              
+  j              1x1                          8  double              
+  m             84x102x84x3            17273088  single    complex   
+  v             84x102x84x3             8636544  single              
+  varargin       1x3                   34546576  cell                
+
+  Name           Size                     Bytes  Class     Attributes
+
+  F              5-D                   25909632  single              
+  a             84x102x84               5757696  single    complex   
+  i              1x1                          8  double              
+  j              1x1                          8  double              
+  m             84x102x84x3            17273088  single    complex   
+  v             84x102x84x3             8636544  single              
+  varargin       1x3                   34546576  cell                
+
+  Name           Size                     Bytes  Class     Attributes
+
+  F              5-D                   25909632  single              
+  a             84x102x84               5757696  single    complex   
+  i              1x1                          8  double              
+  j              1x1                          8  double              
+  m             84x102x84x3            17273088  single    complex   
+  v             84x102x84x3             8636544  single              
+  varargin       1x3                   34546576  cell                
+
+  Name           Size                     Bytes  Class     Attributes
+
+  F              5-D                   25909632  single              
+  a             84x102x84               5757696  single    complex   
+  i              1x1                          8  double              
+  j              1x1                          8  double              
+  m             84x102x84x3            17273088  single    complex   
+  v             84x102x84x3             8636544  single              
+  varargin       1x3                   34546576  cell                
+
+  Name           Size                     Bytes  Class     Attributes
+
+  F              5-D                   25909632  single              
+  a             84x102x84               5757696  single    complex   
+  i              1x1                          8  double              
+  j              1x1                          8  double              
+  m             84x102x84x3            17273088  single    complex   
+  v             84x102x84x3             8636544  single              
+  varargin       1x3                   34546576  cell                
+
+  Name           Size                     Bytes  Class     Attributes
+
+  F              5-D                   25909632  single              
+  a             84x102x84               5757696  single    complex   
+  i              1x1                          8  double              
+  j              1x1                          8  double              
+  m             84x102x84x3            17273088  single    complex   
+  v             84x102x84x3             8636544  single              
+  varargin       1x3                   34546576  cell                
+
+  Name           Size                     Bytes  Class     Attributes
+
+  F              5-D                   25909632  single              
+  a             84x102x84               5757696  single    complex   
+  i              1x1                          8  double              
+  j              1x1                          8  double              
+  m             84x102x84x3            17273088  single    complex   
+  v             84x102x84x3             8636544  single              
+  varargin       1x3                   34546576  cell                
+
+  Name           Size                     Bytes  Class     Attributes
+
+  F              5-D                   25909632  single              
+  a             84x102x84               5757696  single    complex   
+  i              1x1                          8  double              
+  j              1x1                          8  double              
+  m             84x102x84x3            17273088  single    complex   
+  v             84x102x84x3             8636544  single              
+  varargin       1x3                   34546576  cell                
+
+  Name           Size                     Bytes  Class     Attributes
+
+  F              5-D                   25909632  single              
+  a             84x102x84               5757696  single    complex   
+  i              1x1                          8  double              
+  j              1x1                          8  double              
+  m             84x102x84x3            17273088  single    complex   
+  v             84x102x84x3             8636544  single              
+  varargin       1x3                   34546576  cell                
+
+  Name           Size                     Bytes  Class     Attributes
+
+  F              5-D                   25909632  single              
+  a             84x102x84               5757696  single    complex   
+  i              1x1                          8  double              
+  j              1x1                          8  double              
+  m             84x102x84x3            17273088  single    complex   
+  v             84x102x84x3             8636544  single              
+  varargin       1x3                   34546576  cell                
+
+  Name           Size                     Bytes  Class     Attributes
+
+  F              5-D                   25909632  single              
+  a             84x102x84               5757696  single    complex   
+  i              1x1                          8  double              
+  j              1x1                          8  double              
+  m             84x102x84x3            17273088  single    complex   
+  v             84x102x84x3             8636544  single              
+  varargin       1x3                   34546576  cell                
+
+  Name           Size                     Bytes  Class     Attributes
+
+  F              5-D                   25909632  single              
+  a             84x102x84               5757696  single    complex   
+  i              1x1                          8  double              
+  j              1x1                          8  double              
+  m             84x102x84x3            17273088  single    complex   
+  v             84x102x84x3             8636544  single              
+  varargin       1x3                   34546576  cell                
+
+  Name           Size                     Bytes  Class     Attributes
+
+  F              5-D                   25909632  single              
+  a             84x102x84               5757696  single    complex   
+  i              1x1                          8  double              
+  j              1x1                          8  double              
+  m             84x102x84x3            17273088  single    complex   
+  v             84x102x84x3             8636544  single              
+  varargin       1x3                   34546576  cell                
+
+  Name           Size                     Bytes  Class     Attributes
+
+  F              5-D                   25909632  single              
+  a             84x102x84               5757696  single    complex   
+  i              1x1                          8  double              
+  j              1x1                          8  double              
+  m             84x102x84x3            17273088  single    complex   
+  v             84x102x84x3             8636544  single              
+  varargin       1x3                   34546576  cell                
+
+  Name           Size                     Bytes  Class     Attributes
+
+  F              5-D                   25909632  single              
+  a             84x102x84               5757696  single    complex   
+  i              1x1                          8  double              
+  j              1x1                          8  double              
+  m             84x102x84x3            17273088  single    complex   
+  v             84x102x84x3             8636544  single              
+  varargin       1x3                   34546576  cell                
+
+  Name           Size                     Bytes  Class     Attributes
+
+  F              5-D                   25909632  single              
+  a             84x102x84               5757696  single    complex   
+  i              1x1                          8  double              
+  j              1x1                          8  double              
+  m             84x102x84x3            17273088  single    complex   
+  v             84x102x84x3             8636544  single              
+  varargin       1x3                   34546576  cell                
+
+  Name           Size                     Bytes  Class     Attributes
+
+  F              5-D                   25909632  single              
+  a             84x102x84               5757696  single    complex   
+  i              1x1                          8  double              
+  j              1x1                          8  double              
+  m             84x102x84x3            17273088  single    complex   
+  v             84x102x84x3             8636544  single              
+  varargin       1x3                   34546576  cell                
+
+  Name           Size                     Bytes  Class     Attributes
+
+  F              5-D                   25909632  single              
+  a             84x102x84               5757696  single    complex   
+  i              1x1                          8  double              
+  j              1x1                          8  double              
+  m             84x102x84x3            17273088  single    complex   
+  v             84x102x84x3             8636544  single              
+  varargin       1x3                   34546576  cell                
+
+  Name           Size                     Bytes  Class     Attributes
+
+  F              5-D                   25909632  single              
+  a             84x102x84               5757696  single    complex   
+  i              1x1                          8  double              
+  j              1x1                          8  double              
+  m             84x102x84x3            17273088  single    complex   
+  v             84x102x84x3             8636544  single              
+  varargin       1x3                   34546576  cell                
+
+  Name           Size                     Bytes  Class     Attributes
+
+  F              5-D                   25909632  single              
+  a             84x102x84               5757696  single    complex   
+  i              1x1                          8  double              
+  j              1x1                          8  double              
+  m             84x102x84x3            17273088  single    complex   
+  v             84x102x84x3             8636544  single              
+  varargin       1x3                   34546576  cell                
+
+  Name           Size                     Bytes  Class     Attributes
+
+  F              5-D                   25909632  single              
+  a             84x102x84               5757696  single    complex   
+  i              1x1                          8  double              
+  j              1x1                          8  double              
+  m             84x102x84x3            17273088  single    complex   
+  v             84x102x84x3             8636544  single              
+  varargin       1x3                   34546576  cell                
+
+  Name           Size                     Bytes  Class     Attributes
+
+  F              5-D                   25909632  single              
+  a             84x102x84               5757696  single    complex   
+  i              1x1                          8  double              
+  j              1x1                          8  double              
+  m             84x102x84x3            17273088  single    complex   
+  v             84x102x84x3             8636544  single              
+  varargin       1x3                   34546576  cell                
+
+  Name           Size                     Bytes  Class     Attributes
+
+  F              5-D                   25909632  single              
+  a             84x102x84               5757696  single    complex   
+  i              1x1                          8  double              
+  j              1x1                          8  double              
+  m             84x102x84x3            17273088  single    complex   
+  v             84x102x84x3             8636544  single              
+  varargin       1x3                   34546576  cell                
+
+  Name           Size                     Bytes  Class     Attributes
+
+  F              5-D                   25909632  single              
+  a             84x102x84               5757696  single    complex   
+  i              1x1                          8  double              
+  j              1x1                          8  double              
+  m             84x102x84x3            17273088  single    complex   
+  v             84x102x84x3             8636544  single              
+  varargin       1x3                   34546576  cell                
+
+  Name           Size                     Bytes  Class     Attributes
+
+  F              5-D                   25909632  single              
+  a             84x102x84               5757696  single    complex   
+  i              1x1                          8  double              
+  j              1x1                          8  double              
+  m             84x102x84x3            17273088  single    complex   
+  v             84x102x84x3             8636544  single              
+  varargin       1x3                   34546576  cell                
+
+  Name           Size                     Bytes  Class     Attributes
+
+  F              5-D                   25909632  single              
+  a             84x102x84               5757696  single    complex   
+  i              1x1                          8  double              
+  j              1x1                          8  double              
+  m             84x102x84x3            17273088  single    complex   
+  v             84x102x84x3             8636544  single              
+  varargin       1x3                   34546576  cell                
+
+  Name           Size                     Bytes  Class     Attributes
+
+  F              5-D                   25909632  single              
+  a             84x102x84               5757696  single    complex   
+  i              1x1                          8  double              
+  j              1x1                          8  double              
+  m             84x102x84x3            17273088  single    complex   
+  v             84x102x84x3             8636544  single              
+  varargin       1x3                   34546576  cell                
+
+  Name           Size                     Bytes  Class     Attributes
+
+  F              5-D                   25909632  single              
+  a             84x102x84               5757696  single    complex   
+  i              1x1                          8  double              
+  j              1x1                          8  double              
+  m             84x102x84x3            17273088  single    complex   
+  v             84x102x84x3             8636544  single              
+  varargin       1x3                   34546576  cell                
+
+  Name           Size                     Bytes  Class     Attributes
+
+  F              5-D                   25909632  single              
+  a             84x102x84               5757696  single    complex   
+  i              1x1                          8  double              
+  j              1x1                          8  double              
+  m             84x102x84x3            17273088  single    complex   
+  v             84x102x84x3             8636544  single              
+  varargin       1x3                   34546576  cell                
+
+  Name           Size                     Bytes  Class     Attributes
+
+  F              5-D                   25909632  single              
+  a             84x102x84               5757696  single    complex   
+  i              1x1                          8  double              
+  j              1x1                          8  double              
+  m             84x102x84x3            17273088  single    complex   
+  v             84x102x84x3             8636544  single              
+  varargin       1x3                   34546576  cell                
+
+  Name           Size                     Bytes  Class     Attributes
+
+  F              5-D                   25909632  single              
+  a             84x102x84               5757696  single    complex   
+  i              1x1                          8  double              
+  j              1x1                          8  double              
+  m             84x102x84x3            17273088  single    complex   
+  v             84x102x84x3             8636544  single              
+  varargin       1x3                   34546576  cell                
+
+  Name           Size                     Bytes  Class     Attributes
+
+  F              5-D                   25909632  single              
+  a             84x102x84               5757696  single    complex   
+  i              1x1                          8  double              
+  j              1x1                          8  double              
+  m             84x102x84x3            17273088  single    complex   
+  v             84x102x84x3             8636544  single              
+  varargin       1x3                   34546576  cell                
+
+  Name           Size                     Bytes  Class     Attributes
+
+  F              5-D                   25909632  single              
+  a             84x102x84               5757696  single    complex   
+  i              1x1                          8  double              
+  j              1x1                          8  double              
+  m             84x102x84x3            17273088  single    complex   
+  v             84x102x84x3             8636544  single              
+  varargin       1x3                   34546576  cell                
+
+  Name           Size                     Bytes  Class     Attributes
+
+  F              5-D                   25909632  single              
+  a             84x102x84               5757696  single    complex   
+  i              1x1                          8  double              
+  j              1x1                          8  double              
+  m             84x102x84x3            17273088  single    complex   
+  v             84x102x84x3             8636544  single              
+  varargin       1x3                   34546576  cell                
+
+  Name           Size                     Bytes  Class     Attributes
+
+  F              5-D                   25909632  single              
+  a             84x102x84               5757696  single    complex   
+  i              1x1                          8  double              
+  j              1x1                          8  double              
+  m             84x102x84x3            17273088  single    complex   
+  v             84x102x84x3             8636544  single              
+  varargin       1x3                   34546576  cell                
+
+  Name           Size                     Bytes  Class     Attributes
+
+  F              5-D                   25909632  single              
+  a             84x102x84               5757696  single    complex   
+  i              1x1                          8  double              
+  j              1x1                          8  double              
+  m             84x102x84x3            17273088  single    complex   
+  v             84x102x84x3             8636544  single              
+  varargin       1x3                   34546576  cell                
+
+  Name           Size                     Bytes  Class     Attributes
+
+  F              5-D                   25909632  single              
+  a             84x102x84               5757696  single    complex   
+  i              1x1                          8  double              
+  j              1x1                          8  double              
+  m             84x102x84x3            17273088  single    complex   
+  v             84x102x84x3             8636544  single              
+  varargin       1x3                   34546576  cell                
+
+  Name           Size                     Bytes  Class     Attributes
+
+  F              5-D                   25909632  single              
+  a             84x102x84               5757696  single    complex   
+  i              1x1                          8  double              
+  j              1x1                          8  double              
+  m             84x102x84x3            17273088  single    complex   
+  v             84x102x84x3             8636544  single              
+  varargin       1x3                   34546576  cell                
+
+  Name           Size                     Bytes  Class     Attributes
+
+  F              5-D                   25909632  single              
+  a             84x102x84               5757696  single    complex   
+  i              1x1                          8  double              
+  j              1x1                          8  double              
+  m             84x102x84x3            17273088  single    complex   
+  v             84x102x84x3             8636544  single              
+  varargin       1x3                   34546576  cell                
+
+  Name           Size                     Bytes  Class     Attributes
+
+  F              5-D                   25909632  single              
+  a             84x102x84               5757696  single    complex   
+  i              1x1                          8  double              
+  j              1x1                          8  double              
+  m             84x102x84x3            17273088  single    complex   
+  v             84x102x84x3             8636544  single              
+  varargin       1x3                   34546576  cell                
+
+   75s
+Local adaptive segmentation (LASstr=0.50)                         
+  Prepare maps                                                        4s
+  Prepare partitions                                                  4s
+  Prepare segments (LASmod = 1.00)                                   12s
+  Estimate local tissue thresholds (WM)                              64s
+  Estimate local tissue thresholds (GM)                              68s
+  Intensity transformation                                            0s
+  SANLM denoising after LAS (medium)                                 13s
+                                                                    171s
+ROI segmentation (partitioning)                                   
+  Atlas -> subject space                                             11s
+  Major structures                                                    5s
+  Ventricle detection                                                15s
+  Blood vessel detection                                              4s
+  WMH detection (WMHCstr=0.45 > WMHCstr'=0.45)                       10s
+  Manual stroke lesion detection                                      0s
+  Closing of deep structures                                          2s
+  Side alignment                                                      4s
+  Final corrections                                                   4s
+                                                                     54s
+No enhanced blood vessel correction is required                       1s
+Amap using initial SPM12 segmentations (MRF filter strength 0.07)    21s
+    AMAP peaks: [CSF,GM,WM] = [0.30±0.09,0.68±0.05,1.00±0.05]
+Final cleanup (gcutstr=0.23)                                      
+  Level 1 cleanup (ROI estimation)                                    1s
+  Level 1 cleanup (brain masking)                                     2s
+  Level 2 cleanup (CSF correction)                                    1s
+  Level 3 cleanup (CSF/WM PVE)                                        2s
+                                                                      7s
+
+    * - SPM12: spm_affreg  ---------------------------------------------
+
+        There is not enough overlap in the images
+        to obtain a solution.
+         
+        Please check that your header information is OK.
+        The Check Reg utility will show you the initial
+        alignment between the images, which must be
+        within about 4cm and about 15 degrees in order
+        for SPM to find the optimal solution.
+
+        -----------------------------------------  15:15:11 - 23/12/2024
+
+
+------------------------------------------------------------------------
+CAT Preprocessing error for sub-ADNI002S1155_ses-m096_run-02_T1w:
+------------------------------------------------------------------------
+insufficient image overlap
+------------------------------------------------------------------------
+  465 - error_message
+  172 - spm_affreg
+  248 - cat_main_registration
+  717 - cat_main1639
+ 1296 - cat_run_job1639
+   40 - cat_run_newcatch
+ 1268 - run_job
+  757 - cat_run
+   29 - cfg_run_cm
+ 1717 - local_runcj
+  972 - cfg_util
+  469 - fill_run_job
+  247 - spm_jobman
+  101 - spm_standalone
+------------------------------------------------------------------------

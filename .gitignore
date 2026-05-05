@@ -1,0 +1,4 @@
+*.pyc
+.idea
+data/data_tutorial/derivatives
+data/data_tutorial/rawdata/*/*/func
