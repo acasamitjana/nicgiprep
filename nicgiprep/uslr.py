@@ -437,6 +437,9 @@ class USLR_Linear(USLRProcessing):
             if not exists(join(DIR_PIPELINES[self.pipeline_dir], filename_sss)):
                 return {'exit_code': 2,
                         'message': '[partly done] graph is already computed; template and etiv missing.\n'}
+            elif self._get_data(**{**self.im_graph_lin_entities, 'subject': subject, 'suffix': 'T1wdseg'}, curr_len=len(timepoints), verbose=False) is None:
+                return {'exit_code': 2,
+                        'message': '[partly done] graph is already computed; template and etiv missing.\n'}
             elif not exists(join(DIR_PIPELINES[self.pipeline_dir], 'sub-' + subject, 'sub-' + subject + '_T1wetiv.npy')):
                 return {'exit_code': 3,
                         'message': '[partly done] graph and template are already computed; subject etiv missing.\n'}

@@ -2,3 +2,5 @@
 .idea
 data/data_tutorial/derivatives
 data/data_tutorial/rawdata/*/*/func
+data/data_tutorial/tmp
+data/data_tutorial/BIDS-raw.db
