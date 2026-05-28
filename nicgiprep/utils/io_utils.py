@@ -13,6 +13,27 @@ from skimage.transform import rescale
 import numpy as np
 import csv
 
+def get_bids_entities(fname):
+    edict = {}
+    fparts = basename(fname).split('_')
+    for f in fparts:
+
+        if '.' in f:
+            edict['suffix'] = f.split('.')[0]
+            edict['extension'] = '.'.join(f.split('.')[1:])
+
+        else:
+            e, v = f.split('-')
+            if e == 'sub':
+                e = 'subject'
+            elif e == 'ses':
+                e = 'session'
+
+            edict['suffix'] = e
+            edict[e] = v
+
+    return edict
+
 def save_nii(im, v2r, filepath):
     if im.dtype in [np.bool_]:
         im = im.astype('uint8')

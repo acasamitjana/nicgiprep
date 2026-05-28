@@ -164,6 +164,8 @@ class USLRSegment(USLRProcessing):
                 df_new.to_csv(join(DIR_PIPELINES['preproc'], subject, subject + '_vols.csv'), index=False)
             df_new = None
 
+        self._update_full_layout()
+
     def process_subject(self, subject, force_flag=False, check_seg=None, **kwargs):
         if check_seg is None:
             check_seg = '/'

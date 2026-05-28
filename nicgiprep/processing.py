@@ -261,7 +261,6 @@ class USLRProcessing(Processing):
         self.svf_graph_entities = {'suffix': 'svf', 'extension': 'nii.gz', 'space': 'uslr', 'scope': 'nonlin'}
         self.template_nonlin_entities = {'space': 'uslr', 'desc': 'template', 'extension': 'nii.gz'}
 
-
 class LongitudinalSegmentationProcessing(Processing):
     def __init__(self, bids_loader, subject_list=None, pipeline_dir=None, **kwargs):
         self._pipeline_dir = pipeline_dir
