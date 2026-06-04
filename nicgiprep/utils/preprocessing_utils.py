@@ -5,22 +5,31 @@ import numpy as np
 from scipy.ndimage import  gaussian_filter
 
 
+
 eps = np.finfo(float).eps
 
 def one_hot_encoding_with_gaussian(target, num_classes, categories=None, sigma=0.0):
-    '''
+    """Convert an integer label map to a (optionally Gaussian-smoothed) one-hot array.
 
     Parameters
     ----------
-    target (np.array): target vector of dimension (d1, d2, ..., dN).
-    num_classes (int): number of classes
-    categories (None or list): existing categories. If set to None, we will consider only categories 0,...,num_classes
-    kernel (bool): smooth the one-hot-encoding via a gaussian kernel with sigma =
+    target : np.ndarray
+        Integer label map of shape ``(d1, d2, ..., dN)``.
+    num_classes : int
+        Number of classes (channels in the output).
+    categories : list of int, optional
+        Ordered label values. Defaults to ``[0, 1, ..., num_classes-1]``.
+    sigma : float, optional
+        Standard deviation of the Gaussian kernel used to smooth each
+        one-hot channel. ``0`` (default) returns a hard one-hot array
+        (dtype ``int``).
+
     Returns
     -------
-    labels (np.array): one-hot target vector of dimension (d1, d2, ..., dN, num_classes)
-
-    '''
+    np.ndarray
+        One-hot array of shape ``(d1, d2, ..., dN, num_classes)``.
+        Dtype is ``int`` when ``sigma=0``, ``float64`` otherwise.
+    """
 
     if categories is None:
         categories = list(range(num_classes))
@@ -37,19 +46,30 @@ def one_hot_encoding_with_gaussian(target, num_classes, categories=None, sigma=0
     else:
         return gaussian_filter(labels, sigma)# size of gaussian kernel is 4*sigma + 0.5 at each side and center=2.
 
-
 def get_dct_basis_functions(image_shape, smoothing_kernel_size):
-    '''
-    Our bias model is a linear combination of a set of basis functions. We are using so-called
-    "DCT-II" basis functions, i.e., the lowest few frequency components of the Discrete Cosine
-    Transform.
+    """Build DCT-II basis functions for bias-field modelling.
 
-    Credit to: SAMSEG (Freesurfer)
+    Computes the lowest-frequency DCT-II basis functions for each image
+    dimension independently. The number of basis functions per dimension
+    is determined by ``ceil(N / delta) + 1``.
 
-    :param image_shape: (tuple)
-    :param smoothing_kernel_size: ()
-    :return:
-    '''
+    Credit: SAMSEG (FreeSurfer).
+
+    Parameters
+    ----------
+    image_shape : tuple of int
+        Spatial shape of the image ``(X, Y, Z)``.
+    smoothing_kernel_size : array-like of float
+        Smoothing scale (in voxels) per dimension, controlling the number
+        of basis functions: larger values → fewer, smoother basis functions.
+
+    Returns
+    -------
+    list of np.ndarray
+        One 2D array per dimension of shape ``(N_d, M_d)``, where ``N_d``
+        is the image size and ``M_d`` is the number of basis functions in
+        that dimension.
+    """
 
     biasFieldBasisFunctions = []
     for dimensionNumber in range(len(image_shape)):
@@ -66,6 +86,24 @@ def get_dct_basis_functions(image_shape, smoothing_kernel_size):
     return biasFieldBasisFunctions
 
 def backprojectKroneckerProductBasisFunctions(kroneckerProductBasisFunctions, coefficients):
+    """Reconstruct a field from Kronecker-product basis coefficients.
+
+    Computes ``W * c`` where ``W`` is the full Kronecker product of the
+    per-dimension basis matrices. This is the inverse of
+    :func:`projectKroneckerProductBasisFunctions`.
+
+    Parameters
+    ----------
+    kroneckerProductBasisFunctions : list of np.ndarray
+        Per-dimension basis matrices, each of shape ``(N_d, M_d)``.
+    coefficients : np.ndarray
+        Coefficient vector of length ``prod(M_d)``.
+
+    Returns
+    -------
+    np.ndarray
+        Reconstructed field, shape ``(N_0, N_1, ..., N_{D-1})``.
+    """
     numberOfDimensions = len(kroneckerProductBasisFunctions)
     Ms = np.zeros(numberOfDimensions, dtype=np.uint32)  # Number of basis functions in each dimension
     Ns = np.zeros(numberOfDimensions, dtype=np.uint32)  # Number of basis functions in each dimension
@@ -79,6 +117,23 @@ def backprojectKroneckerProductBasisFunctions(kroneckerProductBasisFunctions, co
     return Y
 
 def projectKroneckerProductBasisFunctions(kroneckerProductBasisFunctions, T):
+    """Project a field onto Kronecker-product basis functions.
+
+    Computes ``c = W' * t`` where ``W`` is the full Kronecker product of the
+    per-dimension basis matrices and ``t = T.flatten()``.
+
+    Parameters
+    ----------
+    kroneckerProductBasisFunctions : list of np.ndarray
+        Per-dimension basis matrices, each of shape ``(N_d, M_d)``.
+    T : np.ndarray
+        Field to project, shape ``(N_0, N_1, ..., N_{D-1})``.
+
+    Returns
+    -------
+    np.ndarray
+        Coefficient vector of length ``prod(M_d)``.
+    """
     #
     # Compute
     #   c = W' * t
@@ -102,6 +157,20 @@ def projectKroneckerProductBasisFunctions(kroneckerProductBasisFunctions, T):
     return coefficients
 
 def computePrecisionOfKroneckerProductBasisFunctions(kroneckerProductBasisFunctions, B):
+    """Compute the precision matrix ``H = W' diag(B) W`` for Kronecker basis functions.
+
+    Parameters
+    ----------
+    kroneckerProductBasisFunctions : list of np.ndarray
+        Per-dimension basis matrices, each of shape ``(N_d, M_d)``.
+    B : np.ndarray
+        Weight field, shape ``(N_0, N_1, ..., N_{D-1})``.
+
+    Returns
+    -------
+    np.ndarray
+        Precision matrix of shape ``(prod(M_d), prod(M_d))``.
+    """
     #
     # Compute
     #   H = W' * diag( B ) * W
@@ -129,6 +198,36 @@ def computePrecisionOfKroneckerProductBasisFunctions(kroneckerProductBasisFuncti
     return precisionMatrix
 
 def fitBiasFieldParameters(image, soft_seg, means, variances, bias_field_functions, mask, penalty=1):
+    """Estimate bias-field DCT coefficients via weighted least squares.
+
+    Implements Eq. 8 from Van Leemput, *Automated Model-based Bias Field
+    Correction of MR Images of the Brain*, IEEE TMI 1999.
+
+    Parameters
+    ----------
+    image : np.ndarray
+        Log-transformed image, shape ``(X, Y, Z, n_contrasts)``.
+    soft_seg : np.ndarray
+        Soft segmentation posterior probabilities for masked voxels,
+        shape ``(n_voxels_in_mask, n_gaussians)``.
+    means : np.ndarray
+        Gaussian means, shape ``(n_gaussians, n_contrasts, 1)``.
+    variances : np.ndarray
+        Gaussian variances/covariances,
+        shape ``(n_gaussians, n_contrasts, n_contrasts)``.
+    bias_field_functions : list of np.ndarray
+        DCT basis functions as returned by :func:`get_dct_basis_functions`.
+    mask : np.ndarray
+        Boolean mask of shape ``(X, Y, Z)``.
+    penalty : float, optional
+        L2 regularisation weight on the coefficients. Default is 1.
+
+    Returns
+    -------
+    np.ndarray
+        Bias-field DCT coefficients,
+        shape ``(prod(M_d), n_contrasts)``.
+    """
     # Bias field correction: implements Eq. 8 in the paper
     #    Van Leemput, "Automated Model-based Bias Field Correction of MR Images of the Brain", IEEE TMI 1999
 
@@ -184,8 +283,26 @@ def fitBiasFieldParameters(image, soft_seg, means, variances, bias_field_functio
     biasFieldCoefficients = solution.reshape((numberOfContrasts, numberOf3DBasisFunctions)).transpose()
     return biasFieldCoefficients
 
-def getBiasFields(biasFieldCoefficients, biasFieldBasisFunctions,  mask=None ):
+def getBiasFields(biasFieldCoefficients, biasFieldBasisFunctions, mask=None):
+    """Reconstruct bias fields from DCT coefficients and basis functions.
 
+    Parameters
+    ----------
+    biasFieldCoefficients : np.ndarray
+        DCT coefficients, shape ``(prod(M_d), n_contrasts)``.
+    biasFieldBasisFunctions : list of np.ndarray
+        Per-dimension DCT basis matrices as returned by
+        :func:`get_dct_basis_functions`.
+    mask : np.ndarray, optional
+        Boolean spatial mask; if provided, the bias field is zeroed outside
+        the mask.
+
+    Returns
+    -------
+    np.ndarray
+        Reconstructed bias fields (log-scale),
+        shape ``(X, Y, Z, n_contrasts)``.
+    """
     #
     numberOfContrasts = biasFieldCoefficients.shape[-1]
     imageSize = tuple( [ functions.shape[0] for functions in biasFieldBasisFunctions ] )
@@ -200,6 +317,28 @@ def getBiasFields(biasFieldCoefficients, biasFieldBasisFunctions,  mask=None ):
     return biasFields
 
 def undoLogTransformAndBiasField(imageBuffers, biasFields, mask):
+    """Undo the log transform and divide out the estimated bias field.
+
+    Clamps bias-field values outside the mask to the in-mask range (with a
+    ``log(2)`` margin) to prevent extrapolation artefacts.
+
+    Parameters
+    ----------
+    imageBuffers : np.ndarray
+        Log-transformed image, shape ``(X, Y, Z, n_contrasts)``.
+    biasFields : np.ndarray
+        Log-scale bias fields, shape ``(X, Y, Z, n_contrasts)``.
+    mask : np.ndarray
+        Boolean spatial mask, shape ``(X, Y, Z)``.
+
+    Returns
+    -------
+    expImageBuffers : np.ndarray
+        Bias-corrected image in intensity space,
+        shape ``(X, Y, Z, n_contrasts)``.
+    expBiasFields : np.ndarray
+        Bias field in intensity space, shape ``(X, Y, Z, n_contrasts)``.
+    """
     #
     expBiasFields = np.zeros(biasFields.shape, order='F')
     numberOfContrasts = imageBuffers.shape[-1]
@@ -221,14 +360,49 @@ def undoLogTransformAndBiasField(imageBuffers, biasFields, mask):
     return expImageBuffers, expBiasFields
 
 def getGaussianLikelihoods(data, mean, variance):
+    """Compute univariate Gaussian likelihoods for each voxel and class.
 
+    Parameters
+    ----------
+    data : np.ndarray
+        Observed log-intensities, shape ``(n_contrasts, n_voxels)``.
+    mean : np.ndarray
+        Class mean, shape ``(n_contrasts, 1)``.
+    variance : np.ndarray
+        Per-contrast variance, shape ``(n_contrasts,)``.
+
+    Returns
+    -------
+    np.ndarray
+        Likelihood values, shape ``(n_voxels, n_contrasts)``.
+    """
     squared_mahalanobis_dist = (data - mean)** 2 / variance
     scaling = 1.0 / (2 * np.pi * variance) ** (1 / 2)
     gaussianLikelihoods = np.exp(-0.5 * squared_mahalanobis_dist) * scaling
     return gaussianLikelihoods.T
 
 def getGaussianPosteriors(data, classPriors, means, variances):
+    """Compute normalised Gaussian posterior probabilities for each voxel and class.
 
+    Parameters
+    ----------
+    data : np.ndarray
+        Observed log-intensities for masked voxels,
+        shape ``(n_voxels, n_contrasts)``.
+    classPriors : np.ndarray
+        Class prior probabilities, shape ``(n_voxels, n_classes)``.
+    means : np.ndarray
+        Class means, shape ``(n_classes, n_contrasts, 1)``.
+    variances : np.ndarray
+        Per-class, per-contrast variances, shape ``(n_classes, n_contrasts)``.
+
+    Returns
+    -------
+    gaussianPosteriors : np.ndarray
+        Normalised posteriors, shape ``(n_voxels, n_classes)``.
+    minLogLikelihood : float
+        Negative log-likelihood of the data under the current model.
+    """
     numberOfClasses = classPriors.shape[-1]
     numberOfVoxels = data.shape[0]
 
@@ -249,13 +423,39 @@ def getGaussianPosteriors(data, classPriors, means, variances):
     return gaussianPosteriors, minLogLikelihood
 
 def bias_field_corr(init_image, init_seg, penalty=0, patience=3, VERBOSE=True, filter_exceptions=True):
-    '''
-    :param image: np array. Input image to correct
-    :param seg: np.array. Soft segmentation or one-hot encoding of the segmentation with shape=image.shape + (num_labels).
-    :param penalty: regularization term over the coefficients.
-    :param patience: int, default=3. Number indicating the maximum number of iterations where improvement < 1e-6
-    :return:
-    '''
+    """Perform iterative MRI bias-field correction using a Gaussian mixture model.
+
+    Estimates and removes the multiplicative bias field from an MRI volume
+    using DCT basis functions and EM-style updates (Van Leemput, TMI 1999).
+
+    Parameters
+    ----------
+    init_image : np.ndarray
+        Input MRI volume, shape ``(X, Y, Z)`` or ``(X, Y, Z, 1)``.
+    init_seg : np.ndarray
+        Soft segmentation (class posteriors) aligned with the image,
+        shape ``(X, Y, Z, n_labels)``.
+    penalty : float, optional
+        L2 regularisation weight on the DCT coefficients. Default is 0
+        (no regularisation).
+    patience : int, optional
+        Stop after this many consecutive iterations with relative
+        log-likelihood improvement < 1e-3. Default is 3.
+    VERBOSE : bool, optional
+        If ``True``, print iteration progress and total runtime. Default
+        is ``True``.
+    filter_exceptions : bool, optional
+        If ``True``, return ``(None, None)`` when the log-likelihood is NaN
+        instead of raising. Default is ``True``.
+
+    Returns
+    -------
+    image_corr : np.ndarray or None
+        Bias-corrected image, same spatial shape as ``init_image``, or
+        ``None`` if NaN was encountered and ``filter_exceptions=True``.
+    bias_field : np.ndarray or None
+        Estimated multiplicative bias field, same shape, or ``None``.
+    """
 
     if len(init_image.shape) == 3: init_image = init_image[..., np.newaxis]
     init_image_log = np.log(init_image + 1e-5)

@@ -14,6 +14,22 @@ import numpy as np
 import csv
 
 def get_bids_entities(fname):
+    """Parse BIDS entities from a filename into a dictionary.
+
+    Parameters
+    ----------
+    fname : str
+        BIDS-formatted filename (e.g.
+        ``sub-001_ses-01_T1w.nii.gz``).
+
+    Returns
+    -------
+    dict
+        Mapping of entity keys to values. The ``'subject'`` and
+        ``'session'`` keys are normalised from the BIDS short forms
+        ``'sub'`` and ``'ses'``. A ``'suffix'`` and ``'extension'``
+        key are also set for the final filename component.
+    """
     edict = {}
     fparts = basename(fname).split('_')
     for f in fparts:
@@ -35,6 +51,20 @@ def get_bids_entities(fname):
     return edict
 
 def save_nii(im, v2r, filepath):
+    """Save a NumPy array as a NIfTI file, creating parent directories as needed.
+
+    Boolean arrays are cast to ``uint8`` and ``int64`` arrays to ``float``
+    before saving to ensure NIfTI compatibility.
+
+    Parameters
+    ----------
+    im : np.ndarray
+        Image data to save.
+    v2r : np.ndarray
+        Voxel-to-RAS affine matrix, shape ``(4, 4)``.
+    filepath : str
+        Output file path (e.g. ``path/to/image.nii.gz``).
+    """
     if im.dtype in [np.bool_]:
         im = im.astype('uint8')
     elif im.dtype in [np.int64]:
@@ -45,12 +75,35 @@ def save_nii(im, v2r, filepath):
     nib.save(img, filepath)
 
 def check_nan(v):
+    """Return whether a value represents a missing / NaN observation.
+
+    Parameters
+    ----------
+    v : str or float
+        Value to test.
+
+    Returns
+    -------
+    bool
+        ``True`` if ``v`` is ``''``, ``'nan'``, ``'NaN'``, or
+        ``float('nan')``.
+    """
     if v in ['', 'nan', 'NaN'] or np.isnan(v):
         return True
     else:
         return False
 
 def create_dir(path, subdirs=None):
+    """Create a directory (and optional sub-directories) if they do not exist.
+
+    Parameters
+    ----------
+    path : str
+        Root directory to create.
+    subdirs : str or list of str, optional
+        Sub-directory name(s) to create inside ``path``. If ``None``,
+        only ``path`` itself is created.
+    """
     if subdirs is None:
         if not exists(path):
             makedirs(path)
@@ -63,9 +116,28 @@ def create_dir(path, subdirs=None):
                 makedirs(join(path, subdir))
 
 def remove_dir(path):
+    """Recursively remove a directory and all its contents.
+
+    Parameters
+    ----------
+    path : str
+        Path to the directory to remove.
+    """
     subprocess.call(['rm', '-rf', path])
 
 def create_derivative_dir(path, description):
+    """Create a BIDS derivative directory with a ``dataset_description.json``.
+
+    The JSON file is only written if it does not already exist.
+
+    Parameters
+    ----------
+    path : str
+        Path to the derivative directory to create.
+    description : str
+        Human-readable description written to the ``'Description'`` field
+        of ``dataset_description.json``.
+    """
     if not os.path.exists(path): os.makedirs(path)
     data_descr_path = os.path.join(path, 'dataset_description.json')
 
@@ -80,6 +152,19 @@ def create_derivative_dir(path, description):
             outfile.write(json_object)
 
 def write_json_derivatives(pixdim, volshape, filename, extra_kwargs={}):
+    """Write a BIDS-style JSON sidecar with image resolution and shape.
+
+    Parameters
+    ----------
+    pixdim : array-like of float
+        Voxel sizes along R, A, S axes in mm (length ≥ 3).
+    volshape : array-like of int
+        Image dimensions along X, Y, Z axes (length ≥ 3).
+    filename : str
+        Output ``.json`` file path.
+    extra_kwargs : dict, optional
+        Additional key-value pairs to merge into the JSON object.
+    """
     im_json = {
         "Resolution": {
             "R": str(pixdim[0]),
@@ -99,6 +184,16 @@ def write_json_derivatives(pixdim, volshape, filename, extra_kwargs={}):
         outfile.write(json_object)
 
 def create_results_dir(results_dir, subdirs=None):
+    """Create a results directory with standard sub-directories.
+
+    Parameters
+    ----------
+    results_dir : str
+        Root results directory to create.
+    subdirs : list of str, optional
+        Sub-directory names to create. Defaults to
+        ``['checkpoints', 'results']``.
+    """
     if subdirs is None:
         subdirs = ['checkpoints', 'results']
     if not exists(results_dir):
@@ -110,7 +205,17 @@ def create_results_dir(results_dir, subdirs=None):
                 makedirs(join(results_dir, sd))
 
 def mri_convert_nifti_directory(directory, extension='.nii.gz'):
+    """Convert all NIfTI / MGZ files in a directory to a target format via ``mri_convert``.
 
+    Files already in the target ``extension`` are skipped.
+
+    Parameters
+    ----------
+    directory : str
+        Path to the directory containing the images to convert.
+    extension : str, optional
+        Target file extension. Default is ``'.nii.gz'``.
+    """
     files = listdir(directory)
     for f in files:
         if extension in f:
@@ -130,6 +235,18 @@ def mri_convert_nifti_directory(directory, extension='.nii.gz'):
         subprocess.call(['mri_convert', join(directory, f), join(directory, new_f)])
 
 def read_lta(file):
+    """Read a FreeSurfer LTA (linear transform array) file into a 4×4 matrix.
+
+    Parameters
+    ----------
+    file : str
+        Path to the ``.lta`` file.
+
+    Returns
+    -------
+    np.ndarray
+        Affine transformation matrix, shape ``(4, 4)``.
+    """
     lta = np.zeros((4,4))
     with open(file, 'r') as txtfile:
         lines = txtfile.readlines()
@@ -140,7 +257,25 @@ def read_lta(file):
     return lta
 
 def read_tsv(path, k=None, delimiter='\t', codec_read=False):
+    """Read a delimited file into a dictionary keyed by one or more columns.
 
+    Parameters
+    ----------
+    path : str
+        Path to the TSV (or CSV) file.
+    k : str or list of str, optional
+        Column name(s) to use as the dictionary key. Multiple columns are
+        joined with ``'_'``. Defaults to the first column in the file.
+    delimiter : str, optional
+        Field delimiter. Default is ``'\\t'``.
+    codec_read : bool, optional
+        Reserved for future use. Currently unused. Default is ``False``.
+
+    Returns
+    -------
+    dict
+        Mapping from key string to the full row dictionary.
+    """
     t = {}
     with open(path, 'r') as csvfile:
         csvreader = csv.DictReader(csvfile, delimiter=delimiter)
@@ -153,12 +288,41 @@ def read_tsv(path, k=None, delimiter='\t', codec_read=False):
     return t
 
 def write_affine_matrix(path, affine_matrix):
+    """Write a 4×4 affine matrix to a space-delimited text file.
+
+    Parameters
+    ----------
+    path : str
+        Output file path.
+    affine_matrix : np.ndarray
+        Affine matrix, shape ``(4, 4)``.
+    """
     with open(path, 'w', newline='') as csvfile:
         csvwriter = csv.writer(csvfile, delimiter=' ')
         for it_row in range(4):
             csvwriter.writerow(affine_matrix[it_row])
 
 def read_affine_matrix(path, full=False):
+    """Read an affine matrix from a space-delimited text file.
+
+    Parameters
+    ----------
+    path : str
+        Path to the file produced by :func:`write_affine_matrix`.
+    full : bool, optional
+        If ``True``, return the full 4×4 affine matrix. If ``False``
+        (default), return the 3×3 rotation block and the 3-element
+        translation vector separately.
+
+    Returns
+    -------
+    affine_matrix : np.ndarray
+        Shape ``(4, 4)`` when ``full=True``.
+    rotation_matrix : np.ndarray
+        Shape ``(3, 3)`` when ``full=False``.
+    translation_vector : np.ndarray
+        Shape ``(3,)`` when ``full=False``.
+    """
     with open(path, 'r') as csvfile:
         rotation_matrix = np.zeros((3, 3))
         translation_vector = np.zeros((3,))
@@ -182,23 +346,56 @@ def read_affine_matrix(path, full=False):
         return rotation_matrix, translation_vector
 
 def load_array_if_path(var, load_as_numpy=True):
-    """If var is a string and load_as_numpy is True, this function loads the array writen at the path indicated by var.
-    Otherwise it simply returns var as it is."""
+    """Load a NumPy array from a file path, or pass through the value unchanged.
+
+    Parameters
+    ----------
+    var : str or any
+        If a string and ``load_as_numpy`` is ``True``, treated as a file path
+        and loaded with ``np.load``. Otherwise returned as-is.
+    load_as_numpy : bool, optional
+        Whether to attempt loading ``var`` as a NumPy file. Default is ``True``.
+
+    Returns
+    -------
+    np.ndarray or any
+        Loaded array, or the original ``var`` if no loading was performed.
+    """
     if (isinstance(var, str)) & load_as_numpy:
         assert os.path.isfile(var), 'No such path: %s' % var
         var = np.load(var)
     return var
 
 def get_dims(shape, max_channels=10):
-    """Get the number of dimensions and channels from the shape of an array.
-    The number of dimensions is assumed to be the length of the shape, as long as the shape of the last dimension is
-    inferior or equal to max_channels (default 3).
-    :param shape: shape of an array. Can be a sequence or a 1d numpy array.
-    :param max_channels: maximum possible number of channels.
-    :return: the number of dimensions and channels associated with the provided shape.
-    example 1: get_dims([150, 150, 150], max_channels=10) = (3, 1)
-    example 2: get_dims([150, 150, 150, 3], max_channels=10) = (3, 3)
-    example 3: get_dims([150, 150, 150, 15], max_channels=10) = (4, 1), because 5>3"""
+    """Infer the number of spatial dimensions and channels from an array shape.
+
+    If the last dimension is ≤ ``max_channels`` it is interpreted as a channel
+    axis; otherwise the array is treated as purely spatial with one channel.
+
+    Parameters
+    ----------
+    shape : sequence of int
+        Shape of the array (e.g. ``volume.shape``).
+    max_channels : int, optional
+        Maximum value of the last dimension that is still considered a channel
+        axis. Default is 10.
+
+    Returns
+    -------
+    n_dims : int
+        Number of spatial dimensions.
+    n_channels : int
+        Number of channels.
+
+    Examples
+    --------
+    >>> get_dims([150, 150, 150], max_channels=10)
+    (3, 1)
+    >>> get_dims([150, 150, 150, 3], max_channels=10)
+    (3, 3)
+    >>> get_dims([150, 150, 150, 15], max_channels=10)
+    (4, 1)
+    """
     if shape[-1] <= max_channels:
         n_dims = len(shape) - 1
         n_channels = shape[-1]
@@ -208,11 +405,21 @@ def get_dims(shape, max_channels=10):
     return n_dims, n_channels
 
 def get_ras_axes(aff, n_dims=3):
-    """This function finds the RAS axes corresponding to each dimension of a volume, based on its affine matrix.
-    :param aff: affine matrix Can be a 2d numpy array of size n_dims*n_dims, n_dims+1*n_dims+1, or n_dims*n_dims+1.
-    :param n_dims: number of dimensions (excluding channels) of the volume corresponding to the provided affine matrix.
-    :return: two numpy 1d arrays of lengtn n_dims, one with the axes corresponding to RAS orientations,
-    and one with their corresponding direction.
+    """Find which voxel axis corresponds to each RAS axis from an affine matrix.
+
+    Parameters
+    ----------
+    aff : np.ndarray
+        Affine matrix. Accepted shapes: ``(n_dims, n_dims)``,
+        ``(n_dims+1, n_dims+1)``, or ``(n_dims, n_dims+1)``.
+    n_dims : int, optional
+        Number of spatial dimensions. Default is 3.
+
+    Returns
+    -------
+    np.ndarray
+        1D array of length ``n_dims`` mapping each RAS axis (R=0, A=1, S=2)
+        to the corresponding voxel axis index.
     """
     aff_inverted = np.linalg.inv(aff)
     img_ras_axes = np.argmax(np.absolute(aff_inverted[0:n_dims, 0:n_dims]), axis=0)
@@ -225,14 +432,36 @@ def get_ras_axes(aff, n_dims=3):
     return img_ras_axes
 
 def align_volume_to_ref(volume, aff, aff_ref=None, return_aff=False, n_dims=None, return_copy=True):
-    """This function aligns a volume to a reference orientation (axis and direction) specified by an affine matrix.
-    :param volume: a numpy array
-    :param aff: affine matrix of the floating volume
-    :param aff_ref: (optional) affine matrix of the target orientation. Default is identity matrix.
-    :param return_aff: (optional) whether to return the affine matrix of the aligned volume
-    :param n_dims: (optional) number of dimensions (excluding channels) of the volume. If not provided, n_dims will be
-    inferred from the input volume.
-    :return: aligned volume, with corresponding affine matrix if return_aff is True.
+    """Align a volume to the axis orientation and flip direction of a reference affine.
+
+    Swaps and flips axes of ``volume`` so that its orientation matches
+    ``aff_ref``, updating the affine accordingly.
+
+    Parameters
+    ----------
+    volume : np.ndarray
+        Floating volume to reorient.
+    aff : np.ndarray
+        Affine matrix of the floating volume, shape ``(4, 4)``.
+    aff_ref : np.ndarray, optional
+        Target orientation affine. Defaults to ``np.eye(4)`` (identity /
+        RAS-aligned).
+    return_aff : bool, optional
+        If ``True``, also return the updated affine matrix. Default is
+        ``False``.
+    n_dims : int, optional
+        Number of spatial dimensions. Inferred from ``volume.shape`` when
+        ``None``.
+    return_copy : bool, optional
+        If ``True``, operate on a copy of the volume. Default is ``True``.
+
+    Returns
+    -------
+    new_volume : np.ndarray
+        Reoriented volume.
+    aff_flo : np.ndarray
+        Updated affine, shape ``(4, 4)``. Only returned when
+        ``return_aff=True``.
     """
 
     # work on copy
@@ -271,15 +500,32 @@ def align_volume_to_ref(volume, aff, aff_ref=None, return_aff=False, n_dims=None
         return new_volume
 
 def reformat_to_list(var, length=None, load_as_numpy=False, dtype=None):
-    """This function takes a variable and reformat it into a list of desired
-    length and type (int, float, bool, str).
-    If variable is a string, and load_as_numpy is True, it will be loaded as a numpy array.
-    If variable is None, this funtion returns None.
-    :param var: a str, int, float, list, tuple, or numpy array
-    :param length: (optional) if var is a single item, it will be replicated to a list of this length
-    :param load_as_numpy: (optional) whether var is the path to a numpy array
-    :param dtype: (optional) convert all item to this type. Can be 'int', 'float', 'bool', or 'str'
-    :return: reformated list
+    """Reformat a scalar, tuple, array, or string into a typed list of given length.
+
+    Parameters
+    ----------
+    var : str, int, float, bool, list, tuple, or np.ndarray
+        Value to reformat. ``None`` is returned unchanged.
+    length : int, optional
+        Desired list length. If ``var`` has a single element it is replicated;
+        otherwise ``var`` must already have this length.
+    load_as_numpy : bool, optional
+        If ``True`` and ``var`` is a string, load it as a NumPy array first.
+        Default is ``False``.
+    dtype : {'int', 'float', 'bool', 'str'}, optional
+        Convert every list element to this type after reformatting.
+
+    Returns
+    -------
+    list or None
+        Reformatted list, or ``None`` if ``var`` is ``None``.
+
+    Raises
+    ------
+    ValueError
+        If ``var`` is a list/array of length ≠ 1 and ≠ ``length``.
+    TypeError
+        If ``var`` cannot be converted to a list.
     """
 
     # convert to list
@@ -324,17 +570,37 @@ def reformat_to_list(var, length=None, load_as_numpy=False, dtype=None):
     return var
 
 def load_volume(path_volume, im_only=True, squeeze=True, dtype=None, aff_ref=None):
-    """
-    Load volume file.
-    :param path_volume: path of the volume to load. Can either be a nii, nii.gz, mgz, or npz format.
-    If npz format, 1) the variable name is assumed to be 'vol_data',
-    2) the volume is associated with a identity affine matrix and blank header.
-    :param im_only: (optional) if False, the function also returns the affine matrix and header of the volume.
-    :param squeeze: (optional) whether to squeeze the volume when loading.
-    :param dtype: (optional) if not None, convert the loaded volume to this numpy dtype.
-    :param aff_ref: (optional) If not None, the loaded volume is aligned to this affine matrix.
-    The returned affine matrix is also given in this new space. Must be a numpy array of dimension 4x4.
-    :return: the volume, with corresponding affine matrix and header if im_only is False.
+    """Load a medical image volume from disk.
+
+    Supported formats: ``.nii``, ``.nii.gz``, ``.mgz``, ``.npz``.
+    For ``.npz`` files the array must be stored under the key
+    ``'vol_data'``; the affine defaults to identity and the header is blank.
+
+    Parameters
+    ----------
+    path_volume : str
+        Path to the image file.
+    im_only : bool, optional
+        If ``True`` (default), return only the volume array. If ``False``,
+        also return the affine matrix and header.
+    squeeze : bool, optional
+        Whether to squeeze singleton dimensions. Default is ``True``.
+    dtype : str, optional
+        NumPy dtype to cast the volume to after loading (e.g. ``'float32'``).
+        Integer dtypes trigger rounding before casting.
+    aff_ref : np.ndarray, optional
+        If provided, align the volume to this 4×4 affine matrix before
+        returning.
+
+    Returns
+    -------
+    volume : np.ndarray
+        Image data array.
+    aff : np.ndarray
+        Affine matrix, shape ``(4, 4)``. Only returned when
+        ``im_only=False``.
+    header : nibabel header
+        Image header. Only returned when ``im_only=False``.
     """
     assert path_volume.endswith(('.nii', '.nii.gz', '.mgz', '.npz')), 'Unknown data file: %s' % path_volume
 
@@ -368,17 +634,25 @@ def load_volume(path_volume, im_only=True, squeeze=True, dtype=None, aff_ref=Non
         return volume, aff, header
 
 def save_volume(volume, aff, header, path, res=None, dtype=None, n_dims=3):
-    """
-    Save a volume.
-    :param volume: volume to save
-    :param aff: affine matrix of the volume to save. If aff is None, the volume is saved with an identity affine matrix.
-    aff can also be set to 'FS', in which case the volume is saved with the affine matrix of FreeSurfer outputs.
-    :param header: header of the volume to save. If None, the volume is saved with a blank header.
-    :param path: path where to save the volume.
-    :param res: (optional) update the resolution in the header before saving the volume.
-    :param dtype: (optional) numpy dtype for the saved volume.
-    :param n_dims: (optional) number of dimensions, to avoid confusion in multi-channel case. Default is None, where
-    n_dims is automatically inferred.
+    """Save a volume array to disk as a NIfTI or NPZ file.
+
+    Parameters
+    ----------
+    volume : np.ndarray
+        Image data to save.
+    aff : np.ndarray or str or None
+        Voxel-to-RAS affine matrix, shape ``(4, 4)``. Pass ``'FS'`` to use
+        the standard FreeSurfer output affine, or ``None`` for identity.
+    header : nibabel header or None
+        Image header. A blank ``Nifti1Header`` is used when ``None``.
+    path : str
+        Output file path (``.nii``, ``.nii.gz``, or ``.npz``).
+    res : float or array-like of float, optional
+        If provided, update the voxel sizes in the header before saving.
+    dtype : str, optional
+        NumPy dtype for the saved data. Integer dtypes trigger rounding.
+    n_dims : int, optional
+        Number of spatial dimensions, used to interpret ``res``. Default is 3.
     """
 
     if not exists(os.path.dirname(path)): makedirs(os.path.dirname(path))
@@ -406,14 +680,38 @@ def save_volume(volume, aff, header, path, res=None, dtype=None, n_dims=3):
         nib.save(nifty, path)
 
 def get_volume_info(path_volume, return_volume=False, aff_ref=None, max_channels=10):
-    """
-    Gather information about a volume: shape, affine matrix, number of dimensions and channels, header, and resolution.
-    :param path_volume: path of the volume to get information form.
-    :param return_volume: (optional) whether to return the volume along with the information.
-    :param aff_ref: (optional) If not None, the loaded volume is aligned to this affine matrix.
-    All info relative to the volume is then given in this new space. Must be a numpy array of dimension 4x4.
-    :return: volume (if return_volume is true), and corresponding info. If aff_ref is not None, the returned aff is
-    the original one, i.e. the affine of the image before being aligned to aff_ref.
+    """Gather metadata about a volume without necessarily returning the data.
+
+    Parameters
+    ----------
+    path_volume : str
+        Path to the image file.
+    return_volume : bool, optional
+        If ``True``, include the loaded array in the return tuple. Default is
+        ``False``.
+    aff_ref : np.ndarray, optional
+        If provided, align the volume and recompute shape / resolution in this
+        4×4 reference space before returning.
+    max_channels : int, optional
+        Passed to :func:`get_dims` to determine the channel threshold.
+        Default is 10.
+
+    Returns
+    -------
+    volume : np.ndarray
+        Image data. Only included when ``return_volume=True``.
+    im_shape : list of int
+        Spatial shape (without channel dimension).
+    aff : np.ndarray
+        Original affine matrix, shape ``(4, 4)``.
+    n_dims : int
+        Number of spatial dimensions.
+    n_channels : int
+        Number of image channels.
+    header : nibabel header
+        Image header.
+    data_res : np.ndarray
+        Voxel sizes in mm, length ``n_dims``.
     """
     # read image
     im, aff, header = load_volume(path_volume, im_only=False)
@@ -449,19 +747,84 @@ def get_volume_info(path_volume, return_volume=False, aff_ref=None, max_channels
         return im_shape, aff, n_dims, n_channels, header, data_res
 
 def get_run(file):
+    """Extract the BIDS ``run`` index from a filename.
+
+    Parameters
+    ----------
+    file : str
+        BIDS filename (e.g. ``sub-001_ses-01_run-02_T1w.nii.gz``).
+
+    Returns
+    -------
+    str
+        The run index string (e.g. ``'02'``), or ``''`` if no run entity is
+        present.
+    """
     for f in file.split('_'):
         if 'run' in f: return f.split('-')[1]
     return ''
 
 def load_chunk(ps, chunk, ps_id):
+    """Load a spatial sub-volume (chunk) from a NIfTI proxy and add a batch axis.
+
+    Parameters
+    ----------
+    ps : nibabel.Nifti1Image
+        Source image proxy.
+    chunk : list of [int, int]
+        Crop coordinates ``[[x0, x1], [y0, y1], [z0, z1]]``.
+    ps_id : any
+        Identifier passed through as the second return value (e.g. subject ID).
+
+    Returns
+    -------
+    data : np.ndarray
+        Sub-volume with a leading batch dimension, shape ``(1, dx, dy, dz)``.
+    ps_id : any
+        The ``ps_id`` argument, unchanged.
+    """
     return np.asarray(ps.dataobj[chunk[0][0]:chunk[0][1], chunk[1][0]:chunk[1][1], chunk[2][0]:chunk[2][1]])[np.newaxis], ps_id
 
 def load_chunk_rescale(ps, chunk, ps_id, factor):
+    """Load and spatially rescale a NIfTI volume, then return a chunk.
+
+    Parameters
+    ----------
+    ps : nibabel.Nifti1Image
+        Source image proxy.
+    chunk : list of [int, int]
+        Crop coordinates ``[[x0, x1], [y0, y1], [z0, z1]]`` applied after
+        rescaling.
+    ps_id : any
+        Identifier passed through as the second return value.
+    factor : float
+        Isotropic rescaling factor applied to the first three dimensions.
+
+    Returns
+    -------
+    data : np.ndarray
+        Rescaled and cropped sub-volume with a leading batch dimension,
+        shape ``(1, dx, dy, dz)``.
+    ps_id : any
+        The ``ps_id`` argument, unchanged.
+    """
     svf = np.asarray(ps.dataobj)
     svf = rescale(svf, [factor]*3  + [1])
     return svf[chunk[0][0]:chunk[0][1], chunk[1][0]:chunk[1][1], chunk[2][0]:chunk[2][1]][np.newaxis], ps_id
 
 def get_age(age):
+    """Parse an age value to float, returning ``None`` for missing values.
+
+    Parameters
+    ----------
+    age : str or float
+        Age value, possibly ``'nan'`` or a non-numeric string.
+
+    Returns
+    -------
+    float or None
+        Parsed age, or ``None`` if parsing fails or the value is ``'nan'``.
+    """
     if age == 'nan': age = None
     try:
         age = float(age)
@@ -471,6 +834,22 @@ def get_age(age):
     return age
 
 def get_dx_bl(subject):
+    """Extract the baseline diagnosis code from a subject object.
+
+    Looks up ``'dx'`` then ``'diagnosis'`` in the subject dictionary, and
+    falls back to deriving the longitudinal diagnosis from session metadata.
+
+    Parameters
+    ----------
+    subject : object
+        Subject object with attributes ``sbj_dict`` (dict) and ``sessions``
+        (list of session objects with ``sess_metadata`` dicts).
+
+    Returns
+    -------
+    int
+        Diagnosis code as defined in :data:`DX_DICT`.
+    """
     if 'dx' in subject.sbj_dict.keys():
         dx = subject.sbj_dict['dx']
     elif 'diagnosis' in subject.sbj_dict.keys():
@@ -481,6 +860,21 @@ def get_dx_bl(subject):
     return dx
 
 def get_dx(dx):
+    """Map a diagnosis string to an integer code.
+
+    Parameters
+    ----------
+    dx : str
+        Diagnosis label. Recognised values include ``''``, ``'-1'``,
+        ``'CN'``, ``'Control'``, ``'CTR'``, ``'MCI'``, ``'Dementia'``,
+        ``'AD'``, ``'FTD'``, ``'DFT'``, and ``'PortadorGENFI'``.
+
+    Returns
+    -------
+    int
+        Integer code: ``-1`` unknown, ``0`` CN, ``1`` MCI, ``2`` AD/Dementia,
+        ``3`` FTD, ``4`` GENFI carrier.
+    """
     if dx == '':
         dx = -1
     elif dx == '-1':
@@ -499,6 +893,22 @@ def get_dx(dx):
     return dx
 
 def get_dx_long(dx_list):
+    """Derive a longitudinal diagnosis code from a list of cross-sectional diagnoses.
+
+    Combines baseline and last diagnosis to classify trajectories such as
+    CN-stable, CN-to-MCI converter, MCI-to-AD converter, etc.
+
+    Parameters
+    ----------
+    dx_list : list of str
+        Ordered list of cross-sectional diagnosis labels (one per visit),
+        as accepted by :func:`get_dx`.
+
+    Returns
+    -------
+    int
+        Longitudinal diagnosis code as defined in :data:`DX_DICT`.
+    """
     if len(dx_list) == 1:
         return get_dx(dx_list[0])
 
@@ -580,8 +990,22 @@ DX_DICT = {
 }
 
 def read_FS_volumes(file, labs=None):
+    """Parse regional volumes and eTIV from a FreeSurfer stats file.
 
+    Parameters
+    ----------
+    file : str
+        Path to a FreeSurfer ``aseg.stats`` (or similar) file.
+    labs : dict, optional
+        Reserved for future use. Currently unused.
 
+    Returns
+    -------
+    fs_vols : dict
+        Mapping of structure name → volume (mm³) as a ``float``.
+    etiv : float
+        Estimated total intra-cranial volume in mm³.
+    """
     etiv = 0
     fs_vols = {}
     start = False
@@ -603,6 +1027,18 @@ def read_FS_volumes(file, labs=None):
     return fs_vols, etiv
 
 def get_float_vol(v):
+    """Safely cast a value to float, returning ``-4`` on failure.
+
+    Parameters
+    ----------
+    v : any
+        Value to cast.
+
+    Returns
+    -------
+    float
+        Parsed float, or ``-4.0`` if conversion raises an exception.
+    """
     try:
         return float(v)
     except:

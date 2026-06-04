@@ -11,6 +11,32 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 def fast_3D_interp_torch(X, II, JJ, KK, mode):
+    """Interpolate a 3D scalar volume at arbitrary coordinates using PyTorch.
+
+    Parameters
+    ----------
+    X : torch.Tensor
+        Source volume, shape ``(Nx, Ny, Nz)``.
+    II : torch.Tensor
+        x-coordinates of the query points (first dimension), shape (Rx, Ry, Rz).
+    JJ : torch.Tensor
+        y-coordinates of the query points (second dimension), shape (Rx, Ry, Rz).
+    KK : torch.Tensor
+        z-coordinates of the query points (third dimension), shape (Rx, Ry, Rz).
+    mode : {'nearest', 'linear'}
+        Interpolation mode. ``'linear'`` uses trilinear interpolation;
+        out-of-bounds coordinates are set to zero.
+
+    Returns
+    -------
+    torch.Tensor
+        Interpolated values, shape ``(*II.shape, C)`` == ``(Rx, Ry, Rz, C)``.
+
+    Raises
+    ------
+    Exception
+        If ``mode`` is not ``'nearest'`` or ``'linear'``.
+    """
     if mode == 'nearest':
         IIr = torch.round(II).long()
         JJr = torch.round(JJ).long()
@@ -66,7 +92,7 @@ def fast_3D_interp_torch(X, II, JJ, KK, mode):
         #
         c = c0 * wfz + c1 * wcz
         #
-        Y = torch.zeros(II.shape, device='cpu')
+        Y = torch.zeros(II.shape, device=X.device)
         Y[ok] = c.float()
 
     else:
@@ -75,6 +101,32 @@ def fast_3D_interp_torch(X, II, JJ, KK, mode):
     return Y
 
 def fast_3D_interp_field_torch(X, II, JJ, KK, mode='linear'):
+    """Interpolate a 3D multi-channel field at arbitrary coordinates using PyTorch.
+
+    Parameters
+    ----------
+    X : torch.Tensor
+        Source field, shape ``(Nx, Ny, Nz, C)``.
+    II : torch.Tensor
+        x-coordinates of the query points (first dimension), shape (Rx, Ry, Rz).
+    JJ : torch.Tensor
+        y-coordinates of the query points (second dimension), shape (Rx, Ry, Rz).
+    KK : torch.Tensor
+        z-coordinates of the query points (third dimension), shape (Rx, Ry, Rz).
+    mode : {'nearest', 'linear'}, optional
+        Interpolation mode. Default is ``'linear'`` (trilinear);
+        out-of-bounds coordinates are set to zero.
+
+    Returns
+    -------
+    torch.Tensor
+        Interpolated field, shape ``(*II.shape, C)`` == ``(Rx, Ry, Rz, C)``.
+
+    Raises
+    ------
+    Exception
+        If ``mode`` is not ``'nearest'`` or ``'linear'``.
+    """
     num_channels = X.shape[-1]
     if mode == 'nearest':
         IIr = torch.round(II).long()
@@ -148,10 +200,39 @@ def fast_3D_interp_field_torch(X, II, JJ, KK, mode='linear'):
             #
             Y[..., channel] = Yc
         #
+    else:
+        raise Exception('mode must be linear or nearest')
+
     return Y
 
 def vol_resample_fast(ref_proxy, flo_proxy, proxyflow=None, mode='linear', device='cpu', return_np=False):
+    """Resample a floating image into the space of a reference image using PyTorch.
 
+    Optionally applies a dense displacement field before resampling.
+
+    Parameters
+    ----------
+    ref_proxy : nibabel.Nifti1Image
+        Reference image defining the output grid.
+    flo_proxy : nibabel.Nifti1Image
+        Floating (moving) image to resample.
+    proxyflow : nibabel.Nifti1Image, optional
+        Dense displacement field in the reference space,
+        shape ``(3, X, Y, Z)`` or ``(X, Y, Z, 3)``. If ``None``,
+        only the affine alignment is applied.
+    mode : {'linear', 'nearest'}, optional
+        Interpolation mode. Default is ``'linear'``.
+    device : str, optional
+        PyTorch device string. Default is ``'cpu'``.
+    return_np : bool, optional
+        If ``True``, return a NumPy array. If ``False`` (default), wrap the
+        result in a ``Nifti1Image`` with the reference affine.
+
+    Returns
+    -------
+    np.ndarray or nibabel.Nifti1Image
+        Resampled image.
+    """
     ref_v2r = (ref_proxy.affine).astype('float32')
     target_v2r = (flo_proxy.affine).astype('float32')
 
@@ -163,37 +244,37 @@ def vol_resample_fast(ref_proxy, flo_proxy, proxyflow=None, mode='linear', devic
 
     del ii, jj, kk
 
-    II = torch.tensor(II, device='cpu')
-    JJ = torch.tensor(JJ, device='cpu')
-    KK = torch.tensor(KK, device='cpu')
+    II = torch.tensor(II, device=device)
+    JJ = torch.tensor(JJ, device=device)
+    KK = torch.tensor(KK, device=device)
 
     if proxyflow is not None:
 
         flow_v2r = proxyflow.affine
         flow_v2r = flow_v2r.astype('float32')
 
-        affine = torch.tensor(np.linalg.inv(flow_v2r) @ ref_v2r)
+        affine = torch.tensor(np.linalg.inv(flow_v2r) @ ref_v2r, device=device)
         II2 = affine[0, 0] * II + affine[0, 1] * JJ + affine[0, 2] * KK + affine[0, 3]
         JJ2 = affine[1, 0] * II + affine[1, 1] * JJ + affine[1, 2] * KK + affine[1, 3]
         KK2 = affine[2, 0] * II + affine[2, 1] * JJ + affine[2, 2] * KK + affine[2, 3]
 
         flow = np.array(proxyflow.dataobj)
         if flow.shape[0] == 3: flow = np.transpose(flow, axes=(1, 2, 3, 0))
-        flow = torch.tensor(flow)
+        flow = torch.tensor(flow, device=device)
 
         FIELD = fast_3D_interp_field_torch(flow, II2, JJ2, KK2)
         II3 = II2 + FIELD[:, :, :, 0]
         JJ3 = JJ2 + FIELD[:, :, :, 1]
         KK3 = KK2 + FIELD[:, :, :, 2]
 
-        affine = torch.tensor(np.linalg.inv(target_v2r) @ flow_v2r)
+        affine = torch.tensor(np.linalg.inv(target_v2r) @ flow_v2r, device=device)
         II4 = affine[0, 0] * II3 + affine[0, 1] * JJ3 + affine[0, 2] * KK3 + affine[0, 3]
         JJ4 = affine[1, 0] * II3 + affine[1, 1] * JJ3 + affine[1, 2] * KK3 + affine[1, 3]
         KK4 = affine[2, 0] * II3 + affine[2, 1] * JJ3 + affine[2, 2] * KK3 + affine[2, 3]
 
 
     else:
-        affine = torch.tensor(np.linalg.inv(target_v2r) @ ref_v2r)
+        affine = torch.tensor(np.linalg.inv(target_v2r) @ ref_v2r, device=device)
         II4 = affine[0, 0] * II + affine[0, 1] * JJ + affine[0, 2] * KK + affine[0, 3]
         JJ4 = affine[1, 0] * II + affine[1, 1] * JJ + affine[1, 2] * KK + affine[1, 3]
         KK4 = affine[2, 0] * II + affine[2, 1] * JJ + affine[2, 2] * KK + affine[2, 3]
@@ -201,11 +282,11 @@ def vol_resample_fast(ref_proxy, flo_proxy, proxyflow=None, mode='linear', devic
 
     image = np.array(flo_proxy.dataobj)
     if len(flo_proxy.shape) == 3:
-        reg_image = fast_3D_interp_torch(torch.tensor(image), II4, JJ4, KK4, mode=mode)
+        reg_image = fast_3D_interp_torch(torch.tensor(image, device=device), II4, JJ4, KK4, mode=mode)
     else:
-        reg_image = fast_3D_interp_field_torch(torch.tensor(image), II4, JJ4, KK4, mode=mode)
+        reg_image = fast_3D_interp_field_torch(torch.tensor(image, device=device), II4, JJ4, KK4, mode=mode)
 
-    reg_image = reg_image.numpy()
+    reg_image = reg_image.cpu().numpy()
 
     if return_np:
         return reg_image
@@ -213,6 +294,21 @@ def vol_resample_fast(ref_proxy, flo_proxy, proxyflow=None, mode='linear', devic
         return nib.Nifti1Image(reg_image, ref_proxy.affine)
 
 def compute_gradient(flow):
+    """Compute the spatial gradient of a 3D vector field using central differences.
+
+    Boundary voxels are left at zero (no padding is applied).
+
+    Parameters
+    ----------
+    flow : np.ndarray
+        Vector field, shape ``(X, Y, Z, 3)``.
+
+    Returns
+    -------
+    np.ndarray
+        Gradient tensor, shape ``(X, Y, Z, 3, 3)``, where entry
+        ``[..., i, j]`` is ``d flow_i / d x_j``.
+    """
     gradient_map = np.zeros(flow.shape[:3] + (3,3))
 
     for it_dim in range(3):
@@ -225,14 +321,24 @@ def compute_gradient(flow):
         gradient_map[1:-1, :, :, it_dim, 0] = dx/2
         gradient_map[:, 1:-1, :, it_dim, 1] = dy/2
         gradient_map[:, :, 1:-1, it_dim, 2] = dz/2
-        # gradient_maps[0, :, :, it_dim, 0] = fmap[0]
-        # gradient_maps[:, 0, :, it_dim, 1] = fmap[:, 0]
-        # gradient_maps[:, :, 0, it_dim, 2] = fmap[:, :, 0]
 
 
     return gradient_map
 
 def compute_jacobian(flow):
+    """Compute the Jacobian determinant of a displacement field.
+
+    Parameters
+    ----------
+    flow : np.ndarray
+        Displacement field, shape ``(X, Y, Z, 3)``.
+
+    Returns
+    -------
+    np.ndarray
+        Jacobian determinant map, shape ``(X, Y, Z)``.  Values < 0 indicate
+        folding.
+    """
     gradient_map = compute_gradient(flow)
     gradient_map[..., 0, 0] += 1
     gradient_map[..., 1, 1] += 1
@@ -240,7 +346,23 @@ def compute_jacobian(flow):
     return np.linalg.det(gradient_map)
 
 def lie_bracket(v, w):
+    """Compute the Lie bracket (commutator) of two vector fields.
 
+    The Lie bracket is defined as ``[v, w] = Jw * v - Jv * w``, where
+    ``Jv`` and ``Jw`` are the Jacobian matrices of ``v`` and ``w``.
+
+    Parameters
+    ----------
+    v : np.ndarray
+        First vector field, shape ``(X, Y, Z, 3)``.
+    w : np.ndarray
+        Second vector field, shape ``(X, Y, Z, 3)``.
+
+    Returns
+    -------
+    np.ndarray
+        Lie bracket ``[v, w]``, shape ``(X, Y, Z, 3)``.
+    """
     Jv = compute_gradient(v)
     Jw = compute_gradient(w)
 
@@ -251,7 +373,28 @@ def lie_bracket(v, w):
     return vw #
 
 def pole_ladder(long_svf, mni_svf, steps=80):
+    """Parallel-transport a longitudinal SVF along an inter-subject SVF using the pole-ladder scheme.
 
+    Approximates parallel transport on the diffeomorphism group by
+    iterating first- and second-order Lie-bracket corrections.
+
+    Parameters
+    ----------
+    long_svf : np.ndarray
+        Longitudinal stationary velocity field to transport,
+        shape ``(X, Y, Z, 3)``.
+    mni_svf : np.ndarray
+        Inter-subject SVF defining the transport path (e.g. subject-to-MNI),
+        shape ``(X, Y, Z, 3)``.
+    steps : int, optional
+        Number of pole-ladder steps. More steps give a better approximation.
+        Default is 80.
+
+    Returns
+    -------
+    np.ndarray
+        Transported SVF, shape ``(X, Y, Z, 3)``.
+    """
     init_mni_svf = mni_svf / steps
     u = long_svf
     for it_step in range(steps):
@@ -263,6 +406,18 @@ def pole_ladder(long_svf, mni_svf, steps=80):
     return u
 
 def svf_to_vox(proxysvf):
+    """Convert an SVF from RAS to voxel displacement units.
+
+    Parameters
+    ----------
+    proxysvf : nibabel.Nifti1Image
+        SVF image with displacements in RAS mm, shape ``(X, Y, Z, 3)``.
+
+    Returns
+    -------
+    nibabel.Nifti1Image
+        SVF in voxel units, same affine as ``proxysvf``.
+    """
     svf_ras = np.array(proxysvf.dataobj)
     ref_shape = proxysvf.shape[:3]
     svf_ras_zeros = np.concatenate((svf_ras, np.zeros(ref_shape + (1,))), axis=-1).reshape(-1, 4)
@@ -272,12 +427,21 @@ def svf_to_vox(proxysvf):
     return nib.Nifti1Image(np.transpose(svf_vox, axes=(1,2,3,0)), proxysvf.affine)
 
 def svf_to_ras(proxysvf):
-    '''
-    The process: svf --> def (add vox mosaic) --> def_ones (add one column) --> def_ras (product by v2r) --> svf_ras ...
-    (remove ref_ras_mosaic) is equivalent to dorectly compute v2r*svf with a zero-column in the translations
-    :param proxysvf:
-    :return:
-    '''
+    """Convert an SVF from voxel to RAS displacement units.
+
+    Equivalent to multiplying the voxel SVF by the voxel-to-RAS matrix with
+    a zero translation column (the mosaic centering terms cancel out).
+
+    Parameters
+    ----------
+    proxysvf : nibabel.Nifti1Image
+        SVF image with displacements in voxel units, shape ``(X, Y, Z, 3)``.
+
+    Returns
+    -------
+    nibabel.Nifti1Image
+        SVF in RAS mm, same affine as ``proxysvf``.
+    """
     svf_vox = np.array(proxysvf.dataobj)
     ref_shape = proxysvf.shape[:3]
     svf_vox_zeros = np.concatenate((svf_vox, np.zeros(ref_shape + (1,))), axis=-1).reshape(-1, 4)
@@ -340,7 +504,26 @@ def network_space(im, shape, center=None):
     return np.float32(net_to_vox.matrix), np.float32(vox_to_net.matrix), new.vox2world.matrix
 
 def getM(ref, mov, use_L1=False):
+    """Estimate a 4×4 affine matrix from point correspondences.
 
+    Solves the least-squares problem ``mov ≈ M * ref`` for a 12-DOF affine
+    matrix. Optionally refines using L1 minimisation via linear programming.
+
+    Parameters
+    ----------
+    ref : np.ndarray
+        Reference points, shape ``(3, N)``.
+    mov : np.ndarray
+        Corresponding moving points, shape ``(3, N)``.
+    use_L1 : bool, optional
+        If ``True``, refine the L2 solution with an L1 minimisation step.
+        Default is ``False``.
+
+    Returns
+    -------
+    np.ndarray
+        Estimated affine matrix, shape ``(4, 4)``.
+    """
     zmat = np.zeros(ref.shape[::-1])
     zcol = np.zeros([ref.shape[1], 1])
     ocol = np.ones([ref.shape[1], 1])
@@ -379,7 +562,25 @@ def getM(ref, mov, use_L1=False):
 
 
 def create_empty_template(image_list):
+    """Build a bounding-box template that encompasses a list of brain images.
 
+    Computes the average RAS bounding box across all images (with a 5 mm
+    margin) and returns a 1 mm isotropic identity-oriented template grid.
+
+    Parameters
+    ----------
+    image_list : list of str or nibabel.Nifti1Image
+        Images whose non-zero voxel extents define the bounding box.
+
+    Returns
+    -------
+    rasMosaic : np.ndarray
+        RAS coordinates of all template voxels, shape ``(4, N_vox)``.
+    template_vox2ras0 : np.ndarray
+        Voxel-to-RAS affine of the template, shape ``(4, 4)``.
+    template_size : tuple of int
+        Spatial dimensions ``(X, Y, Z)`` of the template grid.
+    """
     boundaries_min = np.zeros((len(image_list), 3))
     boundaries_max = np.zeros((len(image_list), 3))
     margin_bb = 5
@@ -456,23 +657,32 @@ def create_empty_template(image_list):
 
 
 class VecInt(nn.Module):
-    """
-    Vector Integration Layer
+    """Integrate a stationary velocity field via scaling and squaring.
 
-    Enables vector integration via several methods
-    (ode or quadrature for time-dependent vector fields,
-    scaling and squaring for stationary fields)
+    Implements the scaling-and-squaring algorithm for diffeomorphic
+    registration. If you find this layer useful, please cite:
 
-    If you find this function useful, please cite:
-      Unsupervised Learning for Fast Probabilistic Diffeomorphic Registration
-      Adrian V. Dalca, Guha Balakrishnan, John Guttag, Mert R. Sabuncu
-      MICCAI 2018.
+        Dalca et al., *Unsupervised Learning for Fast Probabilistic
+        Diffeomorphic Registration*, MICCAI 2018.
+
+    Attributes
+    ----------
+    int_steps : int
+        Number of integration steps.
+    scale : float
+        Initial scaling factor ``1 / 2**int_steps``.
+    transformer : SpatialTransformer
+        Spatial transformer used to compose intermediate deformations.
     """
 
     def __init__(self, field_shape, int_steps=7, **kwargs):
         """
-        Parameters:
-            int_steps is the number of integration steps
+        Parameters
+        ----------
+        field_shape : tuple of int
+            Spatial shape of the velocity field ``(X, Y, Z)``.
+        int_steps : int, optional
+            Number of scaling-and-squaring steps. Default is 7.
         """
         super().__init__()
         self.int_steps = int_steps
@@ -480,6 +690,21 @@ class VecInt(nn.Module):
         self.transformer = SpatialTransformer(field_shape)
 
     def forward(self, field, **kwargs):
+        """Integrate the velocity field.
+
+        Parameters
+        ----------
+        field : torch.Tensor
+            Stationary velocity field, shape ``(B, 3, X, Y, Z)``.
+        **kwargs
+            Optional ``nsteps`` override to reduce integration steps at
+            inference.
+
+        Returns
+        -------
+        torch.Tensor
+            Integrated displacement field, same shape as ``field``.
+        """
 
         output = field
         output = output * self.scale
@@ -494,19 +719,38 @@ class VecInt(nn.Module):
         return output
 
 class RescaleTransform(nn.Module):
-    """
-    Resize a transform, which involves resizing the vector field *and* rescaling it.
-    Credit to voxelmorph: https://github.com/voxelmorph/voxelmorph/blob/redesign/voxelmorph/torch/layers.py
+    """Resize a displacement field and rescale its vector magnitudes accordingly.
+
+    Resampling a flow field requires both interpolating the field to a new
+    grid *and* multiplying vector components by the corresponding scale
+    factors. Optionally applies Gaussian anti-aliasing before downsampling.
+
+    Credit: VoxelMorph (https://github.com/voxelmorph/voxelmorph).
+
+    Attributes
+    ----------
+    ndims : int
+        Number of spatial dimensions.
+    factor : list of float
+        Per-dimension scale factors.
     """
 
     def __init__(self, inshape, factor=None, target_size=None, gaussian_filter_flag=False):
-        '''
-
-        :param vol_size:
-        :param factor:
-                :param latent_size: it only applies if factor is None
-
-        '''
+        """
+        Parameters
+        ----------
+        inshape : tuple of int
+            Spatial shape of the input field.
+        factor : float or list of float, optional
+            Isotropic or per-dimension scale factor. Mutually exclusive with
+            ``target_size``.
+        target_size : tuple of int, optional
+            Target spatial shape from which the scale factor is derived.
+            Used only when ``factor`` is ``None``.
+        gaussian_filter_flag : bool, optional
+            If ``True``, apply Gaussian anti-aliasing before downsampling.
+            Default is ``False``.
+        """
         super().__init__()
 
         self.ndims = len(inshape)
@@ -539,7 +783,18 @@ class RescaleTransform(nn.Module):
             self.register_buffer('kernel', kernel)
 
     def gaussian_filter_2d(self, kernel_sigma):
+        """Build a 2D separable Gaussian convolution kernel as a registered buffer.
 
+        Parameters
+        ----------
+        kernel_sigma : float or list of float
+            Standard deviation(s) of the Gaussian in each spatial dimension.
+
+        Returns
+        -------
+        torch.Tensor
+            Kernel tensor of shape ``(2, 2, ky, kx)``.
+        """
         if isinstance(kernel_sigma, list):
             kernel_size = [int(np.ceil(ks*3) + np.mod(np.ceil(ks*3) + 1, 2)) for ks in kernel_sigma]
 
@@ -582,7 +837,18 @@ class RescaleTransform(nn.Module):
         return total_kernel
 
     def gaussian_filter_3d(self, kernel_sigma):
+        """Build a 3D separable Gaussian convolution kernel as a registered buffer.
 
+        Parameters
+        ----------
+        kernel_sigma : float or list of float
+            Standard deviation(s) of the Gaussian in each spatial dimension.
+
+        Returns
+        -------
+        torch.Tensor
+            Kernel tensor of shape ``(3, 3, kz, ky, kx)``.
+        """
         if isinstance(kernel_sigma, list):
             kernel_size = [int(np.ceil(ks*3) + np.mod(np.ceil(ks*3) + 1, 2)) for ks in kernel_sigma]
 
@@ -626,7 +892,18 @@ class RescaleTransform(nn.Module):
         return total_kernel
 
     def forward(self, x):
+        """Rescale the displacement field.
 
+        Parameters
+        ----------
+        x : torch.Tensor
+            Input flow field, shape ``(B, ndims, *spatial)``.
+
+        Returns
+        -------
+        torch.Tensor
+            Rescaled flow field at the new spatial resolution.
+        """
         x = x.clone()
         if self.factor[0] < 1:
             if self.gaussian_filter_flag:
@@ -651,20 +928,26 @@ class RescaleTransform(nn.Module):
         return x
 
 class SpatialInterpolation(nn.Module):
-    """
-    [SpatialInterpolation] represesents a spatial transformation block
-    that uses the output from the UNet to preform an grid_sample
-    https://pytorch.org/docs/stable/nn.functional.html#grid-sample
+    """Apply a pre-computed normalised grid to a source image via ``grid_sample``.
 
-    This is copied from voxelmorph code, so for more information and credit
-    visit https://github.com/voxelmorph/voxelmorph/blob/master/pytorch/model.py
+    Unlike :class:`SpatialTransformer`, this layer takes an explicit
+    normalised location grid rather than a flow field relative to a
+    pre-built identity grid.
+
+    Credit: VoxelMorph
+    (https://github.com/voxelmorph/voxelmorph/blob/master/pytorch/model.py).
     """
 
     def __init__(self, mode='bilinear', padding_mode='zeros'):
         """
-        Instiatiate the block
-            :param size: size of input to the spatial transformer block
-            :param mode: method of interpolation for grid_sampler
+        Parameters
+        ----------
+        mode : str, optional
+            Interpolation mode passed to ``F.grid_sample``. Default is
+            ``'bilinear'``.
+        padding_mode : str, optional
+            Padding mode for out-of-boundary coordinates. Default is
+            ``'zeros'``.
         """
         super().__init__()
 
@@ -672,10 +955,23 @@ class SpatialInterpolation(nn.Module):
         self.padding_mode = padding_mode
 
     def forward(self, src, new_locs, **kwargs):
-        """
-        Push the src and flow through the spatial transform block
-            :param src: the original moving image
-            :param flow: the output from the U-Net
+        """Interpolate ``src`` at the given normalised coordinates.
+
+        Parameters
+        ----------
+        src : torch.Tensor
+            Source image, shape ``(B, C, *spatial)``.
+        new_locs : torch.Tensor
+            Sampling grid in voxel coordinates, shape
+            ``(B, ndims, *spatial)``. Will be normalised to ``[-1, 1]``
+            internally.
+        **kwargs
+            Optional ``'padding_mode'`` and ``'mode'`` overrides.
+
+        Returns
+        -------
+        torch.Tensor
+            Warped image, same shape as ``src``.
         """
         if 'padding_mode' in kwargs:
             self.padding_mode = kwargs['padding_mode']
@@ -699,20 +995,32 @@ class SpatialInterpolation(nn.Module):
         return F.grid_sample(src, new_locs, mode=self.mode, padding_mode=self.padding_mode, align_corners=True)
 
 class SpatialTransformer(nn.Module):
-    """
-    [SpatialTransformer] represesents a spatial transformation block
-    that uses the output from the UNet to preform an grid_sample
-    https://pytorch.org/docs/stable/nn.functional.html#grid-sample
+    """Warp a source image by adding a flow field to an identity grid.
 
-    This is copied from voxelmorph code, so for more information and credit
-    visit https://github.com/voxelmorph/voxelmorph/blob/master/pytorch/model.py
+    Registers a fixed identity sampling grid at construction time and adds
+    the flow field to it at forward time before calling ``F.grid_sample``.
+
+    Credit: VoxelMorph
+    (https://github.com/voxelmorph/voxelmorph/blob/master/pytorch/model.py).
+
+    Attributes
+    ----------
+    grid : torch.Tensor
+        Pre-computed identity sampling grid, shape ``(1, ndims, *size)``.
     """
 
     def __init__(self, size, mode='bilinear', padding_mode='border'):
         """
-        Instiatiate the block
-            :param size: size of input to the spatial transformer block
-            :param mode: method of interpolation for grid_sampler
+        Parameters
+        ----------
+        size : tuple of int
+            Spatial shape of the images to transform, e.g. ``(X, Y, Z)``.
+        mode : str, optional
+            Interpolation mode for ``F.grid_sample``. Default is
+            ``'bilinear'``.
+        padding_mode : str, optional
+            Padding mode for out-of-boundary coordinates. Default is
+            ``'border'``.
         """
         super().__init__()
 
@@ -728,10 +1036,21 @@ class SpatialTransformer(nn.Module):
         self.padding_mode = padding_mode
 
     def forward(self, src, flow, **kwargs):
-        """
-        Push the src and flow through the spatial transform block
-            :param src: the original moving image
-            :param flow: the output from the U-Net
+        """Warp ``src`` by adding ``flow`` to the pre-built identity grid.
+
+        Parameters
+        ----------
+        src : torch.Tensor
+            Source image, shape ``(B, C, *spatial)``.
+        flow : torch.Tensor
+            Displacement field, shape ``(B, ndims, *spatial)``.
+        **kwargs
+            Optional ``'padding_mode'`` and ``'mode'`` overrides.
+
+        Returns
+        -------
+        torch.Tensor
+            Warped image, same shape as ``src``.
         """
         padding_mode = kwargs['padding_mode'] if 'padding_mode' in kwargs else self.padding_mode
         mode = kwargs['mode'] if 'mode' in kwargs else self.mode

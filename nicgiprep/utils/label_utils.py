@@ -1,3 +1,43 @@
+"""Brain segmentation label dictionaries and lookup tables.
+
+This module loads SynthSeg, FreeSurfer aseg, and cortical parcellation labels
+from the repository ``data/`` directory and exposes them as module-level
+constants.
+
+Constants
+---------
+APARC_DICT : dict
+    Integer label → region name for SynthSeg cortical parcellation (non-background).
+APARC_DICT_REV : dict
+    Region name → integer label (reverse of ``APARC_DICT``).
+SYNTHSEG_DICT : dict
+    Integer label → region name for SynthSeg subcortical labels (non-background).
+SYNTHSEG_DICT_REV : dict
+    Region name → integer label (reverse of ``SYNTHSEG_DICT``).
+SYNTHSEG_APARC_DICT : dict
+    Combined SynthSeg subcortical + cortical parcellation label-to-name mapping.
+SYNTHSEG_APARC_DICT_REV : dict
+    Reverse of ``SYNTHSEG_APARC_DICT``.
+ASEG_DICT : dict
+    Integer label → region name for FreeSurfer aseg labels (non-background).
+ASEG_DICT_REV : dict
+    Region name → integer label (reverse of ``ASEG_DICT``).
+SYNTHSEG_LUT : dict
+    Contiguous index LUT for SynthSeg labels. Cortical labels are mapped to
+    the index of label 3 (left GM) or label 42 (right GM).
+ASEG_LUT : dict
+    Same structure as ``SYNTHSEG_LUT`` but in aseg label space.
+SYNTHSEG_APARC_LUT : dict
+    Contiguous index LUT for the combined SynthSeg + aparc label space.
+ASEG_APARC_LUT : dict
+    Contiguous index LUT for the combined aseg + aparc label space.
+CLUSTER_DICT : dict
+    Grouping of SynthSeg labels into named anatomical clusters
+    (e.g. ``'Gray'``, ``'CSF'``, ``'WM'``).
+CSF_LABELS : list of int
+    Integer labels considered as CSF (currently ``[24]``).
+"""
+
 import pdb
 from os.path import join, dirname, exists
 

@@ -11,7 +11,26 @@ from munkres import Munkres
 
 
 def align_with_identity_vox2ras0(V, vox2ras0):
+    """Permute and flip a volume so its voxel-to-RAS matrix is close to identity.
 
+    Uses the Hungarian algorithm to find the axis permutation that best
+    aligns each voxel axis with the nearest RAS axis, then flips any axis
+    whose diagonal entry in the resulting matrix is negative.
+
+    Parameters
+    ----------
+    V : np.ndarray
+        Input 3D volume, shape ``(X, Y, Z)``.
+    vox2ras0 : np.ndarray
+        Voxel-to-RAS affine matrix, shape ``(4, 4)``.
+
+    Returns
+    -------
+    V : np.ndarray
+        Re-oriented volume.
+    v2r : np.ndarray
+        Updated voxel-to-RAS affine matrix, shape ``(4, 4)``.
+    """
     COST = np.zeros((3,3))
     for i in range(3):
         for j in range(3):
@@ -43,16 +62,31 @@ def align_with_identity_vox2ras0(V, vox2ras0):
     return V, v2r
 
 def rescale_volume(volume, new_min=0, new_max=255, min_percentile=2, max_percentile=98, use_positive_only=True):
-    """This function linearly rescales a volume between new_min and new_max.
-    :param volume: a numpy array
-    :param new_min: (optional) minimum value for the rescaled image.
-    :param new_max: (optional) maximum value for the rescaled image.
-    :param min_percentile: (optional) percentile for estimating robust minimum of volume (float in [0,...100]),
-    where 0 = np.min
-    :param max_percentile: (optional) percentile for estimating robust maximum of volume (float in [0,...100]),
-    where 100 = np.max
-    :param use_positive_only: (optional) whether to use only positive values when estimating the min and max percentile
-    :return: rescaled volume
+    """Linearly rescale a volume to a new intensity range.
+
+    Parameters
+    ----------
+    volume : np.ndarray
+        Input volume.
+    new_min : float, optional
+        Minimum value of the output range. Default is 0.
+    new_max : float, optional
+        Maximum value of the output range. Default is 255.
+    min_percentile : float, optional
+        Percentile used to estimate the robust minimum (0 = ``np.min``).
+        Default is 2.
+    max_percentile : float, optional
+        Percentile used to estimate the robust maximum (100 = ``np.max``).
+        Default is 98.
+    use_positive_only : bool, optional
+        If ``True``, percentiles are computed from positive voxels only.
+        Default is ``True``.
+
+    Returns
+    -------
+    np.ndarray
+        Rescaled volume clipped to ``[robust_min, robust_max]`` and linearly
+        mapped to ``[new_min, new_max]``.
     """
 
     # select only positive intensities
@@ -73,11 +107,26 @@ def rescale_volume(volume, new_min=0, new_max=255, min_percentile=2, max_percent
         return np.zeros_like(new_volume)
 
 def rescale_flow(flow_vol, aff, new_vox_size):
-    """This function resizes the voxels of a volume to a new provided size, while adjusting the header to keep the RAS
-    :param volume: a numpy array
-    :param aff: affine matrix of the volume
-    :param new_vox_size: new voxel size (3 - element numpy vector) in mm
-    :return: new volume and affine matrix
+    """Rescale a displacement field to a new voxel size.
+
+    Adjusts displacement vector magnitudes to account for the change in voxel
+    spacing, then resamples the field to the target voxel size.
+
+    Parameters
+    ----------
+    flow_vol : np.ndarray
+        Displacement field, shape ``(X, Y, Z, 3)``, in voxel units.
+    aff : np.ndarray
+        Affine matrix of the input field, shape ``(4, 4)``.
+    new_vox_size : array-like of float
+        Target voxel size in mm, length 3.
+
+    Returns
+    -------
+    flow_vol : np.ndarray
+        Resampled displacement field in the new voxel space.
+    flow_aff : np.ndarray
+        Updated affine matrix, shape ``(4, 4)``.
     """
     pixdim = np.sqrt(np.sum(aff * aff, axis=0))[:-1]
     f_factor = pixdim / new_vox_size
@@ -91,6 +140,23 @@ def rescale_flow(flow_vol, aff, new_vox_size):
     return flow_vol, flow_aff
 
 def gaussian_smoothing_voxel_size(proxy, new_vox_size):
+    """Apply Gaussian anti-aliasing smoothing before resampling to a new voxel size.
+
+    Computes per-axis sigma values from the ratio of current to target
+    voxel sizes. Axes being upsampled (factor > 1) receive zero smoothing.
+
+    Parameters
+    ----------
+    proxy : nibabel.Nifti1Image
+        Input image proxy providing the affine and data.
+    new_vox_size : array-like of float
+        Target voxel size in mm, length 3.
+
+    Returns
+    -------
+    np.ndarray
+        Smoothed image array.
+    """
     pixdim = np.sqrt(np.sum(proxy.affine * proxy.affine, axis=0))[:-1]
     new_vox_size = np.array(new_vox_size)
     factor = pixdim / new_vox_size
@@ -104,11 +170,30 @@ def gaussian_smoothing_voxel_size(proxy, new_vox_size):
     return gaussian_filter(volume, sigmas)
 
 def rescale_voxel_size(volume, aff, new_vox_size, not_aliasing=False):
-    """This function resizes the voxels of a volume to a new provided size, while adjusting the header to keep the RAS
-    :param volume: a numpy array
-    :param aff: affine matrix of the volume
-    :param new_vox_size: new voxel size (3 - element numpy vector) in mm
-    :return: new volume and affine matrix
+    """Resample a volume to a new voxel size using trilinear interpolation.
+
+    Optionally applies Gaussian anti-aliasing before downsampling.
+    The returned affine matrix is updated so that the RAS coordinates of
+    the volume are preserved.
+
+    Parameters
+    ----------
+    volume : np.ndarray
+        Input volume array.
+    aff : np.ndarray
+        Affine (voxel-to-RAS) matrix of the input volume, shape ``(4, 4)``.
+    new_vox_size : array-like of float
+        Target voxel size in mm, length 3.
+    not_aliasing : bool, optional
+        If ``True``, skip the Gaussian anti-aliasing step even when
+        downsampling. Default is ``False``.
+
+    Returns
+    -------
+    volume2 : np.ndarray
+        Resampled volume at the new voxel size.
+    aff2 : np.ndarray
+        Updated affine matrix, shape ``(4, 4)``.
     """
 
     pixdim = np.sqrt(np.sum(aff * aff, axis=0))[:-1]
@@ -157,6 +242,24 @@ def rescale_voxel_size(volume, aff, new_vox_size, not_aliasing=False):
     return volume2, aff2
 
 def gaussian_antialiasing(volume, aff, new_voxel_size):
+    """Apply a Gaussian anti-aliasing filter before downsampling a volume.
+
+    Axes being upsampled (factor > 1) receive zero smoothing.
+
+    Parameters
+    ----------
+    volume : np.ndarray
+        Input volume array.
+    aff : np.ndarray
+        Affine matrix of the input volume, shape ``(4, 4)``.
+    new_voxel_size : array-like of float
+        Target voxel size in mm, length 3.
+
+    Returns
+    -------
+    np.ndarray
+        Gaussian-smoothed volume, same shape as ``volume``.
+    """
     pixdim = np.sqrt(np.sum(aff * aff, axis=0))[:-1]
     new_vox_size = np.array(new_voxel_size)
     factor = pixdim / new_vox_size
@@ -166,6 +269,25 @@ def gaussian_antialiasing(volume, aff, new_voxel_size):
     return gaussian_filter(volume, sigmas)
 
 def get_rigid_params(matrix, proxyref, cog=None):
+    """Decompose a rigid affine matrix into Euler angles and translation.
+
+    Parameters
+    ----------
+    matrix : torch.Tensor
+        4×4 rigid transformation matrix (rotation + translation block).
+    proxyref : nibabel.Nifti1Image
+        Reference image used to compute the center of rotation when ``cog``
+        is ``None``.
+    cog : array-like of float, optional
+        Center of gravity in RAS mm. If ``None``, the image center is used.
+
+    Returns
+    -------
+    angles : np.ndarray
+        Euler angles ``[rx, ry, rz]`` in radians.
+    translation : np.ndarray
+        Translation vector ``[tx, ty, tz]`` in mm.
+    """
     ry = -np.asin(matrix[2, 0])
     rx = np.atan2(matrix[2, 1] / np.cos(ry), matrix[2, 2] / np.cos(ry))
     rz = np.atan2(matrix[1, 0] / np.cos(ry), matrix[0, 0] / np.cos(ry))
@@ -200,19 +322,28 @@ def get_rigid_params(matrix, proxyref, cog=None):
     return angles, translation
 
 def one_hot_encoding(target, num_classes=None, categories=None):
-    '''
+    """Convert an integer label map to a one-hot encoded array.
 
     Parameters
     ----------
-    target (np.array): target vector of dimension (d1, d2, ..., dN).
-    num_classes (int): number of classes
-    categories (None or dict): existing categories as a LUT. If set to None, we will consider only categories 0,...,num_classes
+    target : np.ndarray
+        Integer label map of shape ``(d1, d2, ..., dN)``.
+    num_classes : int, optional
+        Number of classes. Required when ``categories`` is ``None``.
+    categories : dict, list, or np.ndarray, optional
+        Defines the mapping from label value to channel index.
+
+        - If a ``dict``, used directly as ``{label: channel_index}``.
+        - If a list or array, converted to ``{label: i}`` by enumeration.
+        - If ``None`` and ``num_classes`` is also ``None``, inferred from
+          ``np.unique(target)``.
 
     Returns
     -------
-    labels (np.array): one-hot target vector of dimension (d1, d2, ..., dN, num_classes)
-
-    '''
+    np.ndarray
+        One-hot array of shape ``(d1, d2, ..., dN, num_classes)``,
+        dtype ``uint16``.
+    """
 
     if categories is None and num_classes is None:
         categories = {cls: it_cls for it_cls, cls in enumerate(np.sort(np.unique(target)))}
@@ -236,19 +367,28 @@ def one_hot_encoding(target, num_classes=None, categories=None):
     return np.transpose(labels, axes=(1, 2, 3, 0))
 
 def label_log_odds(target, num_classes=None, categories=None):
-    '''
+    """Compute per-label signed distance maps as log-odds representations.
+
+    For each label, the signed Euclidean distance transform is computed:
+    positive inside the label region, negative outside. A large negative
+    sentinel value (``-10000``) is used outside the bounding box.
 
     Parameters
     ----------
-    target (np.array): target vector of dimension (d1, d2, ..., dN).
-    num_classes (int): number of classes
-    categories (None or list): existing categories. If set to None, we will consider only categories 0,...,num_classes
+    target : np.ndarray
+        Integer label map of shape ``(d1, d2, ..., dN)``.
+    num_classes : int, optional
+        Number of classes. Required when ``categories`` is ``None``.
+    categories : list or np.ndarray, optional
+        Ordered label values. If ``None`` and ``num_classes`` is also
+        ``None``, inferred from ``np.unique(target)``.
 
     Returns
     -------
-    labels (np.array): one-hot target vector of dimension (num_classes, d1, d2, ..., dN)
-
-    '''
+    np.ndarray
+        Signed distance map of shape ``(num_classes, d1, d2, ..., dN)``,
+        dtype ``int``.
+    """
 
     if categories is None and num_classes is None:
         categories = np.sort(np.unique(target))
@@ -276,7 +416,26 @@ def label_log_odds(target, num_classes=None, categories=None):
     return labels
 
 def crop_label(mask, margin=10, threshold=0):
+    """Crop a binary mask to its bounding box with an optional margin.
 
+    Parameters
+    ----------
+    mask : np.ndarray
+        3D array; voxels above ``threshold`` are treated as foreground.
+    margin : int or list of int, optional
+        Number of voxels to expand the bounding box in each dimension.
+        A single int applies the same margin to all dimensions. Default is 10.
+    threshold : float, optional
+        Voxels with values strictly above this are considered foreground.
+        Default is 0.
+
+    Returns
+    -------
+    mask_cropped : np.ndarray
+        Cropped sub-volume of the mask.
+    crop_coord : list of [int, int]
+        Crop coordinates ``[[x0, x1], [y0, y1], [z0, z1]]``.
+    """
     ndim = len(mask.shape)
     if isinstance(margin, int):
         margin=[margin]*ndim
@@ -297,12 +456,45 @@ def crop_label(mask, margin=10, threshold=0):
     return mask_cropped, crop_coord
 
 def apply_crop(image, crop_coord):
+    """Extract a sub-volume defined by crop coordinates.
+
+    Parameters
+    ----------
+    image : np.ndarray
+        3D input array.
+    crop_coord : list of [int, int]
+        Crop coordinates as returned by :func:`crop_label`.
+
+    Returns
+    -------
+    np.ndarray
+        Cropped sub-volume.
+    """
     return image[crop_coord[0][0]: crop_coord[0][1],
                  crop_coord[1][0]: crop_coord[1][1],
                  crop_coord[2][0]: crop_coord[2][1]
            ]
 
 def compute_centroids_ras(seg_file, labelfile):
+    """Compute RAS-space centroids for each label in a segmentation.
+
+    Labels with fewer than 50 voxels are flagged as missing.
+
+    Parameters
+    ----------
+    seg_file : str
+        Path to a NIfTI segmentation file.
+    labelfile : str
+        Path to a ``.npy`` file containing the integer label values of interest.
+
+    Returns
+    -------
+    refCOG : np.ndarray
+        RAS centroids, shape ``(3, n_labels)``.
+    ok : np.ndarray
+        Binary flag array of length ``n_labels``; 1 if the label had ≥ 50
+        voxels, 0 otherwise.
+    """
     seg_proxy = nib.load(seg_file)
     seg_buffer = np.array(seg_proxy.dataobj)
     labels = np.load(labelfile)
@@ -326,6 +518,27 @@ def compute_centroids_ras(seg_file, labelfile):
     return refCOG, ok
 
 def compute_distance_map_nongrid(labelmap, sampling_grid, labels_lut=None):
+    """Compute signed distance maps evaluated on an arbitrary sampling grid.
+
+    For each label, the signed Euclidean distance is computed: positive
+    inside the label and negative outside.
+
+    Parameters
+    ----------
+    labelmap : np.ndarray
+        Integer label map, shape ``(X, Y, Z)``.
+    sampling_grid : np.ndarray
+        Sampling coordinates, shape ``(3, N1, N2, ...)``, in voxel units.
+    labels_lut : dict, optional
+        Mapping ``{label_value: channel_index}``. If ``None``, inferred
+        from ``np.unique(labelmap)``.
+
+    Returns
+    -------
+    np.ndarray
+        Signed distance map, shape ``(*sampling_grid.shape[1:], n_labels)``,
+        dtype ``float32``.
+    """
     if labels_lut is None:
         labels_lut = {ul: it_ul for it_ul, ul in enumerate(np.unique(labelmap))}
 
@@ -370,6 +583,27 @@ def compute_distance_map_nongrid(labelmap, sampling_grid, labels_lut=None):
     return distancemap
 
 def compute_distance_map(labelmap, soft_seg=True, labels_lut=None):
+    """Compute signed distance maps on the native label grid.
+
+    For each label the computation is cropped to a tight bounding box with
+    a 5-voxel margin to reduce memory usage.
+
+    Parameters
+    ----------
+    labelmap : np.ndarray
+        Integer label map, shape ``(X, Y, Z)``.
+    soft_seg : bool, optional
+        If ``True``, apply softmax along the label axis before returning.
+        Default is ``True``.
+    labels_lut : dict, optional
+        Mapping ``{label_value: channel_index}``. If ``None``, inferred
+        from ``np.unique(labelmap)``.
+
+    Returns
+    -------
+    np.ndarray
+        Distance map, shape ``(X, Y, Z, n_labels)``, dtype ``float32``.
+    """
     if labels_lut is None:
         labels_lut = {ul: it_ul for it_ul, ul in enumerate(np.unique(labelmap))}
 
@@ -402,6 +636,27 @@ def compute_distance_map(labelmap, soft_seg=True, labels_lut=None):
     return distancemap
 
 def compute_distance_map_crop(labelmap, soft_seg=True, labels_lut=None):
+    """Compute signed distance maps using per-label bounding-box crops.
+
+    Equivalent to :func:`compute_distance_map` but operates on cropped
+    sub-volumes named ``bbox_label`` rather than the full label mask,
+    which can be faster for sparse labels.
+
+    Parameters
+    ----------
+    labelmap : np.ndarray
+        Integer label map, shape ``(X, Y, Z)``.
+    soft_seg : bool, optional
+        If ``True``, apply softmax along the label axis. Default is ``True``.
+    labels_lut : dict, optional
+        Mapping ``{label_value: channel_index}``. If ``None``, inferred
+        from ``np.unique(labelmap)``.
+
+    Returns
+    -------
+    np.ndarray
+        Distance map, shape ``(X, Y, Z, n_labels)``, dtype ``float32``.
+    """
     if labels_lut is None:
         labels_lut = {ul: it_ul for it_ul, ul in enumerate(np.unique(labelmap))}
 

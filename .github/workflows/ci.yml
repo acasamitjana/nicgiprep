@@ -1,0 +1,114 @@
+name: CI
+
+# Runs on every PR targeting main and on direct pushes to main.
+# The full dependency stack (TensorFlow, PyTorch, FreeSurfer, BIDS_DIR …)
+# cannot be reproduced in CI, so checks are scoped to things that do NOT
+# require importing the package:
+#   1. Python syntax validity
+#   2. Linting (flake8)
+#   3. Docstring coverage (every public function/class must have a docstring)
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  # ------------------------------------------------------------------
+  # 1. Syntax check — catches outright parse errors across the whole
+  #    codebase without needing to install any dependency.
+  # ------------------------------------------------------------------
+  syntax:
+    name: Syntax check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Check Python syntax (py_compile)
+        run: |
+          find nicgiprep -name "*.py" -print0 \
+            | xargs -0 python -m py_compile \
+            && echo "All files parsed successfully."
+
+  # ------------------------------------------------------------------
+  # 2. Lint — flake8 with settings tuned to the existing codebase.
+  #    E501  long lines  — ignored (lines can be long in scientific code)
+  #    W503  line break before binary operator — ignored (style choice)
+  #    E402  module-level import not at top — ignored (setup.py quirk)
+  #    F401  imported but unused — ignored (wildcard imports from setup)
+  #    F403  star import — ignored (from setup import *)
+  #    F405  may be undefined from star import — ignored
+  # ------------------------------------------------------------------
+  lint:
+    name: Lint (flake8)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install flake8
+        run: pip install flake8
+
+      - name: Run flake8
+        run: |
+          flake8 nicgiprep/ \
+            --max-line-length=200 \
+            --extend-ignore=E501,W503,E402,F401,F403,F405 \
+            --exclude=.venv,__pycache__
+
+  # ------------------------------------------------------------------
+  # 3. Docstring coverage — every function, method, and class must have
+  #    a docstring.  Uses the same AST-based check validated locally.
+  # ------------------------------------------------------------------
+  docstrings:
+    name: Docstring coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Check docstring coverage
+        run: |
+          python - <<'EOF'
+          import ast, sys
+          from pathlib import Path
+
+          missing_total = []
+          for fpath in sorted(Path("nicgiprep").rglob("*.py")):
+              src = fpath.read_text()
+              try:
+                  tree = ast.parse(src)
+              except SyntaxError as e:
+                  print(f"SyntaxError in {fpath}: {e}")
+                  sys.exit(1)
+
+              for node in ast.walk(tree):
+                  if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                      has_doc = (
+                          node.body
+                          and isinstance(node.body[0], ast.Expr)
+                          and isinstance(node.body[0].value, ast.Constant)
+                      )
+                      if not has_doc:
+                          missing_total.append(
+                              f"  {fpath}:{node.lineno}  {type(node).__name__} '{node.name}'"
+                          )
+
+          if missing_total:
+              print(f"Missing docstrings ({len(missing_total)}):")
+              print("\n".join(missing_total))
+              sys.exit(1)
+          else:
+              print(f"All functions/classes have docstrings.")
+          EOF

@@ -13,8 +13,43 @@ from nicgiprep.utils import def_utils
 #########################################
 
 class InstanceRigidModelLOG(nn.Module):
+    """Instance-specific rigid registration via log-space parameterisation.
+
+    Jointly estimates per-timepoint rigid transformations by minimising the
+    discrepancy between predicted and observed pairwise log-rigid transforms.
+    Rotation and translation are stored as Lie-algebra elements and converted
+    to 4×4 matrices via the matrix exponential.
+
+    Attributes
+    ----------
+    N : int
+        Number of timepoints.
+    K : int
+        Number of pairwise combinations ``N*(N-1)//2``.
+    angle : torch.nn.Parameter
+        Lie-algebra rotation vector per timepoint, shape ``(3, N)``.
+    translation : torch.nn.Parameter
+        Translation vector per timepoint, shape ``(3, N)``.
+    """
 
     def __init__(self, timepoints, reg_weight=0.001, cost='l1', device='cpu', torch_dtype=torch.float):
+        """
+        Parameters
+        ----------
+        timepoints : list
+            Ordered list of timepoint identifiers (strings or objects with
+            an ``.id`` attribute).
+        reg_weight : float, optional
+            Weight for the L2 regularisation on rotation and translation
+            parameters. Default is 0.001.
+        cost : {'l1', 'l2'}, optional
+            Pairwise fitting loss. Default is ``'l1'``.
+        device : str, optional
+            PyTorch device string. Default is ``'cpu'``.
+        torch_dtype : torch.dtype, optional
+            Floating-point dtype for parameters. Default is
+            ``torch.float``.
+        """
         super().__init__()
 
         self.device = device
@@ -33,7 +68,13 @@ class InstanceRigidModelLOG(nn.Module):
 
 
     def _compute_matrix(self):
+        """Compute 4×4 rigid transformation matrices from log-space parameters.
 
+        Returns
+        -------
+        torch.Tensor
+            Stacked transformation matrices, shape ``(4, 4, N)``.
+        """
         T = torch.zeros((4,4,self.N))
         for n in range(self.N):
             theta = torch.sqrt(torch.sum(self.angle[..., n]**2)) # torch.sum(torch.abs(self.angle))
@@ -56,7 +97,18 @@ class InstanceRigidModelLOG(nn.Module):
 
 
     def _build_combinations(self, timepoints):
+        """Build pairwise log-rigid difference vectors for all timepoint pairs.
 
+        Parameters
+        ----------
+        timepoints : list
+            Ordered timepoints (same format as passed to ``__init__``).
+
+        Returns
+        -------
+        torch.Tensor
+            Pairwise log-rigid vectors, shape ``(6, K)``.
+        """
         K = self.K
         if any([isinstance(t, str) for t in timepoints]):
             timepoints_dict = {
@@ -87,7 +139,25 @@ class InstanceRigidModelLOG(nn.Module):
 
 
     def forward(self, logRobs, timepoints):
+        """Compute the fitting loss between predicted and observed pairwise transforms.
 
+        Parameters
+        ----------
+        logRobs : torch.Tensor
+            Observed pairwise log-rigid vectors, shape ``(6, K)``.
+        timepoints : list
+            Ordered timepoints used to index parameters.
+
+        Returns
+        -------
+        torch.Tensor
+            Scalar loss value.
+
+        Raises
+        ------
+        ValueError
+            If ``self.cost`` is not ``'l1'`` or ``'l2'``.
+        """
         logTij = self._build_combinations(timepoints)
         if self.cost == 'l1':
             loss = torch.sum(torch.sqrt(torch.sum((logTij - logRobs) ** 2, axis=0))) / self.K
@@ -100,9 +170,51 @@ class InstanceRigidModelLOG(nn.Module):
         return loss
 
 class ST2Nonlinear(nn.Module):
+    """Spatio-temporal squared (ST²) nonlinear registration model.
+
+    Estimates per-timepoint stationary velocity fields (SVFs) on a
+    control-point grid that minimise discrepancy between predicted and
+    observed pairwise deformation fields.
+
+    Attributes
+    ----------
+    N : int
+        Number of timepoints.
+    K : int
+        Number of pairwise combinations ``N*(N-1)//2``.
+    T : torch.nn.ParameterDict
+        Per-timepoint SVFs keyed by timepoint ID, each of shape
+        ``(1, 3, *cp_size)``.
+    """
+
     def __init__(self, obs_size, cp_size, factor=2, cost='l1', timepoints=None, init_T=None, reg_weight=1,
                  version=0, device='cpu'):
-
+        """
+        Parameters
+        ----------
+        obs_size : tuple of int
+            Spatial shape of the observation (displacement) grid
+            ``(X, Y, Z)``.
+        cp_size : tuple of int
+            Spatial shape of the control-point grid ``(X', Y', Z')``.
+        factor : int, optional
+            Up-scale factor from control-point to observation grid.
+            Default is 2.
+        cost : {'l1', 'l2'}, optional
+            Residual fitting loss. Default is ``'l1'``.
+        timepoints : list, optional
+            Ordered timepoint objects (used when ``init_T`` is ``None``).
+        init_T : dict, optional
+            Mapping ``{timepoint_id: torch.Tensor}`` to initialise SVFs.
+            If provided, ``timepoints`` is ignored.
+        reg_weight : float, optional
+            Regularisation weight. Default is 1.
+        version : int, optional
+            Algorithm variant: ``0`` uses ``_build_combinations``;
+            ``1`` uses ``_get_difference``. Default is 0.
+        device : str, optional
+            PyTorch device string. Default is ``'cpu'``.
+        """
         super().__init__()
         self.obs_size = obs_size
         self.cost = cost
@@ -138,12 +250,40 @@ class ST2Nonlinear(nn.Module):
         self.interp = def_utils.SpatialInterpolation().to(device)
 
     def _compose_fields(self, f1, f2):
+        """Compose two displacement fields via spatial interpolation.
+
+        Parameters
+        ----------
+        f1 : torch.Tensor
+            First displacement field, shape ``(1, 3, *cp_size)``.
+        f2 : torch.Tensor
+            Second displacement field, shape ``(1, 3, *cp_size)``.
+
+        Returns
+        -------
+        torch.Tensor
+            Composed displacement ``f1 ∘ f2``, same shape as ``f1``.
+        """
         GG2 = self.grid + f1
         f2_int = self.interp(f2, GG2.clone())
         GG3 = GG2 + f2_int
         return GG3 -  self.grid
 
     def _build_combinations(self, tid_list):
+        """Predict pairwise composed deformations from per-timepoint SVFs.
+
+        Parameters
+        ----------
+        tid_list : list of str
+            Pairs in ``'ref_to_flo'`` format specifying which combinations
+            to evaluate.
+
+        Returns
+        -------
+        torch.Tensor
+            Predicted pairwise fields,
+            shape ``(*obs_size, 3, len(tid_list))``.
+        """
         K = self.K
         k = 0
         R_hat = []#torch.zeros(self.obs_size + (3, K), device=self.device, requires_grad=True)
@@ -162,6 +302,21 @@ class ST2Nonlinear(nn.Module):
         return R_hat
 
     def _get_difference(self, R, tid_list):
+        """Compute residuals between observed and predicted pairwise fields.
+
+        Parameters
+        ----------
+        R : torch.Tensor
+            Observed pairwise displacement fields,
+            shape ``(*obs_size, 3, K)``.
+        tid_list : list of str
+            Pairs in ``'ref_to_flo'`` format.
+
+        Returns
+        -------
+        torch.Tensor
+            Residual fields, shape ``(*obs_size, 3, K)``.
+        """
         R = torch.permute(R, (4, 3, 0, 1, 2))
         R_hat = []
         for it_tp, tp_id in enumerate(tid_list):
@@ -179,7 +334,29 @@ class ST2Nonlinear(nn.Module):
         return R_hat
 
     def forward(self, R, tid_list, M=None):
+        """Compute the fitting loss between predicted and observed pairwise fields.
 
+        Parameters
+        ----------
+        R : torch.Tensor
+            Observed pairwise displacement fields,
+            shape ``(*obs_size, 3, K)``.
+        tid_list : list of str
+            Pairs in ``'ref_to_flo'`` format.
+        M : torch.Tensor, optional
+            Spatial weight mask applied to the residuals. If ``None``,
+            all voxels contribute equally.
+
+        Returns
+        -------
+        torch.Tensor
+            Scalar loss value.
+
+        Raises
+        ------
+        ValueError
+            If ``self.cost`` is not ``'l1'`` or ``'l2'``.
+        """
         if self.version == 0:
             R_hat = self._build_combinations(tid_list)
             residue = R_hat - R

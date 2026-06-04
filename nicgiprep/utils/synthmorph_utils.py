@@ -72,7 +72,20 @@ def load_weights(model, weights):
                     raise e
 
 def warp(arr_flo, arr_def):
+    """Apply a dense displacement field to a 3D volume using TensorFlow.
 
+    Parameters
+    ----------
+    arr_flo : np.ndarray
+        Floating (moving) image, shape ``(X, Y, Z)`` or ``(X, Y, Z, C)``.
+    arr_def : np.ndarray
+        Dense displacement field, shape ``(X, Y, Z, 3)``.
+
+    Returns
+    -------
+    np.ndarray
+        Warped image with the same spatial shape as ``arr_def``.
+    """
     if len(arr_flo.shape) == 3:
         arr_flo = arr_flo[..., np.newaxis]
         
@@ -85,9 +98,29 @@ def warp(arr_flo, arr_def):
     return np.squeeze(np.array(mov_1))
 
 def integrate_svf(svf, orig_shape, scaling_factor=2, int_steps=7):
+    """Integrate a stationary velocity field (SVF) via scaling and squaring.
+
+    Parameters
+    ----------
+    svf : np.ndarray
+        Stationary velocity field, shape ``(X, Y, Z, 3)``.
+    orig_shape : tuple of int
+        Spatial shape of the target image space, used to compose a
+        downsampling affine after integration.
+    scaling_factor : int, optional
+        Up-scaling factor applied before integration. Default is 2.
+    int_steps : int, optional
+        Number of scaling-and-squaring steps. Default is 7.
+
+    Returns
+    -------
+    np.ndarray
+        Dense displacement field, shape ``(X, Y, Z, 3)``.
+    """
     num_dim = len(svf.shape) - 1
 
     def scale(fact):
+        """Return a constant isotropic scaling affine layer with factor ``fact``."""
         mat = np.diag((*[fact] * num_dim, 1))
         return ne.layers.Constant(mat)([])
 
@@ -103,6 +136,28 @@ def integrate_svf(svf, orig_shape, scaling_factor=2, int_steps=7):
 
 
 def synthmorph_register(imageref_file, imageflo_file, reg_param=0.5):
+    """Register a floating image to a reference using SynthMorph deformable registration.
+
+    Loads the SynthMorph model from
+    ``$FREESURFER_HOME/models/synthmorph.deform.3.h5`` and returns the
+    forward stationary velocity field (SVF).
+
+    Parameters
+    ----------
+    imageref_file : str, nibabel.Nifti1Image, or file-like
+        Reference (fixed) image. Accepts a file path, a ``Nifti1Image``
+        object, or an object with a ``.path`` attribute.
+    imageflo_file : str, nibabel.Nifti1Image, or file-like
+        Floating (moving) image. Same format options as ``imageref_file``.
+    reg_param : float, optional
+        Regularisation hyper-parameter for the HyperVxmJoint model.
+        Higher values produce smoother deformations. Default is 0.5.
+
+    Returns
+    -------
+    np.ndarray
+        Forward SVF in the reference image voxel space, shape ``(X, Y, Z, 3)``.
+    """
     # subprocess.call(
     #     ['mri_synthmorph', 'register', '-m', 'deform', '-t', 'prova_sm_def.nii.gz', '-o', 'prova_sm_mov.nii.gz', imageflo_file.path,
     #      imageref_file.path], stdout=subprocess.DEVNULL)
