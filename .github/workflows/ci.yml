@@ -12,7 +12,7 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches: [main]
+    branches: [main, feat/ci-testing]
 
 jobs:
   # ------------------------------------------------------------------
@@ -112,3 +112,19 @@ jobs:
           else:
               print(f"All functions/classes have docstrings.")
           EOF
+
+  tests:
+    name: Unit tests (pytest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install pytest
+        run: pip install pytest
+
+      - name: Run tests
+        run: pytest -q tests/
