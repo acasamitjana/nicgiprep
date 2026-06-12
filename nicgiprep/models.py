@@ -7,9 +7,10 @@ import numpy as np
 import torch
 from torch import nn
 
-#########################################
-##   Linear Registration/Deformation   ##
-#########################################
+#######################################
+#   Linear Registration/Deformation   #
+#######################################
+
 
 class InstanceRigidModelLOG(nn.Module):
     """Instance-specific rigid registration via log-space parameterisation.
@@ -31,12 +32,13 @@ class InstanceRigidModelLOG(nn.Module):
         Translation vector per session, shape ``(3, N)``.
     """
 
-    def __init__(self,
-                 session_list: list[Union[str, object]],
-                 reg_weight: float=0.001,
-                 cost: Literal["l1", "l2"]="l1",
-                 device: str='cpu'
-                 ) -> None:
+    def __init__(
+        self,
+        session_list: list[Union[str, object]],
+        reg_weight: float = 0.001,
+        cost: Literal["l1", "l2"] = "l1",
+        device: str = "cpu",
+    ) -> None:
         """
         Parameters
         ----------
@@ -61,7 +63,7 @@ class InstanceRigidModelLOG(nn.Module):
 
         self.session_list = session_list
         self.N = len(session_list)
-        self.K = int(self.N * (self.N-1) / 2)
+        self.K = int(self.N * (self.N - 1) / 2)
 
         # Parameters
         self.angle = torch.nn.Parameter(torch.zeros(3, self.N))
@@ -83,20 +85,34 @@ class InstanceRigidModelLOG(nn.Module):
         """
         T = torch.zeros((4, 4, self.N))
         for n in range(self.N):
-            theta = torch.sqrt(torch.sum(self.angle[..., n]**2)) # torch.sum(torch.abs(self.angle))
-            W = torch.zeros((3,3))
-            W[1,0], W[0,1] = self.angle[2, n], -self.angle[2, n]
-            W[0,2], W[2,0] = self.angle[1, n], -self.angle[1, n]
-            W[2,1], W[1,2] = self.angle[0, n], -self.angle[0, n]
-            V = torch.eye(3) + (1 - torch.cos(theta)) / (theta ** 2) * W + (theta - torch.sin(theta)) / (theta ** 3) * torch.matmul(W,W)
+            theta = torch.sqrt(
+                torch.sum(self.angle[..., n] ** 2)
+            )  # torch.sum(torch.abs(self.angle))
+            W = torch.zeros((3, 3))
+            W[1, 0], W[0, 1] = self.angle[2, n], -self.angle[2, n]
+            W[0, 2], W[2, 0] = self.angle[1, n], -self.angle[1, n]
+            W[2, 1], W[1, 2] = self.angle[0, n], -self.angle[0, n]
+            V = (
+                torch.eye(3)
+                + (1 - torch.cos(theta)) / (theta**2) * W
+                + (theta - torch.sin(theta)) / (theta**3) * torch.matmul(W, W)
+            )
 
-            T[:3, :3, n] = torch.eye(3) + torch.sin(theta) / theta * W      +      (1 - torch.cos(theta)) / (theta ** 2) * torch.matmul(W,W)
-            T[:3, 3, n] = V @ self.translation[..., n]#torch.matmul(V, self.translation[..., n])
+            T[:3, :3, n] = (
+                torch.eye(3)
+                + torch.sin(theta) / theta * W
+                + (1 - torch.cos(theta)) / (theta**2) * torch.matmul(W, W)
+            )
+            T[:3, 3, n] = (
+                V @ self.translation[..., n]
+            )  # torch.matmul(V, self.translation[..., n])
             T[3, 3, n] = 1
 
         return T
 
-    def _build_combinations(self, session_list: list[Union[object, str]]) -> torch.Tensor:
+    def _build_combinations(
+        self, session_list: list[Union[object, str]]
+    ) -> torch.Tensor:
         """Build pairwise log-rigid difference vectors for all sessions pairs.
         Total number of registrations is K
 
@@ -112,9 +128,7 @@ class InstanceRigidModelLOG(nn.Module):
         """
         K = self.K
         if any([isinstance(t, str) for t in session_list]):
-            sessions_dict = {
-                t: it_t for it_t, t in enumerate(session_list)
-            }
+            sessions_dict = {t: it_t for it_t, t in enumerate(session_list)}
         else:
             sessions_dict = {
                 t.id: it_t for it_t, t in enumerate(session_list)
@@ -159,13 +173,18 @@ class InstanceRigidModelLOG(nn.Module):
             If ``self.cost`` is not ``'l1'`` or ``'l2'``.
         """
         logt_ij = self._build_combinations(session_list)
-        if self.cost == 'l1':
-            loss = torch.sum(torch.sqrt(torch.sum((logt_ij - logr_obs) ** 2, axis=0))) / self.K
-        elif self.cost == 'l2':
+        if self.cost == "l1":
+            loss = (
+                torch.sum(torch.sqrt(torch.sum((logt_ij - logr_obs) ** 2, axis=0)))
+                / self.K
+            )
+        elif self.cost == "l2":
             loss = torch.sum((logt_ij - logr_obs) ** 2 + 1e-6) / self.K
         else:
-            raise ValueError('Cost ' + self.cost + ' not valid. Choose \'l1\' of \'l2\'.' )
-        loss += self.reg_weight * torch.sum(torch.sum(self.angle**2, axis=0) + torch.sum(self.translation**2, axis=0), axis=0) # / self.K
+            raise ValueError("Cost " + self.cost + " not valid. Choose 'l1' of 'l2'.")
+        loss += self.reg_weight * torch.sum(
+            torch.sum(self.angle**2, axis=0) + torch.sum(self.translation**2, axis=0),
+            axis=0,
+        )  # / self.K
 
         return loss
-
