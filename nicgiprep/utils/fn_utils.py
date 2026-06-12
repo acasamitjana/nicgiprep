@@ -472,9 +472,9 @@ def label_log_odds(
 
         labels[
             it_cls,
-            crop_coord[0][0] : crop_coord[0][1],
-            crop_coord[1][0] : crop_coord[1][1],
-            crop_coord[2][0] : crop_coord[2][1],
+            crop_coord[0][0]: crop_coord[0][1],
+            crop_coord[1][0]: crop_coord[1][1],
+            crop_coord[2][0]: crop_coord[2][1],
         ] = d
 
     return labels
@@ -515,9 +515,9 @@ def crop_label(
         crop_coord.append([clow, chigh])
 
     mask_cropped = mask[
-        crop_coord[0][0] : crop_coord[0][1],
-        crop_coord[1][0] : crop_coord[1][1],
-        crop_coord[2][0] : crop_coord[2][1],
+        crop_coord[0][0]: crop_coord[0][1],
+        crop_coord[1][0]: crop_coord[1][1],
+        crop_coord[2][0]: crop_coord[2][1],
     ]
 
     return mask_cropped, crop_coord
@@ -539,9 +539,9 @@ def apply_crop(image: np.ndarray, crop_coord: list[list[int]]) -> np.ndarray:
         Cropped sub-volume.
     """
     return image[
-        crop_coord[0][0] : crop_coord[0][1],
-        crop_coord[1][0] : crop_coord[1][1],
-        crop_coord[2][0] : crop_coord[2][1],
+        crop_coord[0][0]: crop_coord[0][1],
+        crop_coord[1][0]: crop_coord[1][1],
+        crop_coord[2][0]: crop_coord[2][1],
     ]
 
 
@@ -739,9 +739,9 @@ def compute_distance_map(
             d[~mask_label] = d_out[~mask_label]
 
             distancemap[
-                crop_coord[0][0] : crop_coord[0][1],
-                crop_coord[1][0] : crop_coord[1][1],
-                crop_coord[2][0] : crop_coord[2][1],
+                crop_coord[0][0]: crop_coord[0][1],
+                crop_coord[1][0]: crop_coord[1][1],
+                crop_coord[2][0]: crop_coord[2][1],
                 it_ul,
             ] = d
 
@@ -798,9 +798,9 @@ def compute_distance_map_crop(
             d[~bbox_label] = d_out[~bbox_label]
 
             distancemap[
-                crop_coord[0][0] : crop_coord[0][1],
-                crop_coord[1][0] : crop_coord[1][1],
-                crop_coord[2][0] : crop_coord[2][1],
+                crop_coord[0][0]: crop_coord[0][1],
+                crop_coord[1][0]: crop_coord[1][1],
+                crop_coord[2][0]: crop_coord[2][1],
                 it_ul,
             ] = d
 

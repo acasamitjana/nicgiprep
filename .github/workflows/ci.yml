@@ -60,9 +60,9 @@ jobs:
   #     - name: Run flake8
   #       run: |
   #         flake8 nicgiprep/ \
-  #           --max-line-length=1000 \
-  #           --extend-ignore=E501,W503,E402,F401,F403,F405 \
-  #           --exclude=.venv,__pycache__
+            # --max-line-length=200 \
+            # --extend-ignore=E501,W503,E402,F401,F403,F405 \
+            # --exclude=.venv,__pycache__
 
   # ------------------------------------------------------------------
   # 3. Docstring coverage — every function, method, and class must have
