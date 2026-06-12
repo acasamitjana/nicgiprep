@@ -1,0 +1,173 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>nicgiprep &mdash; nicgiprep  documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Installation" href="getting_started/installation.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="#" class="icon icon-home">
+            nicgiprep
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting Started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="getting_started/installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="getting_started/quickstart.html">Quickstart</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">API Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="api/pipelines.html">Pipelines</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api/callbacks.html">Callbacks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api/models.html">Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api/utils.html">Utils</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="#">nicgiprep</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="#" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">nicgiprep</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="nicgiprep">
+<h1>nicgiprep<a class="headerlink" href="#nicgiprep" title="Link to this heading"></a></h1>
+<p><strong>nicgiprep</strong> is a neuroimaging preprocessing pipeline for longitudinal and multimodal MRI data,
+built around the <a class="reference external" href="https://github.com/acasamitjana/USLR">USLR (Unified Segmentation-based Longitudinal Registration)</a> framework.
+It provides BIDS-compatible processing for cross-sectional, longitudinal, and multimodal studies
+using SynthSeg and SynthMorph for segmentation and registration.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>This project is under active development.</p>
+</div>
+<div class="toctree-wrapper compound">
+<p class="caption" role="heading"><span class="caption-text">Getting Started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="getting_started/installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="getting_started/quickstart.html">Quickstart</a></li>
+</ul>
+</div>
+<div class="toctree-wrapper compound">
+<p class="caption" role="heading"><span class="caption-text">API Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="api/pipelines.html">Pipelines</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="api/pipelines.html#pipelines.BiasCorrectionProcessor"><code class="docutils literal notranslate"><span class="pre">BiasCorrectionProcessor</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/pipelines.html#pipelines.CrossSectionalProcessor"><code class="docutils literal notranslate"><span class="pre">CrossSectionalProcessor</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/pipelines.html#pipelines.LongitudinalProcessor"><code class="docutils literal notranslate"><span class="pre">LongitudinalProcessor</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/pipelines.html#pipelines.MMProcessor"><code class="docutils literal notranslate"><span class="pre">MMProcessor</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/pipelines.html#pipelines.MultiMRIProcessor"><code class="docutils literal notranslate"><span class="pre">MultiMRIProcessor</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/pipelines.html#pipelines.MultiModalBiasCorrectionProcessor"><code class="docutils literal notranslate"><span class="pre">MultiModalBiasCorrectionProcessor</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/pipelines.html#pipelines.MultiModalSynthSegProcessor"><code class="docutils literal notranslate"><span class="pre">MultiModalSynthSegProcessor</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/pipelines.html#pipelines.Processor"><code class="docutils literal notranslate"><span class="pre">Processor</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/pipelines.html#pipelines.SynthSegProcessor"><code class="docutils literal notranslate"><span class="pre">SynthSegProcessor</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/pipelines.html#module-pipelines.base">Base</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/pipelines.html#module-pipelines.cross_sectional">Cross-sectional</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/pipelines.html#module-pipelines.longitudinal">Longitudinal</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/pipelines.html#module-pipelines.multimodal">Multimodal</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="api/callbacks.html">Callbacks</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="api/callbacks.html#callbacks.Callback"><code class="docutils literal notranslate"><span class="pre">Callback</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/callbacks.html#callbacks.History"><code class="docutils literal notranslate"><span class="pre">History</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/callbacks.html#callbacks.ModelCheckpoint"><code class="docutils literal notranslate"><span class="pre">ModelCheckpoint</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/callbacks.html#callbacks.PrinterCallback"><code class="docutils literal notranslate"><span class="pre">PrinterCallback</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="api/models.html">Models</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="api/models.html#models.InstanceRigidModelLOG"><code class="docutils literal notranslate"><span class="pre">InstanceRigidModelLOG</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/models.html#models.ST2Nonlinear"><code class="docutils literal notranslate"><span class="pre">ST2Nonlinear</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="api/utils.html">Utils</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="api/utils.html#module-utils.def_utils">Deformation utilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/utils.html#module-utils.fn_utils">Functional utilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/utils.html#module-utils.io_utils">I/O utilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/utils.html#module-utils.label_utils">Label utilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/utils.html#module-utils.log_utils">Logging utilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/utils.html#module-utils.preprocessing_utils">Preprocessing utilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/utils.html#module-utils.synthmorph_utils">SynthMorph utilities</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="getting_started/installation.html" class="btn btn-neutral float-right" title="Installation" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Adrià Casamitjana, Agustín Cartaya Lathulerie, Clara Lisazo, Rachika E. Hamadache.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

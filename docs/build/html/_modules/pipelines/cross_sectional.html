@@ -1,0 +1,695 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>pipelines.cross_sectional &mdash; nicgiprep  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../index.html" class="icon icon-home">
+            nicgiprep
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting Started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../getting_started/installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../getting_started/quickstart.html">Quickstart</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">API Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../api/pipelines.html">Pipelines</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../api/callbacks.html">Callbacks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../api/models.html">Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../api/utils.html">Utils</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">nicgiprep</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">pipelines.cross_sectional</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for pipelines.cross_sectional</h1><div class="highlight"><pre>
+<span></span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">os.path</span><span class="w"> </span><span class="kn">import</span> <span class="n">isfile</span><span class="p">,</span> <span class="n">join</span><span class="p">,</span> <span class="n">dirname</span><span class="p">,</span> <span class="n">basename</span><span class="p">,</span> <span class="n">exists</span><span class="p">,</span> <span class="n">isdir</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">os</span><span class="w"> </span><span class="kn">import</span> <span class="n">makedirs</span><span class="p">,</span> <span class="n">listdir</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">nibabel</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">nib</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">skimage.morphology</span><span class="w"> </span><span class="kn">import</span> <span class="n">ball</span><span class="p">,</span> <span class="n">binary_dilation</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">setup</span><span class="w"> </span><span class="kn">import</span> <span class="o">*</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nicgiprep.callbacks</span><span class="w"> </span><span class="kn">import</span> <span class="o">*</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nicgiprep.pipelines</span><span class="w"> </span><span class="kn">import</span> <span class="n">Processor</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nicgiprep.utils.preprocessing_utils</span><span class="w"> </span><span class="kn">import</span> <span class="o">*</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nicgiprep.utils.fn_utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">one_hot_encoding</span><span class="p">,</span> <span class="n">rescale_voxel_size</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nicgiprep.utils.label_utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">SYNTHSEG_LUT</span><span class="p">,</span> <span class="n">CSF_LABELS</span><span class="p">,</span> <span class="n">CLUSTER_DICT</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nicgiprep.utils.def_utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">vol_resample_fast</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nicgiprep.utils.io_utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">save_nii</span>
+
+<div class="viewcode-block" id="CrossSectionalProcessor">
+<a class="viewcode-back" href="../../api/pipelines.html#pipelines.CrossSectionalProcessor">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">CrossSectionalProcessor</span><span class="p">(</span><span class="n">Processor</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Base class for cross-sectional neuroimaging processing pipelines.</span>
+
+<span class="sd">    Thin wrapper around :class:`~nicgiprep.pipelines.base.Processor` that</span>
+<span class="sd">    initialises common cross-sectional pipeline state via</span>
+<span class="sd">    :meth:`_build_processor`.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_build_processor</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Builds cross-sectional pipeline, by initialising relevant variables.</span>
+
+<span class="sd">        Subclasses should call ``super()._build_processor()``</span>
+<span class="sd">        and then extend or override these attributes.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_build_processor</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="SynthSegProcessor">
+<a class="viewcode-back" href="../../api/pipelines.html#pipelines.SynthSegProcessor">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">SynthSegProcessor</span><span class="p">(</span><span class="n">CrossSectionalProcessor</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Run SynthSeg parcellation on all T1w images in a BIDS dataset.</span>
+
+<span class="sd">    Collects input/output paths across subjects and sessions, invokes</span>
+<span class="sd">    ``mri_synthseg`` in a single batch call, and aggregates the resulting</span>
+<span class="sd">    volume TSV files into per-subject CSVs.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_name</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the display name of this pipeline.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="s1">&#39;SynthSegSegmentation&#39;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_check_file</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">proxy</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Check whether a NIfTI image is suitable for SynthSeg.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        proxy : nibabel.Nifti1Image</span>
+<span class="sd">            Loaded image proxy.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        dict</span>
+<span class="sd">            ``{&#39;run_flag&#39;: bool, &#39;exit_message&#39;: str}`` — ``run_flag`` is</span>
+<span class="sd">            ``True`` when the image passes all checks.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">proxy</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">3</span><span class="p">:</span>
+                <span class="k">return</span> <span class="p">{</span><span class="s1">&#39;run_flag&#39;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span> <span class="s1">&#39;exit_message&#39;</span><span class="p">:</span> <span class="s1">&#39;File excluded due to wrong image dimensions&#39;</span><span class="p">}</span>
+
+
+            <span class="k">elif</span> <span class="nb">any</span><span class="p">([</span><span class="n">s</span> <span class="o">&lt;</span> <span class="mi">20</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">proxy</span><span class="o">.</span><span class="n">shape</span><span class="p">]):</span>
+                <span class="k">return</span> <span class="p">{</span><span class="s1">&#39;run_flag&#39;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span> <span class="s1">&#39;exit_message&#39;</span><span class="p">:</span> <span class="s1">&#39;File excluded due to wrong image dimensions&#39;</span><span class="p">}</span>
+
+            <span class="k">elif</span> <span class="nb">any</span><span class="p">([</span><span class="n">r</span> <span class="o">&gt;</span> <span class="mi">7</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">proxy</span><span class="o">.</span><span class="n">affine</span> <span class="o">*</span> <span class="n">proxy</span><span class="o">.</span><span class="n">affine</span><span class="p">)),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)[:</span><span class="mi">3</span><span class="p">]</span><span class="o">.</span><span class="n">tolist</span><span class="p">()]):</span>
+                <span class="k">return</span> <span class="p">{</span><span class="s1">&#39;run_flag&#39;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+                        <span class="s1">&#39;exit_message&#39;</span><span class="p">:</span> <span class="s1">&#39;File excluded due to large resolution in some image dimension.&#39;</span><span class="p">}</span>
+
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">return</span> <span class="p">{</span><span class="s1">&#39;run_flag&#39;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span> <span class="s1">&#39;exit_message&#39;</span><span class="p">:</span> <span class="s1">&#39;&#39;</span><span class="p">}</span>
+
+        <span class="k">except</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">{</span><span class="s1">&#39;run_flag&#39;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+                    <span class="s1">&#39;exit_message&#39;</span><span class="p">:</span> <span class="s1">&#39;File excluded due to an error reading the file or computing image shape and resolution.&#39;</span><span class="p">}</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_select_image</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">subject</span><span class="p">,</span> <span class="n">tp</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Select a single T1w image for a given subject and session.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        subject : str</span>
+<span class="sd">            Subject ID.</span>
+<span class="sd">        tp : str</span>
+<span class="sd">            Session ID.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        BIDSFile or None</span>
+<span class="sd">            The selected T1w file, or ``None`` if none is found.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Select a single T1w image per session</span>
+        <span class="n">t1w_list</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_data</span><span class="p">(</span><span class="n">subject</span><span class="o">=</span><span class="n">subject</span><span class="p">,</span> <span class="n">extension</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;nii&#39;</span><span class="p">,</span> <span class="s1">&#39;nii.gz&#39;</span><span class="p">],</span> <span class="n">suffix</span><span class="o">=</span><span class="s1">&#39;T1w&#39;</span><span class="p">,</span> <span class="n">session</span><span class="o">=</span><span class="n">tp</span><span class="p">,</span> <span class="n">acquisition</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;orig&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">],</span> <span class="n">scope</span><span class="o">=</span><span class="s1">&#39;raw&#39;</span><span class="p">,</span> <span class="n">ignore_check</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">t1w_list</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+
+        <span class="k">elif</span> <span class="nb">len</span><span class="p">(</span><span class="n">t1w_list</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">any</span><span class="p">([</span><span class="s1">&#39;acquisition&#39;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">f</span><span class="o">.</span><span class="n">entities</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">t1w_list</span><span class="p">]):</span>
+                <span class="n">t1w_list_r</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">filter</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="s1">&#39;acquisition&#39;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">x</span><span class="o">.</span><span class="n">entities</span><span class="o">.</span><span class="n">keys</span><span class="p">(),</span> <span class="n">t1w_list</span><span class="p">))</span>
+
+            <span class="k">elif</span> <span class="nb">any</span><span class="p">([</span><span class="s1">&#39;run&#39;</span> <span class="ow">in</span> <span class="n">f</span><span class="o">.</span><span class="n">entities</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">t1w_list</span><span class="p">]):</span>
+                <span class="n">t1w_list_r</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">filter</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="o">.</span><span class="n">entities</span><span class="p">[</span><span class="s1">&#39;run&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s1">&#39;01&#39;</span><span class="p">,</span> <span class="n">t1w_list</span><span class="p">))</span>
+
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">t1w_list_r</span> <span class="o">=</span> <span class="n">t1w_list</span>
+
+            <span class="n">t1w_i</span> <span class="o">=</span> <span class="n">t1w_list_r</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">t1w_i</span> <span class="o">=</span> <span class="n">t1w_list</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+        <span class="k">return</span> <span class="n">t1w_i</span>
+
+<div class="viewcode-block" id="SynthSegProcessor.process_parallel">
+<a class="viewcode-back" href="../../api/pipelines.html#pipelines.SynthSegProcessor.process_parallel">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">process_parallel</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">num_cores</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Sequential fallback — SynthSeg cannot be parallelised.</span>
+
+<span class="sd">        Emits a warning and delegates to :meth:`process`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="s1">&#39;Parallel implementation not possible for SynthSeg segmentation. It defers to sequential &#39;</span>
+                      <span class="s1">&#39;processing&#39;</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">process</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="SynthSegProcessor.process">
+<a class="viewcode-back" href="../../api/pipelines.html#pipelines.SynthSegProcessor.process">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">process</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">prefix</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="n">gpu_flag</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">threads</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Collect all input/output paths and invoke SynthSeg in one batch call.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        prefix : str, optional</span>
+<span class="sd">            Prefix for temporary file lists written to ``TMP_DIR``. Default</span>
+<span class="sd">            is ``&#39;&#39;``.</span>
+<span class="sd">        gpu_flag : bool, optional</span>
+<span class="sd">            If ``True``, enable GPU inference. Default is ``False``.</span>
+<span class="sd">        threads : int, optional</span>
+<span class="sd">            Number of CPU threads for SynthSeg. Default is 16.</span>
+<span class="sd">        **kwargs</span>
+<span class="sd">            Forwarded to :meth:`process_subject`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_on_pipeline_init</span><span class="p">()</span>
+
+        <span class="n">input_files</span><span class="p">,</span> <span class="n">res_files</span><span class="p">,</span> <span class="n">output_files</span><span class="p">,</span> <span class="n">vol_files</span><span class="p">,</span> <span class="n">discarded_files</span> <span class="o">=</span> <span class="p">[],</span> <span class="p">[],</span> <span class="p">[],</span> <span class="p">[],</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">subject</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">subject_list</span><span class="p">:</span>
+            <span class="n">output</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">process_subject</span><span class="p">(</span><span class="n">subject</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+            <span class="n">input_files</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">output</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+            <span class="n">res_files</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">output</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+            <span class="n">output_files</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">output</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
+            <span class="n">vol_files</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">output</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+            <span class="n">discarded_files</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">output</span><span class="p">[</span><span class="mi">4</span><span class="p">])</span>
+
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">join</span><span class="p">(</span><span class="n">TMP_DIR</span><span class="p">,</span> <span class="n">prefix</span> <span class="o">+</span> <span class="s1">&#39;_input_files.txt&#39;</span><span class="p">),</span> <span class="s1">&#39;w&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">i_f</span> <span class="ow">in</span> <span class="n">input_files</span><span class="p">:</span>
+                <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">i_f</span><span class="p">)</span>
+                <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span><span class="p">)</span>
+
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">join</span><span class="p">(</span><span class="n">TMP_DIR</span><span class="p">,</span> <span class="n">prefix</span> <span class="o">+</span> <span class="s1">&#39;_res_files.txt&#39;</span><span class="p">),</span> <span class="s1">&#39;w&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">i_f</span> <span class="ow">in</span> <span class="n">res_files</span><span class="p">:</span>
+                <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">i_f</span><span class="p">)</span>
+                <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span><span class="p">)</span>
+
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">join</span><span class="p">(</span><span class="n">TMP_DIR</span><span class="p">,</span> <span class="n">prefix</span> <span class="o">+</span> <span class="s1">&#39;_output_files.txt&#39;</span><span class="p">),</span> <span class="s1">&#39;w&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">i_f</span> <span class="ow">in</span> <span class="n">output_files</span><span class="p">:</span>
+                <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">i_f</span><span class="p">)</span>
+                <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span><span class="p">)</span>
+
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">join</span><span class="p">(</span><span class="n">TMP_DIR</span><span class="p">,</span> <span class="n">prefix</span> <span class="o">+</span> <span class="s1">&#39;_vol_files.txt&#39;</span><span class="p">),</span> <span class="s1">&#39;w&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">i_f</span> <span class="ow">in</span> <span class="n">vol_files</span><span class="p">:</span>
+                <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">i_f</span><span class="p">)</span>
+                <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">output_files</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">gpu_cmd</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;&#39;</span><span class="p">]</span> <span class="k">if</span> <span class="n">gpu_flag</span> <span class="k">else</span> <span class="p">[</span><span class="s1">&#39;--cpu&#39;</span><span class="p">]</span>
+            <span class="n">subprocess</span><span class="o">.</span><span class="n">call</span><span class="p">([</span><span class="s1">&#39;mri_synthseg&#39;</span><span class="p">,</span>
+                             <span class="s1">&#39;--i&#39;</span><span class="p">,</span> <span class="n">join</span><span class="p">(</span><span class="n">TMP_DIR</span><span class="p">,</span> <span class="n">prefix</span> <span class="o">+</span> <span class="s1">&#39;_input_files.txt&#39;</span><span class="p">),</span>
+                             <span class="s1">&#39;--o&#39;</span><span class="p">,</span> <span class="n">join</span><span class="p">(</span><span class="n">TMP_DIR</span><span class="p">,</span> <span class="n">prefix</span> <span class="o">+</span> <span class="s1">&#39;_output_files.txt&#39;</span><span class="p">),</span>
+                             <span class="s1">&#39;--resample&#39;</span><span class="p">,</span> <span class="n">join</span><span class="p">(</span><span class="n">TMP_DIR</span><span class="p">,</span> <span class="n">prefix</span> <span class="o">+</span> <span class="s1">&#39;_res_files.txt&#39;</span><span class="p">),</span>
+                             <span class="s1">&#39;--vol&#39;</span><span class="p">,</span> <span class="n">join</span><span class="p">(</span><span class="n">TMP_DIR</span><span class="p">,</span> <span class="n">prefix</span> <span class="o">+</span> <span class="s1">&#39;_vol_files.txt&#39;</span><span class="p">),</span>
+                             <span class="s1">&#39;--threads&#39;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">threads</span><span class="p">),</span> <span class="s1">&#39;--robust&#39;</span><span class="p">,</span> <span class="s1">&#39;--parc&#39;</span><span class="p">]</span> <span class="o">+</span> <span class="n">gpu_cmd</span><span class="p">)</span>
+
+        <span class="n">df_new</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">for</span> <span class="n">subject</span> <span class="ow">in</span> <span class="n">listdir</span><span class="p">(</span><span class="n">DIR_PIPELINES</span><span class="p">[</span><span class="s1">&#39;preproc&#39;</span><span class="p">]):</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">isdir</span><span class="p">(</span><span class="n">join</span><span class="p">(</span><span class="n">DIR_PIPELINES</span><span class="p">[</span><span class="s1">&#39;preproc&#39;</span><span class="p">],</span> <span class="n">subject</span><span class="p">)):</span>
+                <span class="k">continue</span>
+
+            <span class="k">for</span> <span class="n">sess</span> <span class="ow">in</span> <span class="n">listdir</span><span class="p">(</span><span class="n">join</span><span class="p">(</span><span class="n">DIR_PIPELINES</span><span class="p">[</span><span class="s1">&#39;preproc&#39;</span><span class="p">],</span> <span class="n">subject</span><span class="p">)):</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">exists</span><span class="p">(</span><span class="n">join</span><span class="p">(</span><span class="n">DIR_PIPELINES</span><span class="p">[</span><span class="s1">&#39;preproc&#39;</span><span class="p">],</span> <span class="n">subject</span><span class="p">,</span> <span class="n">sess</span><span class="p">,</span> <span class="s1">&#39;anat&#39;</span><span class="p">)):</span> <span class="k">continue</span>
+                <span class="n">files</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">filter</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="s1">&#39;T1wdseg.csv&#39;</span> <span class="ow">in</span> <span class="n">x</span> <span class="ow">or</span> <span class="s1">&#39;T1wdseg.tsv&#39;</span> <span class="ow">in</span> <span class="n">x</span><span class="p">,</span>
+                                    <span class="n">listdir</span><span class="p">(</span><span class="n">join</span><span class="p">(</span><span class="n">DIR_PIPELINES</span><span class="p">[</span><span class="s1">&#39;preproc&#39;</span><span class="p">],</span> <span class="n">subject</span><span class="p">,</span> <span class="n">sess</span><span class="p">,</span> <span class="s1">&#39;anat&#39;</span><span class="p">))))</span>
+                <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">files</span><span class="p">:</span>
+                    <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="n">join</span><span class="p">(</span><span class="n">DIR_PIPELINES</span><span class="p">[</span><span class="s1">&#39;preproc&#39;</span><span class="p">],</span> <span class="n">subject</span><span class="p">,</span> <span class="n">sess</span><span class="p">,</span> <span class="s1">&#39;anat&#39;</span><span class="p">,</span> <span class="n">f</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">str</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">df</span><span class="o">.</span><span class="n">columns</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+                        <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="n">join</span><span class="p">(</span><span class="n">DIR_PIPELINES</span><span class="p">[</span><span class="s1">&#39;preproc&#39;</span><span class="p">],</span> <span class="n">subject</span><span class="p">,</span> <span class="n">sess</span><span class="p">,</span> <span class="s1">&#39;anat&#39;</span><span class="p">,</span> <span class="n">f</span><span class="p">),</span> <span class="n">sep</span><span class="o">=</span><span class="s1">&#39;</span><span class="se">\t</span><span class="s1">&#39;</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">str</span><span class="p">)</span>
+
+                    <span class="k">if</span> <span class="n">df_new</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                        <span class="n">df_new</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;session&#39;</span><span class="p">]</span> <span class="o">+</span> <span class="p">[</span><span class="n">c</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">df</span><span class="o">.</span><span class="n">columns</span> <span class="k">if</span> <span class="s1">&#39;Unnamed&#39;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">c</span><span class="p">])</span>
+
+                    <span class="k">if</span> <span class="s1">&#39;session&#39;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">df</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+                        <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">df</span><span class="o">.</span><span class="n">iterrows</span><span class="p">():</span>
+                            <span class="k">try</span><span class="p">:</span>
+                                <span class="n">sid</span> <span class="o">=</span> <span class="n">row</span><span class="p">[</span><span class="s1">&#39;Unnamed: 0&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;ses-&#39;</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;_&#39;</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+                                <span class="n">row</span><span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="s1">&#39;Unnamed: 0&#39;</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+                                <span class="n">row</span><span class="p">[</span><span class="s1">&#39;session&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">sid</span>
+                                <span class="n">df_new</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">([</span><span class="n">df_new</span><span class="p">,</span> <span class="n">row</span><span class="o">.</span><span class="n">to_frame</span><span class="p">()</span><span class="o">.</span><span class="n">T</span><span class="p">])</span>
+                            <span class="k">except</span><span class="p">:</span>
+                                <span class="k">pass</span>
+
+                        <span class="n">df_new</span><span class="o">.</span><span class="n">set_index</span><span class="p">(</span><span class="s1">&#39;session&#39;</span><span class="p">,</span> <span class="n">drop</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="n">df_new</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">([</span><span class="n">df_new</span><span class="p">,</span> <span class="n">df</span><span class="p">])</span>
+
+            <span class="k">if</span> <span class="n">df_new</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">df_new</span><span class="o">.</span><span class="n">to_csv</span><span class="p">(</span><span class="n">join</span><span class="p">(</span><span class="n">DIR_PIPELINES</span><span class="p">[</span><span class="s1">&#39;preproc&#39;</span><span class="p">],</span> <span class="n">subject</span><span class="p">,</span> <span class="n">subject</span> <span class="o">+</span> <span class="s1">&#39;_vols.csv&#39;</span><span class="p">),</span> <span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+            <span class="n">df_new</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_update_full_layout</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="SynthSegProcessor.process_subject">
+<a class="viewcode-back" href="../../api/pipelines.html#pipelines.SynthSegProcessor.process_subject">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">process_subject</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">subject</span><span class="p">,</span> <span class="n">force_flag</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">check_seg</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Collect SynthSeg I/O paths for all sessions of one subject.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        subject : str</span>
+<span class="sd">            Subject ID.</span>
+<span class="sd">        force_flag : bool, optional</span>
+<span class="sd">            If ``True``, re-queue sessions even when segmentations exist.</span>
+<span class="sd">            Default is ``False``.</span>
+<span class="sd">        check_seg : str, optional</span>
+<span class="sd">            Directory to copy pre-existing segmentations from. Defaults to</span>
+<span class="sd">            ``&#39;/&#39;`` (no pre-existing results).</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        tuple of list</span>
+<span class="sd">            ``(input_files, res_files, output_files, vol_files,</span>
+<span class="sd">            discarded_files)`` — one entry per session queued.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">check_seg</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">check_seg</span> <span class="o">=</span> <span class="s1">&#39;/&#39;</span>
+
+        <span class="n">input_files</span><span class="p">,</span> <span class="n">res_files</span><span class="p">,</span> <span class="n">output_files</span><span class="p">,</span> <span class="n">vol_files</span><span class="p">,</span> <span class="n">discarded_files</span> <span class="o">=</span> <span class="p">[],</span> <span class="p">[],</span> <span class="p">[],</span> <span class="p">[],</span> <span class="p">[]</span>
+
+        <span class="n">timepoints</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bids_loader</span><span class="o">.</span><span class="n">get_session</span><span class="p">(</span><span class="n">subject</span><span class="o">=</span><span class="n">subject</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">tp</span> <span class="ow">in</span> <span class="n">timepoints</span><span class="p">:</span>
+            <span class="c1"># Check if segmentation already exists</span>
+            <span class="n">preproc_dirname</span> <span class="o">=</span> <span class="n">join</span><span class="p">(</span><span class="n">DIR_PIPELINES</span><span class="p">[</span><span class="s1">&#39;preproc&#39;</span><span class="p">],</span> <span class="s1">&#39;sub-&#39;</span> <span class="o">+</span> <span class="n">subject</span><span class="p">,</span> <span class="s1">&#39;ses-&#39;</span> <span class="o">+</span> <span class="n">tp</span><span class="p">,</span> <span class="s1">&#39;anat&#39;</span><span class="p">)</span>
+
+            <span class="n">t1w_file</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_select_image</span><span class="p">(</span><span class="n">subject</span><span class="p">,</span> <span class="n">tp</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">t1w_file</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">continue</span>
+
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">exists</span><span class="p">(</span><span class="n">preproc_dirname</span><span class="p">):</span> <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="n">preproc_dirname</span><span class="p">)</span>
+            <span class="n">f</span> <span class="o">=</span> <span class="nb">open</span><span class="p">(</span><span class="n">join</span><span class="p">(</span><span class="n">preproc_dirname</span><span class="p">,</span> <span class="n">t1w_file</span><span class="o">.</span><span class="n">filename</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">&#39;nii.gz&#39;</span><span class="p">,</span> <span class="s1">&#39;txt&#39;</span><span class="p">)),</span> <span class="s1">&#39;w&#39;</span><span class="p">)</span>
+            <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span>
+                <span class="s1">&#39;Since there exists more than one T1w image for this session, we choose this file to run over the &#39;</span>
+                <span class="s1">&#39;entire USLR pipeline with the corresponding segmentation. Refer to the rawdata to check &#39;</span>
+                <span class="s1">&#39;correspondence&#39;</span>
+            <span class="p">)</span>
+
+            <span class="n">raw_dirname</span> <span class="o">=</span> <span class="n">t1w_file</span><span class="o">.</span><span class="n">dirname</span>
+            <span class="n">t1w_entities</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">t1w_file</span><span class="o">.</span><span class="n">entities</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">filename_entities</span><span class="p">}</span>
+            <span class="n">t1w_entities</span><span class="p">[</span><span class="s1">&#39;acquisition&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;1&#39;</span>
+
+            <span class="n">anat_res</span> <span class="o">=</span> <span class="n">basename</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">build_path</span><span class="p">(</span><span class="n">t1w_entities</span><span class="p">))</span>
+            <span class="n">anat_seg</span> <span class="o">=</span> <span class="n">anat_res</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">&#39;T1w&#39;</span><span class="p">,</span> <span class="s1">&#39;T1wdseg&#39;</span><span class="p">)</span>
+            <span class="n">anat_vols</span> <span class="o">=</span> <span class="n">anat_seg</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">&#39;nii.gz&#39;</span><span class="p">,</span> <span class="s1">&#39;tsv&#39;</span><span class="p">)</span>
+
+            <span class="k">if</span> <span class="p">(</span><span class="n">exists</span><span class="p">(</span><span class="n">join</span><span class="p">(</span><span class="n">check_seg</span><span class="p">,</span> <span class="s1">&#39;sub-&#39;</span> <span class="o">+</span> <span class="n">subject</span><span class="p">,</span> <span class="s1">&#39;ses-&#39;</span> <span class="o">+</span> <span class="n">tp</span><span class="p">,</span> <span class="s1">&#39;anat&#39;</span><span class="p">,</span> <span class="n">anat_seg</span><span class="p">))</span> <span class="ow">and</span>
+                    <span class="n">exists</span><span class="p">(</span><span class="n">join</span><span class="p">(</span><span class="n">check_seg</span><span class="p">,</span> <span class="s1">&#39;sub-&#39;</span> <span class="o">+</span> <span class="n">subject</span><span class="p">,</span> <span class="s1">&#39;ses-&#39;</span> <span class="o">+</span> <span class="n">tp</span><span class="p">,</span> <span class="s1">&#39;anat&#39;</span><span class="p">,</span> <span class="n">anat_vols</span><span class="p">))):</span>
+                <span class="n">subprocess</span><span class="o">.</span><span class="n">call</span><span class="p">([</span><span class="s1">&#39;cp&#39;</span><span class="p">,</span> <span class="n">join</span><span class="p">(</span><span class="n">check_seg</span><span class="p">,</span> <span class="s1">&#39;sub-&#39;</span> <span class="o">+</span> <span class="n">subject</span><span class="p">,</span> <span class="s1">&#39;ses-&#39;</span> <span class="o">+</span> <span class="n">tp</span><span class="p">,</span> <span class="s1">&#39;anat&#39;</span><span class="p">,</span> <span class="n">anat_seg</span><span class="p">),</span> <span class="n">join</span><span class="p">(</span><span class="n">preproc_dirname</span><span class="p">,</span> <span class="n">anat_seg</span><span class="p">)])</span>
+                <span class="n">subprocess</span><span class="o">.</span><span class="n">call</span><span class="p">([</span><span class="s1">&#39;cp&#39;</span><span class="p">,</span> <span class="n">join</span><span class="p">(</span><span class="n">check_seg</span><span class="p">,</span> <span class="s1">&#39;sub-&#39;</span> <span class="o">+</span> <span class="n">subject</span><span class="p">,</span> <span class="s1">&#39;ses-&#39;</span> <span class="o">+</span> <span class="n">tp</span><span class="p">,</span> <span class="s1">&#39;anat&#39;</span><span class="p">,</span> <span class="n">anat_vols</span><span class="p">),</span> <span class="n">join</span><span class="p">(</span><span class="n">preproc_dirname</span><span class="p">,</span> <span class="n">anat_vols</span><span class="p">)])</span>
+
+
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">exists</span><span class="p">(</span><span class="n">join</span><span class="p">(</span><span class="n">preproc_dirname</span><span class="p">,</span> <span class="n">anat_seg</span><span class="p">))</span> <span class="ow">or</span> <span class="n">force_flag</span><span class="p">:</span>
+                <span class="n">proxy</span> <span class="o">=</span> <span class="n">nib</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">join</span><span class="p">(</span><span class="n">raw_dirname</span><span class="p">,</span> <span class="n">t1w_file</span><span class="o">.</span><span class="n">filename</span><span class="p">))</span>
+                <span class="n">run_code</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_check_file</span><span class="p">(</span><span class="n">proxy</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">run_code</span><span class="p">[</span><span class="s1">&#39;run_flag&#39;</span><span class="p">]:</span>
+                    <span class="n">input_files</span> <span class="o">+=</span> <span class="p">[</span><span class="n">join</span><span class="p">(</span><span class="n">raw_dirname</span><span class="p">,</span> <span class="n">t1w_file</span><span class="o">.</span><span class="n">filename</span><span class="p">)]</span>
+                    <span class="n">res_files</span> <span class="o">+=</span> <span class="p">[</span><span class="n">join</span><span class="p">(</span><span class="n">preproc_dirname</span><span class="p">,</span> <span class="n">anat_res</span><span class="p">)]</span>
+                    <span class="n">output_files</span> <span class="o">+=</span> <span class="p">[</span><span class="n">join</span><span class="p">(</span><span class="n">preproc_dirname</span><span class="p">,</span> <span class="n">anat_seg</span><span class="p">)]</span>
+                    <span class="n">vol_files</span> <span class="o">+=</span> <span class="p">[</span><span class="n">join</span><span class="p">(</span><span class="n">preproc_dirname</span><span class="p">,</span> <span class="n">anat_vols</span><span class="p">)]</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">join</span><span class="p">(</span><span class="n">preproc_dirname</span><span class="p">,</span> <span class="s1">&#39;excluded_file.txt&#39;</span><span class="p">),</span> <span class="s1">&#39;w&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+                        <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">run_code</span><span class="p">[</span><span class="s1">&#39;exit_message&#39;</span><span class="p">])</span>
+
+        <span class="k">return</span> <span class="n">input_files</span><span class="p">,</span> <span class="n">res_files</span><span class="p">,</span> <span class="n">output_files</span><span class="p">,</span> <span class="n">vol_files</span><span class="p">,</span> <span class="n">discarded_files</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="BiasCorrectionProcessor">
+<a class="viewcode-back" href="../../api/pipelines.html#pipelines.BiasCorrectionProcessor">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">BiasCorrectionProcessor</span><span class="p">(</span><span class="n">CrossSectionalProcessor</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Bias-field correction and brain-mask generation for cross-sectional data.</span>
+
+<span class="sd">    For each session, computes a brain mask from the SynthSeg parcellation,</span>
+<span class="sd">    resamples the T1w to 1 mm isotropic if needed, runs EM-based bias-field</span>
+<span class="sd">    correction, and normalises the white-matter mean to 110.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_name</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the display name of this pipeline.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="s1">&#39;BiasFieldCorrection&#39;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_check_resampled_file</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">raw_file</span><span class="p">,</span> <span class="n">resampled_entities</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Ensure a 1 mm isotropic resampled T1w exists, creating it if necessary.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        raw_file : BIDSFile</span>
+<span class="sd">            Source raw T1w file.</span>
+<span class="sd">        resampled_entities : dict</span>
+<span class="sd">            BIDS entities for the target 1 mm resampled file.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        dict</span>
+<span class="sd">            ``{&#39;exit_code&#39;: int, ...}`` — ``exit_code=0`` with ``&#39;filepath&#39;``</span>
+<span class="sd">            on success; ``exit_code=-1`` with ``&#39;message&#39;`` on failure.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">resampled_file</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_data</span><span class="p">(</span><span class="o">**</span><span class="n">resampled_entities</span><span class="p">,</span> <span class="n">ignore_check</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">resampled_file</span><span class="p">:</span>
+            <span class="n">resampled_filepath</span> <span class="o">=</span> <span class="n">join</span><span class="p">(</span><span class="n">DIR_PIPELINES</span><span class="p">[</span><span class="s1">&#39;preproc&#39;</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">build_path</span><span class="p">(</span><span class="n">resampled_entities</span><span class="p">))</span>
+
+            <span class="n">proxyraw</span> <span class="o">=</span> <span class="n">nib</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">raw_file</span><span class="o">.</span><span class="n">path</span><span class="p">)</span>
+            <span class="n">pixdim</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">proxyraw</span><span class="o">.</span><span class="n">affine</span> <span class="o">*</span> <span class="n">proxyraw</span><span class="o">.</span><span class="n">affine</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">))[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+            <span class="k">if</span> <span class="nb">all</span><span class="p">([</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">p</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mf">0.01</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">pixdim</span><span class="p">]):</span>
+                <span class="n">rf</span> <span class="o">=</span> <span class="n">subprocess</span><span class="o">.</span><span class="n">call</span><span class="p">([</span><span class="s1">&#39;ln&#39;</span><span class="p">,</span> <span class="s1">&#39;-s&#39;</span><span class="p">,</span> <span class="n">raw_file</span><span class="o">.</span><span class="n">path</span><span class="p">,</span> <span class="n">resampled_filepath</span><span class="p">],</span> <span class="n">stderr</span><span class="o">=</span><span class="n">subprocess</span><span class="o">.</span><span class="n">PIPE</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">rf</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="n">subprocess</span><span class="o">.</span><span class="n">call</span><span class="p">([</span><span class="s1">&#39;cp&#39;</span><span class="p">,</span> <span class="n">raw_file</span><span class="o">.</span><span class="n">path</span><span class="p">,</span> <span class="n">resampled_filepath</span><span class="p">])</span>
+
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c1"># some dimension may be wrong</span>
+                <span class="k">if</span> <span class="nb">any</span><span class="p">([</span><span class="n">p</span> <span class="o">&lt;</span> <span class="mf">0.01</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">pixdim</span><span class="p">]):</span>
+                    <span class="k">return</span> <span class="p">{</span><span class="s1">&#39;exit_code&#39;</span><span class="p">:</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="s1">&#39;message&#39;</span><span class="p">:</span> <span class="s1">&#39;some dimensions are wrong&#39;</span><span class="p">}</span>
+
+                <span class="n">v</span><span class="p">,</span> <span class="n">aff</span> <span class="o">=</span> <span class="n">rescale_voxel_size</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">proxyraw</span><span class="o">.</span><span class="n">dataobj</span><span class="p">),</span> <span class="n">proxyraw</span><span class="o">.</span><span class="n">affine</span><span class="p">,</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span>
+                <span class="n">save_nii</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">aff</span><span class="p">,</span> <span class="n">resampled_filepath</span><span class="p">)</span>
+
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">resampled_filepath</span> <span class="o">=</span> <span class="n">resampled_file</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">path</span>
+
+        <span class="k">return</span> <span class="p">{</span><span class="s1">&#39;exit_code&#39;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s1">&#39;filepath&#39;</span><span class="p">:</span> <span class="n">resampled_filepath</span><span class="p">}</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_posterior2generative_labelmap</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">seg</span><span class="p">,</span> <span class="n">lut</span><span class="o">=</span><span class="n">SYNTHSEG_LUT</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Convert soft posterior segmentation to a hemisphere-unified label space.</span>
+
+<span class="sd">        Merges bilateral structures into unified classes using ``CLUSTER_DICT`` and</span>
+<span class="sd">        re-normalises the resulting posteriors so they sum to one across classes.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        seg : np.ndarray</span>
+<span class="sd">            Soft segmentation array of shape ``(*spatial_dims, n_labels)``, where</span>
+<span class="sd">            the last axis indexes labels according to ``lut``.</span>
+<span class="sd">        lut : dict, optional</span>
+<span class="sd">            Lookup table mapping FreeSurfer/SynthSeg integer label IDs to channel</span>
+<span class="sd">            indices in ``seg``. Defaults to ``SYNTHSEG_LUT``.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        np.ndarray</span>
+<span class="sd">            Array of shape ``(*spatial_dims, n_unified_classes)`` with normalised</span>
+<span class="sd">            posterior probabilities over the unified label set.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">out_seg</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">seg</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">CLUSTER_DICT</span><span class="o">.</span><span class="n">keys</span><span class="p">()),))</span>
+        <span class="k">for</span> <span class="n">it_lab</span><span class="p">,</span> <span class="p">(</span><span class="n">lab_str</span><span class="p">,</span> <span class="n">lab_list</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">CLUSTER_DICT</span><span class="o">.</span><span class="n">items</span><span class="p">()):</span>
+            <span class="k">for</span> <span class="n">lab</span> <span class="ow">in</span> <span class="n">lab_list</span><span class="p">:</span>
+                <span class="n">out_seg</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">it_lab</span><span class="p">]</span> <span class="o">+=</span> <span class="n">seg</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">lut</span><span class="p">[</span><span class="n">lab</span><span class="p">]]</span>
+
+        <span class="n">out_seg</span> <span class="o">=</span> <span class="n">out_seg</span> <span class="o">/</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">out_seg</span><span class="p">,</span> <span class="n">axis</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdims</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="o">+</span> <span class="mf">1e-10</span><span class="p">)</span>
+        <span class="n">out_seg</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">out_seg</span><span class="p">)]</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">return</span> <span class="n">out_seg</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_seg2generative_labelmap</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">seg</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Convert a hard integer segmentation to a hemisphere-unified label space.</span>
+
+<span class="sd">        Maps bilateral FreeSurfer/SynthSeg integer labels to unified class indices</span>
+<span class="sd">        defined by ``CLUSTER_DICT``.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        seg : np.ndarray</span>
+<span class="sd">            Integer segmentation array of shape ``(H, W, D)``.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        np.ndarray</span>
+<span class="sd">            Array of shape ``(H, W, D, n_unified_classes)`` with class assignments</span>
+<span class="sd">            normalised across the last axis.</span>
+
+<span class="sd">        Notes</span>
+<span class="sd">        -----</span>
+<span class="sd">        Division by the sum along the last axis may produce NaN at background</span>
+<span class="sd">        voxels where the total is zero; callers should handle this if needed.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">out_seg</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">seg</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="mi">3</span><span class="p">]</span> <span class="o">+</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">CLUSTER_DICT</span><span class="o">.</span><span class="n">keys</span><span class="p">()),))</span>
+        <span class="k">for</span> <span class="n">it_lab</span><span class="p">,</span> <span class="p">(</span><span class="n">lab_str</span><span class="p">,</span> <span class="n">lab_list</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">CLUSTER_DICT</span><span class="o">.</span><span class="n">items</span><span class="p">()):</span>
+            <span class="k">for</span> <span class="n">lab</span> <span class="ow">in</span> <span class="n">lab_list</span><span class="p">:</span>
+                <span class="n">out_seg</span><span class="p">[</span><span class="n">seg</span> <span class="o">==</span> <span class="n">lab</span><span class="p">]</span> <span class="o">=</span> <span class="n">it_lab</span>
+
+        <span class="n">out_seg</span> <span class="o">=</span> <span class="n">out_seg</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">out_seg</span><span class="p">,</span> <span class="n">axis</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdims</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">out_seg</span>
+
+
+<div class="viewcode-block" id="BiasCorrectionProcessor.process_subject">
+<a class="viewcode-back" href="../../api/pipelines.html#pipelines.BiasCorrectionProcessor.process_subject">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">process_subject</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">subject</span><span class="p">,</span> <span class="n">force_flag</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">remove_wrong</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Run bias-field correction for all sessions of one subject.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        subject : str</span>
+<span class="sd">            Subject ID.</span>
+<span class="sd">        force_flag : bool, optional</span>
+<span class="sd">            If ``True``, reprocess sessions even when outputs already exist.</span>
+<span class="sd">            Default is ``False``.</span>
+<span class="sd">        remove_wrong : bool, optional</span>
+<span class="sd">            If ``True``, delete the session directory when bias-field</span>
+<span class="sd">            correction fails. Default is ``True``.</span>
+<span class="sd">        **kwargs</span>
+<span class="sd">            Ignored; present for API compatibility.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;</span><span class="se">\n</span><span class="s1">Subject: &#39;</span> <span class="o">+</span> <span class="n">subject</span><span class="p">)</span>
+
+        <span class="n">timepoints</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_timepoints</span><span class="p">(</span><span class="n">subject</span><span class="o">=</span><span class="n">subject</span><span class="p">,</span> <span class="n">uslr</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">tp_id</span> <span class="ow">in</span> <span class="n">timepoints</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;</span><span class="se">\n</span><span class="s1">* Session: &#39;</span> <span class="o">+</span> <span class="n">tp_id</span><span class="p">,</span> <span class="n">end</span><span class="o">=</span><span class="s1">&#39;: &#39;</span><span class="p">,</span> <span class="n">flush</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+            <span class="n">preproc_dirname</span> <span class="o">=</span> <span class="n">join</span><span class="p">(</span><span class="n">DIR_PIPELINES</span><span class="p">[</span><span class="s1">&#39;preproc&#39;</span><span class="p">],</span> <span class="s1">&#39;sub-&#39;</span> <span class="o">+</span> <span class="n">subject</span><span class="p">,</span> <span class="s1">&#39;ses-&#39;</span> <span class="o">+</span> <span class="n">tp_id</span><span class="p">,</span> <span class="s1">&#39;anat&#39;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">exists</span><span class="p">(</span><span class="n">preproc_dirname</span><span class="p">):</span> <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="n">preproc_dirname</span><span class="p">)</span>
+
+            <span class="c1"># input segs</span>
+            <span class="n">seg_file</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_data</span><span class="p">(</span><span class="o">**</span><span class="p">{</span><span class="s1">&#39;session&#39;</span><span class="p">:</span> <span class="n">tp_id</span><span class="p">,</span> <span class="s1">&#39;subject&#39;</span><span class="p">:</span> <span class="n">subject</span><span class="p">,</span> <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">seg_entities</span><span class="p">})</span>
+            <span class="k">if</span> <span class="n">seg_file</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">continue</span>
+
+            <span class="c1"># get entities</span>
+            <span class="n">seg_entities</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_entities</span><span class="p">(</span><span class="n">seg_file</span><span class="p">)</span>
+            <span class="n">seg_entities</span><span class="p">[</span><span class="s1">&#39;extension&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;nii.gz&#39;</span>
+            <span class="n">raw_entities</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">seg_entities</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">k</span> <span class="o">!=</span> <span class="s1">&#39;acquisition&#39;</span><span class="p">}</span>
+            <span class="n">raw_entities</span><span class="p">[</span><span class="s1">&#39;suffix&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;T1w&#39;</span>
+            <span class="n">raw_entities</span><span class="p">[</span><span class="s1">&#39;scope&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;raw&#39;</span>
+            <span class="n">raw_entities</span><span class="p">[</span><span class="s1">&#39;acquisition&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="kc">None</span><span class="p">,</span> <span class="s1">&#39;orig&#39;</span><span class="p">]</span>
+            <span class="n">resampled_entities</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="n">raw_entities</span><span class="p">)</span>
+            <span class="n">resampled_entities</span><span class="p">[</span><span class="s1">&#39;acquisition&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;1&#39;</span>
+            <span class="n">resampled_entities</span><span class="p">[</span><span class="s1">&#39;scope&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;preproc&#39;</span>
+
+            <span class="c1"># raw image</span>
+            <span class="n">raw_file</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_data</span><span class="p">(</span><span class="o">**</span><span class="n">raw_entities</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">raw_file</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">continue</span>
+
+            <span class="c1"># build output paths</span>
+            <span class="n">output_filepath</span> <span class="o">=</span> <span class="n">join</span><span class="p">(</span><span class="n">preproc_dirname</span><span class="p">,</span> <span class="n">basename</span><span class="p">(</span><span class="n">raw_file</span><span class="p">))</span>
+            <span class="n">output_mask_filepath</span> <span class="o">=</span> <span class="n">join</span><span class="p">(</span><span class="n">preproc_dirname</span><span class="p">,</span> <span class="n">seg_file</span><span class="o">.</span><span class="n">filename</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">&#39;dseg&#39;</span><span class="p">,</span> <span class="s1">&#39;mask&#39;</span><span class="p">))</span>
+
+            <span class="k">if</span> <span class="n">exists</span><span class="p">(</span><span class="n">output_filepath</span><span class="p">)</span> <span class="ow">and</span> <span class="n">exists</span><span class="p">(</span><span class="n">output_mask_filepath</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">force_flag</span><span class="p">:</span>
+                <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;image already processed.&#39;</span><span class="p">)</span>
+                <span class="k">continue</span>
+
+            <span class="c1"># read images</span>
+            <span class="n">proxyraw</span> <span class="o">=</span> <span class="n">nib</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">raw_file</span><span class="o">.</span><span class="n">path</span><span class="p">)</span>
+            <span class="n">proxyseg</span> <span class="o">=</span> <span class="n">nib</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">seg_file</span><span class="o">.</span><span class="n">path</span><span class="p">)</span>
+
+            <span class="c1"># ------------------------ #</span>
+            <span class="c1">#      Computing masks     #</span>
+            <span class="c1"># ------------------------ #</span>
+            <span class="c1"># print(&#39;computing masks from dseg files; &#39;, end=&#39;&#39;, flush=True)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">exists</span><span class="p">(</span><span class="n">output_mask_filepath</span><span class="p">):</span>
+                <span class="n">seg</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">proxyseg</span><span class="o">.</span><span class="n">dataobj</span><span class="p">)</span>
+                <span class="n">mask</span> <span class="o">=</span> <span class="n">seg</span> <span class="o">&gt;</span> <span class="mi">0</span>
+                <span class="k">for</span> <span class="n">lab</span> <span class="ow">in</span> <span class="n">CSF_LABELS</span><span class="p">:</span>
+                    <span class="n">mask</span><span class="p">[</span><span class="n">seg</span> <span class="o">==</span> <span class="n">lab</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
+
+                <span class="n">save_nii</span><span class="p">(</span><span class="n">mask</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="s1">&#39;uint8&#39;</span><span class="p">),</span> <span class="n">proxyseg</span><span class="o">.</span><span class="n">affine</span><span class="p">,</span> <span class="n">output_mask_filepath</span><span class="p">)</span>
+
+            <span class="n">resampled_flag</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_check_resampled_file</span><span class="p">(</span><span class="n">raw_file</span><span class="p">,</span> <span class="n">resampled_entities</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">resampled_flag</span><span class="p">[</span><span class="s1">&#39;exit_code&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">:</span>
+                <span class="nb">print</span><span class="p">(</span><span class="n">resampled_flag</span><span class="p">[</span><span class="s1">&#39;message&#39;</span><span class="p">],</span> <span class="n">end</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="n">flush</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+                <span class="k">continue</span>
+
+            <span class="n">proxyres</span> <span class="o">=</span> <span class="n">nib</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">resampled_flag</span><span class="p">[</span><span class="s1">&#39;filepath&#39;</span><span class="p">])</span>
+
+            <span class="c1"># ------------------------ #</span>
+            <span class="c1"># Bias field correction    #</span>
+            <span class="c1"># ------------------------ #</span>
+            <span class="c1"># print(&#39;correcting for inhomogeneities and normalisation (min/max); &#39;, end=&#39;&#39;, flush=True)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">exists</span><span class="p">(</span><span class="n">output_filepath</span><span class="p">)</span> <span class="ow">or</span> <span class="n">force_flag</span><span class="p">:</span>
+                <span class="n">vox2ras0</span> <span class="o">=</span> <span class="n">proxyres</span><span class="o">.</span><span class="n">affine</span>
+                <span class="n">mri_acq</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">proxyres</span><span class="o">.</span><span class="n">dataobj</span><span class="p">)</span>
+                <span class="n">mri_acq</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">mri_acq</span><span class="p">)]</span> <span class="o">=</span> <span class="mi">0</span>
+
+                <span class="n">pixdimim</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">proxyres</span><span class="o">.</span><span class="n">affine</span> <span class="o">*</span> <span class="n">proxyres</span><span class="o">.</span><span class="n">affine</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">))[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+                <span class="n">pixdimseg</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">proxyseg</span><span class="o">.</span><span class="n">affine</span> <span class="o">*</span> <span class="n">proxyseg</span><span class="o">.</span><span class="n">affine</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">))[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+                <span class="k">if</span> <span class="nb">any</span><span class="p">([</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">p1</span><span class="o">-</span><span class="n">p2</span><span class="p">)</span><span class="o">&gt;</span> <span class="mf">0.01</span> <span class="k">for</span> <span class="n">p1</span><span class="p">,</span> <span class="n">p2</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">pixdimseg</span><span class="p">,</span> <span class="n">pixdimim</span><span class="p">)]):</span>
+                    <span class="n">proxyseg</span> <span class="o">=</span> <span class="n">vol_resample_fast</span><span class="p">(</span><span class="n">proxyres</span><span class="p">,</span> <span class="n">proxyseg</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s1">&#39;nearest&#39;</span><span class="p">)</span>
+
+                <span class="n">seg</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">proxyseg</span><span class="o">.</span><span class="n">dataobj</span><span class="p">)</span>
+                <span class="n">soft_seg</span> <span class="o">=</span> <span class="n">one_hot_encoding</span><span class="p">(</span><span class="n">seg</span><span class="p">,</span> <span class="n">categories</span><span class="o">=</span><span class="n">SYNTHSEG_LUT</span><span class="p">)</span>
+                <span class="n">soft_seg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_posterior2generative_labelmap</span><span class="p">(</span><span class="n">soft_seg</span><span class="p">,</span> <span class="n">lut</span><span class="o">=</span><span class="n">SYNTHSEG_LUT</span><span class="p">)</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">mri_acq_corr</span><span class="p">,</span> <span class="n">bias_field</span> <span class="o">=</span> <span class="n">bias_field_corr</span><span class="p">(</span><span class="n">mri_acq</span><span class="p">,</span> <span class="n">soft_seg</span><span class="p">,</span> <span class="n">penalty</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">VERBOSE</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">filter_exceptions</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+                <span class="k">except</span><span class="p">:</span>
+                    <span class="n">mri_acq_corr</span> <span class="o">=</span> <span class="kc">None</span>
+
+                <span class="k">if</span> <span class="n">mri_acq_corr</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="ow">not</span> <span class="n">remove_wrong</span><span class="p">:</span>
+                        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;[error] bias field cannot be computed -- removing segmentation related files and &quot;</span>
+                              <span class="s2">&quot;exiting: &quot;</span> <span class="o">+</span> <span class="n">seg_file</span><span class="o">.</span><span class="n">path</span><span class="p">,</span> <span class="n">end</span><span class="o">=</span><span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span><span class="p">)</span>
+                        <span class="n">subprocess</span><span class="o">.</span><span class="n">call</span><span class="p">([</span><span class="s1">&#39;rm&#39;</span><span class="p">,</span> <span class="s1">&#39;-rf&#39;</span><span class="p">,</span> <span class="n">join</span><span class="p">(</span><span class="n">DIR_PIPELINES</span><span class="p">[</span><span class="s1">&#39;preproc&#39;</span><span class="p">],</span> <span class="s1">&#39;sub-&#39;</span> <span class="o">+</span> <span class="n">subject</span><span class="p">,</span> <span class="s1">&#39;ses-&#39;</span> <span class="o">+</span> <span class="n">tp_id</span><span class="p">)])</span>
+
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;[error] bias field cannot be computed.&quot;</span><span class="p">,</span> <span class="n">end</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="n">flush</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+                    <span class="k">continue</span>
+
+                <span class="k">del</span> <span class="n">soft_seg</span>
+
+                <span class="n">mask</span> <span class="o">=</span> <span class="n">seg</span> <span class="o">&gt;</span> <span class="mi">0</span>
+                <span class="n">wm_mask</span> <span class="o">=</span> <span class="p">(</span><span class="n">seg</span> <span class="o">==</span> <span class="mi">2</span><span class="p">)</span> <span class="o">|</span> <span class="p">(</span><span class="n">seg</span> <span class="o">==</span> <span class="mi">41</span><span class="p">)</span>
+
+                <span class="k">del</span> <span class="n">seg</span>
+
+                <span class="n">vox2ras0_orig</span> <span class="o">=</span> <span class="n">proxyraw</span><span class="o">.</span><span class="n">affine</span>
+                <span class="n">mri_acq_orig</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">proxyraw</span><span class="o">.</span><span class="n">dataobj</span><span class="p">)</span>
+                <span class="n">mri_acq_orig</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">mri_acq_orig</span><span class="p">)]</span> <span class="o">=</span> <span class="mi">0</span>
+                <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">mri_acq_orig</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">3</span><span class="p">:</span>
+                    <span class="n">mri_acq_orig</span> <span class="o">=</span> <span class="n">mri_acq_orig</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>
+
+                <span class="n">new_vox_size</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">vox2ras0_orig</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">)[:</span><span class="mi">3</span><span class="p">]</span>
+                <span class="n">vox_size</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">vox2ras0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">)[:</span><span class="mi">3</span><span class="p">]</span>
+
+                <span class="k">if</span> <span class="nb">all</span><span class="p">([</span><span class="n">v1</span> <span class="o">==</span> <span class="n">v2</span> <span class="k">for</span> <span class="n">v1</span><span class="p">,</span> <span class="n">v2</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">vox_size</span><span class="p">,</span> <span class="n">new_vox_size</span><span class="p">)]):</span>
+                    <span class="n">mask_dilated</span> <span class="o">=</span> <span class="n">binary_dilation</span><span class="p">(</span><span class="n">mask</span><span class="p">,</span> <span class="n">ball</span><span class="p">(</span><span class="mi">3</span><span class="p">))</span>
+                    <span class="n">m</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">mri_acq_corr</span><span class="p">[</span><span class="n">wm_mask</span><span class="p">])</span>
+                    <span class="n">mri_acq_corr</span> <span class="o">=</span> <span class="mi">110</span> <span class="o">*</span> <span class="n">mri_acq_corr</span> <span class="o">/</span> <span class="n">m</span>
+                    <span class="n">mri_acq_corr</span> <span class="o">*=</span> <span class="n">mask_dilated</span>
+
+                    <span class="n">save_nii</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="n">mri_acq_corr</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">255</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="s1">&#39;uint8&#39;</span><span class="p">),</span> <span class="n">proxyres</span><span class="o">.</span><span class="n">affine</span><span class="p">,</span> <span class="n">output_filepath</span><span class="p">)</span>
+
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">bias_proxy</span> <span class="o">=</span> <span class="n">nib</span><span class="o">.</span><span class="n">Nifti1Image</span><span class="p">(</span><span class="n">bias_field</span><span class="p">,</span> <span class="n">proxyres</span><span class="o">.</span><span class="n">affine</span><span class="p">)</span>
+                    <span class="n">bias_field_resize</span> <span class="o">=</span> <span class="n">vol_resample_fast</span><span class="p">(</span><span class="n">proxyraw</span><span class="p">,</span> <span class="n">bias_proxy</span><span class="p">,</span> <span class="n">return_np</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+                    <span class="c1">#</span>
+                    <span class="n">mask_proxy</span> <span class="o">=</span> <span class="n">nib</span><span class="o">.</span><span class="n">Nifti1Image</span><span class="p">(</span><span class="n">mask</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="s1">&#39;float&#39;</span><span class="p">),</span> <span class="n">proxyres</span><span class="o">.</span><span class="n">affine</span><span class="p">)</span>
+                    <span class="n">mask_resize</span> <span class="o">=</span> <span class="n">vol_resample_fast</span><span class="p">(</span><span class="n">proxyraw</span><span class="p">,</span> <span class="n">mask_proxy</span><span class="p">,</span> <span class="n">return_np</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mf">0.5</span>
+                    <span class="c1">#</span>
+                    <span class="n">wm_mask_proxy</span> <span class="o">=</span> <span class="n">nib</span><span class="o">.</span><span class="n">Nifti1Image</span><span class="p">(</span><span class="n">wm_mask</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="s1">&#39;float&#39;</span><span class="p">),</span> <span class="n">proxyres</span><span class="o">.</span><span class="n">affine</span><span class="p">)</span>
+                    <span class="n">wm_mask_resize</span> <span class="o">=</span> <span class="n">vol_resample_fast</span><span class="p">(</span><span class="n">proxyraw</span><span class="p">,</span> <span class="n">wm_mask_proxy</span><span class="p">,</span> <span class="n">return_np</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mf">0.5</span>
+
+                    <span class="n">mri_acq_orig_corr</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="n">mri_acq_orig</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="s1">&#39;float32&#39;</span><span class="p">))</span>
+                    <span class="n">mri_acq_orig_corr</span><span class="p">[</span><span class="n">mask_resize</span><span class="p">]</span> <span class="o">=</span> <span class="n">mri_acq_orig_corr</span><span class="p">[</span><span class="n">mask_resize</span><span class="p">]</span> <span class="o">/</span> <span class="n">bias_field_resize</span><span class="p">[</span><span class="n">mask_resize</span><span class="p">]</span>
+
+                    <span class="n">m</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">mri_acq_orig_corr</span><span class="p">[</span><span class="n">wm_mask_resize</span><span class="p">])</span>
+                    <span class="n">mri_acq_orig_corr</span> <span class="o">=</span> <span class="mi">110</span> <span class="o">*</span> <span class="n">mri_acq_orig_corr</span> <span class="o">/</span> <span class="n">m</span>
+                    <span class="n">mask_dilated</span> <span class="o">=</span> <span class="n">binary_dilation</span><span class="p">(</span><span class="n">mask_resize</span><span class="p">,</span> <span class="n">ball</span><span class="p">(</span><span class="mi">3</span><span class="p">))</span>
+                    <span class="n">mri_acq_orig_corr</span><span class="p">[</span><span class="n">mask_dilated</span> <span class="o">==</span> <span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
+
+                    <span class="n">save_nii</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="n">mri_acq_orig_corr</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">255</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="s1">&#39;uint8&#39;</span><span class="p">),</span> <span class="n">proxyraw</span><span class="o">.</span><span class="n">affine</span><span class="p">,</span> <span class="n">output_filepath</span><span class="p">)</span>
+
+                    <span class="k">del</span> <span class="n">bias_field</span><span class="p">,</span> <span class="n">bias_field_resize</span><span class="p">,</span> <span class="n">mri_acq_orig</span><span class="p">,</span> <span class="n">mri_acq_orig_corr</span><span class="p">,</span> <span class="n">mask_dilated</span>
+
+        <span class="k">return</span> <span class="p">{</span><span class="s1">&#39;exit_code&#39;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s1">&#39;message&#39;</span><span class="p">:</span> <span class="s1">&#39;success&#39;</span><span class="p">}</span></div>
+</div>
+
+
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Adrià Casamitjana, Agustín Cartaya Lathulerie, Clara Lisazo, Rachika E. Hamadache.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

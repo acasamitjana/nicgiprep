@@ -1,0 +1,1249 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>utils.def_utils &mdash; nicgiprep  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../index.html" class="icon icon-home">
+            nicgiprep
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting Started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../getting_started/installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../getting_started/quickstart.html">Quickstart</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">API Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../api/pipelines.html">Pipelines</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../api/callbacks.html">Callbacks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../api/models.html">Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../api/utils.html">Utils</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">nicgiprep</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">utils.def_utils</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for utils.def_utils</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span><span class="w"> </span><span class="nn">pdb</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">nibabel</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">nib</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">tensorflow</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">tf</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">surfa</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">sf</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">scipy.optimize</span><span class="w"> </span><span class="kn">import</span> <span class="n">linprog</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch.nn</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">nn</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch.nn.functional</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">F</span>
+
+<div class="viewcode-block" id="fast_3D_interp_torch">
+<a class="viewcode-back" href="../../api/utils.html#utils.def_utils.fast_3D_interp_torch">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">fast_3D_interp_torch</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">II</span><span class="p">,</span> <span class="n">JJ</span><span class="p">,</span> <span class="n">KK</span><span class="p">,</span> <span class="n">mode</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Interpolate a 3D scalar volume at arbitrary coordinates using PyTorch.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    X : torch.Tensor</span>
+<span class="sd">        Source volume, shape ``(Nx, Ny, Nz)``.</span>
+<span class="sd">    II : torch.Tensor</span>
+<span class="sd">        x-coordinates of the query points (first dimension), shape (Rx, Ry, Rz).</span>
+<span class="sd">    JJ : torch.Tensor</span>
+<span class="sd">        y-coordinates of the query points (second dimension), shape (Rx, Ry, Rz).</span>
+<span class="sd">    KK : torch.Tensor</span>
+<span class="sd">        z-coordinates of the query points (third dimension), shape (Rx, Ry, Rz).</span>
+<span class="sd">    mode : {&#39;nearest&#39;, &#39;linear&#39;}</span>
+<span class="sd">        Interpolation mode. ``&#39;linear&#39;`` uses trilinear interpolation;</span>
+<span class="sd">        out-of-bounds coordinates are set to zero.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    torch.Tensor</span>
+<span class="sd">        Interpolated values, shape ``(*II.shape, C)`` == ``(Rx, Ry, Rz, C)``.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    Exception</span>
+<span class="sd">        If ``mode`` is not ``&#39;nearest&#39;`` or ``&#39;linear&#39;``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">mode</span> <span class="o">==</span> <span class="s1">&#39;nearest&#39;</span><span class="p">:</span>
+        <span class="n">IIr</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="n">II</span><span class="p">)</span><span class="o">.</span><span class="n">long</span><span class="p">()</span>
+        <span class="n">JJr</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="n">JJ</span><span class="p">)</span><span class="o">.</span><span class="n">long</span><span class="p">()</span>
+        <span class="n">KKr</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="n">KK</span><span class="p">)</span><span class="o">.</span><span class="n">long</span><span class="p">()</span>
+        <span class="n">IIr</span><span class="p">[</span><span class="n">IIr</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">JJr</span><span class="p">[</span><span class="n">JJr</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">KKr</span><span class="p">[</span><span class="n">KKr</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">IIr</span><span class="p">[</span><span class="n">IIr</span> <span class="o">&gt;</span> <span class="p">(</span><span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)]</span> <span class="o">=</span> <span class="p">(</span><span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">JJr</span><span class="p">[</span><span class="n">JJr</span> <span class="o">&gt;</span> <span class="p">(</span><span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)]</span> <span class="o">=</span> <span class="p">(</span><span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">KKr</span><span class="p">[</span><span class="n">KKr</span> <span class="o">&gt;</span> <span class="p">(</span><span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)]</span> <span class="o">=</span> <span class="p">(</span><span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">Y</span> <span class="o">=</span> <span class="n">X</span><span class="p">[</span><span class="n">IIr</span><span class="p">,</span> <span class="n">JJr</span><span class="p">,</span> <span class="n">KKr</span><span class="p">]</span>
+
+    <span class="k">elif</span> <span class="n">mode</span> <span class="o">==</span> <span class="s1">&#39;linear&#39;</span><span class="p">:</span>
+        <span class="n">ok</span> <span class="o">=</span> <span class="p">(</span><span class="n">II</span><span class="o">&gt;=</span><span class="mi">0</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">JJ</span><span class="o">&gt;=</span><span class="mi">0</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">KK</span><span class="o">&gt;=</span><span class="mi">0</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">II</span><span class="o">&lt;=</span><span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">JJ</span><span class="o">&lt;=</span><span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">KK</span><span class="o">&lt;=</span><span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">IIv</span> <span class="o">=</span> <span class="n">II</span><span class="p">[</span><span class="n">ok</span><span class="p">]</span>
+        <span class="n">JJv</span> <span class="o">=</span> <span class="n">JJ</span><span class="p">[</span><span class="n">ok</span><span class="p">]</span>
+        <span class="n">KKv</span> <span class="o">=</span> <span class="n">KK</span><span class="p">[</span><span class="n">ok</span><span class="p">]</span>
+        <span class="c1">#</span>
+        <span class="n">fx</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">floor</span><span class="p">(</span><span class="n">IIv</span><span class="p">)</span><span class="o">.</span><span class="n">long</span><span class="p">()</span>
+        <span class="n">cx</span> <span class="o">=</span> <span class="n">fx</span> <span class="o">+</span> <span class="mi">1</span>
+        <span class="n">cx</span><span class="p">[</span><span class="n">cx</span> <span class="o">&gt;</span> <span class="p">(</span><span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)]</span> <span class="o">=</span> <span class="p">(</span><span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">wcx</span> <span class="o">=</span> <span class="n">IIv</span> <span class="o">-</span> <span class="n">fx</span>
+        <span class="n">wfx</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">-</span> <span class="n">wcx</span>
+        <span class="c1">#</span>
+        <span class="n">fy</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">floor</span><span class="p">(</span><span class="n">JJv</span><span class="p">)</span><span class="o">.</span><span class="n">long</span><span class="p">()</span>
+        <span class="n">cy</span> <span class="o">=</span> <span class="n">fy</span> <span class="o">+</span> <span class="mi">1</span>
+        <span class="n">cy</span><span class="p">[</span><span class="n">cy</span> <span class="o">&gt;</span> <span class="p">(</span><span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)]</span> <span class="o">=</span> <span class="p">(</span><span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">wcy</span> <span class="o">=</span> <span class="n">JJv</span> <span class="o">-</span> <span class="n">fy</span>
+        <span class="n">wfy</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">-</span> <span class="n">wcy</span>
+        <span class="c1">#</span>
+        <span class="n">fz</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">floor</span><span class="p">(</span><span class="n">KKv</span><span class="p">)</span><span class="o">.</span><span class="n">long</span><span class="p">()</span>
+        <span class="n">cz</span> <span class="o">=</span> <span class="n">fz</span> <span class="o">+</span> <span class="mi">1</span>
+        <span class="n">cz</span><span class="p">[</span><span class="n">cz</span> <span class="o">&gt;</span> <span class="p">(</span><span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)]</span> <span class="o">=</span> <span class="p">(</span><span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">wcz</span> <span class="o">=</span> <span class="n">KKv</span> <span class="o">-</span> <span class="n">fz</span>
+        <span class="n">wfz</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">-</span> <span class="n">wcz</span>
+        <span class="c1">#</span>
+        <span class="n">c000</span> <span class="o">=</span> <span class="n">X</span><span class="p">[</span><span class="n">fx</span><span class="p">,</span> <span class="n">fy</span><span class="p">,</span> <span class="n">fz</span><span class="p">]</span>
+        <span class="n">c100</span> <span class="o">=</span> <span class="n">X</span><span class="p">[</span><span class="n">cx</span><span class="p">,</span> <span class="n">fy</span><span class="p">,</span> <span class="n">fz</span><span class="p">]</span>
+        <span class="n">c010</span> <span class="o">=</span> <span class="n">X</span><span class="p">[</span><span class="n">fx</span><span class="p">,</span> <span class="n">cy</span><span class="p">,</span> <span class="n">fz</span><span class="p">]</span>
+        <span class="n">c110</span> <span class="o">=</span> <span class="n">X</span><span class="p">[</span><span class="n">cx</span><span class="p">,</span> <span class="n">cy</span><span class="p">,</span> <span class="n">fz</span><span class="p">]</span>
+        <span class="n">c001</span> <span class="o">=</span> <span class="n">X</span><span class="p">[</span><span class="n">fx</span><span class="p">,</span> <span class="n">fy</span><span class="p">,</span> <span class="n">cz</span><span class="p">]</span>
+        <span class="n">c101</span> <span class="o">=</span> <span class="n">X</span><span class="p">[</span><span class="n">cx</span><span class="p">,</span> <span class="n">fy</span><span class="p">,</span> <span class="n">cz</span><span class="p">]</span>
+        <span class="n">c011</span> <span class="o">=</span> <span class="n">X</span><span class="p">[</span><span class="n">fx</span><span class="p">,</span> <span class="n">cy</span><span class="p">,</span> <span class="n">cz</span><span class="p">]</span>
+        <span class="n">c111</span> <span class="o">=</span> <span class="n">X</span><span class="p">[</span><span class="n">cx</span><span class="p">,</span> <span class="n">cy</span><span class="p">,</span> <span class="n">cz</span><span class="p">]</span>
+        <span class="c1">#</span>
+        <span class="n">c00</span> <span class="o">=</span> <span class="n">c000</span> <span class="o">*</span> <span class="n">wfx</span> <span class="o">+</span> <span class="n">c100</span> <span class="o">*</span> <span class="n">wcx</span>
+        <span class="n">c01</span> <span class="o">=</span> <span class="n">c001</span> <span class="o">*</span> <span class="n">wfx</span> <span class="o">+</span> <span class="n">c101</span> <span class="o">*</span> <span class="n">wcx</span>
+        <span class="n">c10</span> <span class="o">=</span> <span class="n">c010</span> <span class="o">*</span> <span class="n">wfx</span> <span class="o">+</span> <span class="n">c110</span> <span class="o">*</span> <span class="n">wcx</span>
+        <span class="n">c11</span> <span class="o">=</span> <span class="n">c011</span> <span class="o">*</span> <span class="n">wfx</span> <span class="o">+</span> <span class="n">c111</span> <span class="o">*</span> <span class="n">wcx</span>
+        <span class="c1">#</span>
+        <span class="n">c0</span> <span class="o">=</span> <span class="n">c00</span> <span class="o">*</span> <span class="n">wfy</span> <span class="o">+</span> <span class="n">c10</span> <span class="o">*</span> <span class="n">wcy</span>
+        <span class="n">c1</span> <span class="o">=</span> <span class="n">c01</span> <span class="o">*</span> <span class="n">wfy</span> <span class="o">+</span> <span class="n">c11</span> <span class="o">*</span> <span class="n">wcy</span>
+        <span class="c1">#</span>
+        <span class="n">c</span> <span class="o">=</span> <span class="n">c0</span> <span class="o">*</span> <span class="n">wfz</span> <span class="o">+</span> <span class="n">c1</span> <span class="o">*</span> <span class="n">wcz</span>
+        <span class="c1">#</span>
+        <span class="n">Y</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">II</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">X</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="n">Y</span><span class="p">[</span><span class="n">ok</span><span class="p">]</span> <span class="o">=</span> <span class="n">c</span><span class="o">.</span><span class="n">float</span><span class="p">()</span>
+
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s1">&#39;mode must be linear or nearest&#39;</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">Y</span></div>
+
+
+<div class="viewcode-block" id="fast_3D_interp_field_torch">
+<a class="viewcode-back" href="../../api/utils.html#utils.def_utils.fast_3D_interp_field_torch">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">fast_3D_interp_field_torch</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">II</span><span class="p">,</span> <span class="n">JJ</span><span class="p">,</span> <span class="n">KK</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s1">&#39;linear&#39;</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Interpolate a 3D multi-channel field at arbitrary coordinates using PyTorch.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    X : torch.Tensor</span>
+<span class="sd">        Source field, shape ``(Nx, Ny, Nz, C)``.</span>
+<span class="sd">    II : torch.Tensor</span>
+<span class="sd">        x-coordinates of the query points (first dimension), shape (Rx, Ry, Rz).</span>
+<span class="sd">    JJ : torch.Tensor</span>
+<span class="sd">        y-coordinates of the query points (second dimension), shape (Rx, Ry, Rz).</span>
+<span class="sd">    KK : torch.Tensor</span>
+<span class="sd">        z-coordinates of the query points (third dimension), shape (Rx, Ry, Rz).</span>
+<span class="sd">    mode : {&#39;nearest&#39;, &#39;linear&#39;}, optional</span>
+<span class="sd">        Interpolation mode. Default is ``&#39;linear&#39;`` (trilinear);</span>
+<span class="sd">        out-of-bounds coordinates are set to zero.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    torch.Tensor</span>
+<span class="sd">        Interpolated field, shape ``(*II.shape, C)`` == ``(Rx, Ry, Rz, C)``.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    Exception</span>
+<span class="sd">        If ``mode`` is not ``&#39;nearest&#39;`` or ``&#39;linear&#39;``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">num_channels</span> <span class="o">=</span> <span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">mode</span> <span class="o">==</span> <span class="s1">&#39;nearest&#39;</span><span class="p">:</span>
+        <span class="n">IIr</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="n">II</span><span class="p">)</span><span class="o">.</span><span class="n">long</span><span class="p">()</span>
+        <span class="n">JJr</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="n">JJ</span><span class="p">)</span><span class="o">.</span><span class="n">long</span><span class="p">()</span>
+        <span class="n">KKr</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="n">KK</span><span class="p">)</span><span class="o">.</span><span class="n">long</span><span class="p">()</span>
+        <span class="n">IIr</span><span class="p">[</span><span class="n">IIr</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">JJr</span><span class="p">[</span><span class="n">JJr</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">KKr</span><span class="p">[</span><span class="n">KKr</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">IIr</span><span class="p">[</span><span class="n">IIr</span> <span class="o">&gt;</span> <span class="p">(</span><span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)]</span> <span class="o">=</span> <span class="p">(</span><span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">JJr</span><span class="p">[</span><span class="n">JJr</span> <span class="o">&gt;</span> <span class="p">(</span><span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)]</span> <span class="o">=</span> <span class="p">(</span><span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">KKr</span><span class="p">[</span><span class="n">KKr</span> <span class="o">&gt;</span> <span class="p">(</span><span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)]</span> <span class="o">=</span> <span class="p">(</span><span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">Y</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">([</span><span class="o">*</span><span class="n">II</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">num_channels</span><span class="p">],</span> <span class="n">device</span><span class="o">=</span><span class="n">X</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">channel</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_channels</span><span class="p">):</span>
+            <span class="c1">#</span>
+            <span class="n">Xc</span> <span class="o">=</span> <span class="n">X</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">channel</span><span class="p">]</span>
+            <span class="n">Y</span> <span class="o">=</span> <span class="n">Xc</span><span class="p">[</span><span class="n">IIr</span><span class="p">,</span> <span class="n">JJr</span><span class="p">,</span> <span class="n">KKr</span><span class="p">]</span>
+
+    <span class="k">elif</span> <span class="n">mode</span> <span class="o">==</span> <span class="s1">&#39;linear&#39;</span><span class="p">:</span>
+        <span class="c1">#</span>
+        <span class="n">ok</span> <span class="o">=</span> <span class="p">(</span><span class="n">II</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">JJ</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">KK</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">II</span> <span class="o">&lt;=</span> <span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">JJ</span> <span class="o">&lt;=</span> <span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">KK</span> <span class="o">&lt;=</span> <span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">IIv</span> <span class="o">=</span> <span class="n">II</span><span class="p">[</span><span class="n">ok</span><span class="p">]</span>
+        <span class="n">JJv</span> <span class="o">=</span> <span class="n">JJ</span><span class="p">[</span><span class="n">ok</span><span class="p">]</span>
+        <span class="n">KKv</span> <span class="o">=</span> <span class="n">KK</span><span class="p">[</span><span class="n">ok</span><span class="p">]</span>
+        <span class="c1">#</span>
+        <span class="k">del</span> <span class="n">JJ</span><span class="p">,</span> <span class="n">KK</span>
+        <span class="c1">#</span>
+        <span class="n">fx</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">floor</span><span class="p">(</span><span class="n">IIv</span><span class="p">)</span><span class="o">.</span><span class="n">long</span><span class="p">()</span>
+        <span class="n">cx</span> <span class="o">=</span> <span class="n">fx</span> <span class="o">+</span> <span class="mi">1</span>
+        <span class="n">cx</span><span class="p">[</span><span class="n">cx</span> <span class="o">&gt;</span> <span class="p">(</span><span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)]</span> <span class="o">=</span> <span class="p">(</span><span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">wcx</span> <span class="o">=</span> <span class="n">IIv</span> <span class="o">-</span> <span class="n">fx</span>
+        <span class="n">wfx</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">-</span> <span class="n">wcx</span>
+        <span class="c1">#</span>
+        <span class="n">fy</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">floor</span><span class="p">(</span><span class="n">JJv</span><span class="p">)</span><span class="o">.</span><span class="n">long</span><span class="p">()</span>
+        <span class="n">cy</span> <span class="o">=</span> <span class="n">fy</span> <span class="o">+</span> <span class="mi">1</span>
+        <span class="n">cy</span><span class="p">[</span><span class="n">cy</span> <span class="o">&gt;</span> <span class="p">(</span><span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)]</span> <span class="o">=</span> <span class="p">(</span><span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">wcy</span> <span class="o">=</span> <span class="n">JJv</span> <span class="o">-</span> <span class="n">fy</span>
+        <span class="n">wfy</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">-</span> <span class="n">wcy</span>
+        <span class="c1">#</span>
+        <span class="n">fz</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">floor</span><span class="p">(</span><span class="n">KKv</span><span class="p">)</span><span class="o">.</span><span class="n">long</span><span class="p">()</span>
+        <span class="n">cz</span> <span class="o">=</span> <span class="n">fz</span> <span class="o">+</span> <span class="mi">1</span>
+        <span class="n">cz</span><span class="p">[</span><span class="n">cz</span> <span class="o">&gt;</span> <span class="p">(</span><span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)]</span> <span class="o">=</span> <span class="p">(</span><span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">wcz</span> <span class="o">=</span> <span class="n">KKv</span> <span class="o">-</span> <span class="n">fz</span>
+        <span class="n">wfz</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">-</span> <span class="n">wcz</span>
+        <span class="c1">#</span>
+        <span class="n">Y</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">([</span><span class="o">*</span><span class="n">II</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">num_channels</span><span class="p">],</span> <span class="n">device</span><span class="o">=</span><span class="n">X</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">channel</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_channels</span><span class="p">):</span>
+            <span class="c1">#</span>
+            <span class="n">Xc</span> <span class="o">=</span> <span class="n">X</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">channel</span><span class="p">]</span>
+            <span class="c1">#</span>
+            <span class="n">c000</span> <span class="o">=</span> <span class="n">Xc</span><span class="p">[</span><span class="n">fx</span><span class="p">,</span> <span class="n">fy</span><span class="p">,</span> <span class="n">fz</span><span class="p">]</span>
+            <span class="n">c100</span> <span class="o">=</span> <span class="n">Xc</span><span class="p">[</span><span class="n">cx</span><span class="p">,</span> <span class="n">fy</span><span class="p">,</span> <span class="n">fz</span><span class="p">]</span>
+            <span class="n">c010</span> <span class="o">=</span> <span class="n">Xc</span><span class="p">[</span><span class="n">fx</span><span class="p">,</span> <span class="n">cy</span><span class="p">,</span> <span class="n">fz</span><span class="p">]</span>
+            <span class="n">c110</span> <span class="o">=</span> <span class="n">Xc</span><span class="p">[</span><span class="n">cx</span><span class="p">,</span> <span class="n">cy</span><span class="p">,</span> <span class="n">fz</span><span class="p">]</span>
+            <span class="n">c001</span> <span class="o">=</span> <span class="n">Xc</span><span class="p">[</span><span class="n">fx</span><span class="p">,</span> <span class="n">fy</span><span class="p">,</span> <span class="n">cz</span><span class="p">]</span>
+            <span class="n">c101</span> <span class="o">=</span> <span class="n">Xc</span><span class="p">[</span><span class="n">cx</span><span class="p">,</span> <span class="n">fy</span><span class="p">,</span> <span class="n">cz</span><span class="p">]</span>
+            <span class="n">c011</span> <span class="o">=</span> <span class="n">Xc</span><span class="p">[</span><span class="n">fx</span><span class="p">,</span> <span class="n">cy</span><span class="p">,</span> <span class="n">cz</span><span class="p">]</span>
+            <span class="n">c111</span> <span class="o">=</span> <span class="n">Xc</span><span class="p">[</span><span class="n">cx</span><span class="p">,</span> <span class="n">cy</span><span class="p">,</span> <span class="n">cz</span><span class="p">]</span>
+            <span class="c1">#</span>
+            <span class="n">c00</span> <span class="o">=</span> <span class="n">c000</span> <span class="o">*</span> <span class="n">wfx</span> <span class="o">+</span> <span class="n">c100</span> <span class="o">*</span> <span class="n">wcx</span>
+            <span class="n">c01</span> <span class="o">=</span> <span class="n">c001</span> <span class="o">*</span> <span class="n">wfx</span> <span class="o">+</span> <span class="n">c101</span> <span class="o">*</span> <span class="n">wcx</span>
+            <span class="n">c10</span> <span class="o">=</span> <span class="n">c010</span> <span class="o">*</span> <span class="n">wfx</span> <span class="o">+</span> <span class="n">c110</span> <span class="o">*</span> <span class="n">wcx</span>
+            <span class="n">c11</span> <span class="o">=</span> <span class="n">c011</span> <span class="o">*</span> <span class="n">wfx</span> <span class="o">+</span> <span class="n">c111</span> <span class="o">*</span> <span class="n">wcx</span>
+            <span class="c1">#</span>
+            <span class="n">c0</span> <span class="o">=</span> <span class="n">c00</span> <span class="o">*</span> <span class="n">wfy</span> <span class="o">+</span> <span class="n">c10</span> <span class="o">*</span> <span class="n">wcy</span>
+            <span class="n">c1</span> <span class="o">=</span> <span class="n">c01</span> <span class="o">*</span> <span class="n">wfy</span> <span class="o">+</span> <span class="n">c11</span> <span class="o">*</span> <span class="n">wcy</span>
+            <span class="c1">#</span>
+            <span class="n">c</span> <span class="o">=</span> <span class="n">c0</span> <span class="o">*</span> <span class="n">wfz</span> <span class="o">+</span> <span class="n">c1</span> <span class="o">*</span> <span class="n">wcz</span>
+            <span class="c1">#</span>
+            <span class="n">Yc</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">II</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">X</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+            <span class="n">Yc</span><span class="p">[</span><span class="n">ok</span><span class="p">]</span> <span class="o">=</span> <span class="n">c</span><span class="o">.</span><span class="n">float</span><span class="p">()</span>
+            <span class="c1">#</span>
+            <span class="n">Y</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">channel</span><span class="p">]</span> <span class="o">=</span> <span class="n">Yc</span>
+        <span class="c1">#</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s1">&#39;mode must be linear or nearest&#39;</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">Y</span></div>
+
+
+<div class="viewcode-block" id="vol_resample_fast">
+<a class="viewcode-back" href="../../api/utils.html#utils.def_utils.vol_resample_fast">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">vol_resample_fast</span><span class="p">(</span><span class="n">ref_proxy</span><span class="p">,</span> <span class="n">flo_proxy</span><span class="p">,</span> <span class="n">proxyflow</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s1">&#39;linear&#39;</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s1">&#39;cpu&#39;</span><span class="p">,</span> <span class="n">return_np</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Resample a floating image into the space of a reference image using PyTorch.</span>
+
+<span class="sd">    Optionally applies a dense displacement field before resampling.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    ref_proxy : nibabel.Nifti1Image</span>
+<span class="sd">        Reference image defining the output grid.</span>
+<span class="sd">    flo_proxy : nibabel.Nifti1Image</span>
+<span class="sd">        Floating (moving) image to resample.</span>
+<span class="sd">    proxyflow : nibabel.Nifti1Image, optional</span>
+<span class="sd">        Dense displacement field in the reference space,</span>
+<span class="sd">        shape ``(3, X, Y, Z)`` or ``(X, Y, Z, 3)``. If ``None``,</span>
+<span class="sd">        only the affine alignment is applied.</span>
+<span class="sd">    mode : {&#39;linear&#39;, &#39;nearest&#39;}, optional</span>
+<span class="sd">        Interpolation mode. Default is ``&#39;linear&#39;``.</span>
+<span class="sd">    device : str, optional</span>
+<span class="sd">        PyTorch device string. Default is ``&#39;cpu&#39;``.</span>
+<span class="sd">    return_np : bool, optional</span>
+<span class="sd">        If ``True``, return a NumPy array. If ``False`` (default), wrap the</span>
+<span class="sd">        result in a ``Nifti1Image`` with the reference affine.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    np.ndarray or nibabel.Nifti1Image</span>
+<span class="sd">        Resampled image.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">ref_v2r</span> <span class="o">=</span> <span class="p">(</span><span class="n">ref_proxy</span><span class="o">.</span><span class="n">affine</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="s1">&#39;float32&#39;</span><span class="p">)</span>
+    <span class="n">target_v2r</span> <span class="o">=</span> <span class="p">(</span><span class="n">flo_proxy</span><span class="o">.</span><span class="n">affine</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="s1">&#39;float32&#39;</span><span class="p">)</span>
+
+    <span class="n">ii</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">ref_proxy</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="s1">&#39;int32&#39;</span><span class="p">)</span>
+    <span class="n">jj</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">ref_proxy</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="s1">&#39;int32&#39;</span><span class="p">)</span>
+    <span class="n">kk</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">ref_proxy</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="s1">&#39;int32&#39;</span><span class="p">)</span>
+
+    <span class="n">II</span><span class="p">,</span> <span class="n">JJ</span><span class="p">,</span> <span class="n">KK</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">meshgrid</span><span class="p">(</span><span class="n">ii</span><span class="p">,</span> <span class="n">jj</span><span class="p">,</span> <span class="n">kk</span><span class="p">,</span> <span class="n">indexing</span><span class="o">=</span><span class="s1">&#39;ij&#39;</span><span class="p">)</span>
+
+    <span class="k">del</span> <span class="n">ii</span><span class="p">,</span> <span class="n">jj</span><span class="p">,</span> <span class="n">kk</span>
+
+    <span class="n">II</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">II</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+    <span class="n">JJ</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">JJ</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+    <span class="n">KK</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">KK</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">proxyflow</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+
+        <span class="n">flow_v2r</span> <span class="o">=</span> <span class="n">proxyflow</span><span class="o">.</span><span class="n">affine</span>
+        <span class="n">flow_v2r</span> <span class="o">=</span> <span class="n">flow_v2r</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="s1">&#39;float32&#39;</span><span class="p">)</span>
+
+        <span class="n">affine</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">inv</span><span class="p">(</span><span class="n">flow_v2r</span><span class="p">)</span> <span class="o">@</span> <span class="n">ref_v2r</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+        <span class="n">II2</span> <span class="o">=</span> <span class="n">affine</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">II</span> <span class="o">+</span> <span class="n">affine</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span> <span class="o">*</span> <span class="n">JJ</span> <span class="o">+</span> <span class="n">affine</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">]</span> <span class="o">*</span> <span class="n">KK</span> <span class="o">+</span> <span class="n">affine</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">3</span><span class="p">]</span>
+        <span class="n">JJ2</span> <span class="o">=</span> <span class="n">affine</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">II</span> <span class="o">+</span> <span class="n">affine</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span> <span class="o">*</span> <span class="n">JJ</span> <span class="o">+</span> <span class="n">affine</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">]</span> <span class="o">*</span> <span class="n">KK</span> <span class="o">+</span> <span class="n">affine</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">]</span>
+        <span class="n">KK2</span> <span class="o">=</span> <span class="n">affine</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">II</span> <span class="o">+</span> <span class="n">affine</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span> <span class="o">*</span> <span class="n">JJ</span> <span class="o">+</span> <span class="n">affine</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">]</span> <span class="o">*</span> <span class="n">KK</span> <span class="o">+</span> <span class="n">affine</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">]</span>
+
+        <span class="n">flow</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">proxyflow</span><span class="o">.</span><span class="n">dataobj</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">flow</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="mi">3</span><span class="p">:</span> <span class="n">flow</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="n">flow</span><span class="p">,</span> <span class="n">axes</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span>
+        <span class="n">flow</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">flow</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+
+        <span class="n">FIELD</span> <span class="o">=</span> <span class="n">fast_3D_interp_field_torch</span><span class="p">(</span><span class="n">flow</span><span class="p">,</span> <span class="n">II2</span><span class="p">,</span> <span class="n">JJ2</span><span class="p">,</span> <span class="n">KK2</span><span class="p">)</span>
+        <span class="n">II3</span> <span class="o">=</span> <span class="n">II2</span> <span class="o">+</span> <span class="n">FIELD</span><span class="p">[:,</span> <span class="p">:,</span> <span class="p">:,</span> <span class="mi">0</span><span class="p">]</span>
+        <span class="n">JJ3</span> <span class="o">=</span> <span class="n">JJ2</span> <span class="o">+</span> <span class="n">FIELD</span><span class="p">[:,</span> <span class="p">:,</span> <span class="p">:,</span> <span class="mi">1</span><span class="p">]</span>
+        <span class="n">KK3</span> <span class="o">=</span> <span class="n">KK2</span> <span class="o">+</span> <span class="n">FIELD</span><span class="p">[:,</span> <span class="p">:,</span> <span class="p">:,</span> <span class="mi">2</span><span class="p">]</span>
+
+        <span class="n">affine</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">inv</span><span class="p">(</span><span class="n">target_v2r</span><span class="p">)</span> <span class="o">@</span> <span class="n">flow_v2r</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+        <span class="n">II4</span> <span class="o">=</span> <span class="n">affine</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">II3</span> <span class="o">+</span> <span class="n">affine</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span> <span class="o">*</span> <span class="n">JJ3</span> <span class="o">+</span> <span class="n">affine</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">]</span> <span class="o">*</span> <span class="n">KK3</span> <span class="o">+</span> <span class="n">affine</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">3</span><span class="p">]</span>
+        <span class="n">JJ4</span> <span class="o">=</span> <span class="n">affine</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">II3</span> <span class="o">+</span> <span class="n">affine</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span> <span class="o">*</span> <span class="n">JJ3</span> <span class="o">+</span> <span class="n">affine</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">]</span> <span class="o">*</span> <span class="n">KK3</span> <span class="o">+</span> <span class="n">affine</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">]</span>
+        <span class="n">KK4</span> <span class="o">=</span> <span class="n">affine</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">II3</span> <span class="o">+</span> <span class="n">affine</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span> <span class="o">*</span> <span class="n">JJ3</span> <span class="o">+</span> <span class="n">affine</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">]</span> <span class="o">*</span> <span class="n">KK3</span> <span class="o">+</span> <span class="n">affine</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">]</span>
+
+
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">affine</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">inv</span><span class="p">(</span><span class="n">target_v2r</span><span class="p">)</span> <span class="o">@</span> <span class="n">ref_v2r</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+        <span class="n">II4</span> <span class="o">=</span> <span class="n">affine</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">II</span> <span class="o">+</span> <span class="n">affine</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span> <span class="o">*</span> <span class="n">JJ</span> <span class="o">+</span> <span class="n">affine</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">]</span> <span class="o">*</span> <span class="n">KK</span> <span class="o">+</span> <span class="n">affine</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">3</span><span class="p">]</span>
+        <span class="n">JJ4</span> <span class="o">=</span> <span class="n">affine</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">II</span> <span class="o">+</span> <span class="n">affine</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span> <span class="o">*</span> <span class="n">JJ</span> <span class="o">+</span> <span class="n">affine</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">]</span> <span class="o">*</span> <span class="n">KK</span> <span class="o">+</span> <span class="n">affine</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">]</span>
+        <span class="n">KK4</span> <span class="o">=</span> <span class="n">affine</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">II</span> <span class="o">+</span> <span class="n">affine</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span> <span class="o">*</span> <span class="n">JJ</span> <span class="o">+</span> <span class="n">affine</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">]</span> <span class="o">*</span> <span class="n">KK</span> <span class="o">+</span> <span class="n">affine</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">]</span>
+
+
+    <span class="n">image</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">flo_proxy</span><span class="o">.</span><span class="n">dataobj</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">flo_proxy</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">==</span> <span class="mi">3</span><span class="p">:</span>
+        <span class="n">reg_image</span> <span class="o">=</span> <span class="n">fast_3D_interp_torch</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">image</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">),</span> <span class="n">II4</span><span class="p">,</span> <span class="n">JJ4</span><span class="p">,</span> <span class="n">KK4</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="n">mode</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">reg_image</span> <span class="o">=</span> <span class="n">fast_3D_interp_field_torch</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">image</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">),</span> <span class="n">II4</span><span class="p">,</span> <span class="n">JJ4</span><span class="p">,</span> <span class="n">KK4</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="n">mode</span><span class="p">)</span>
+
+    <span class="n">reg_image</span> <span class="o">=</span> <span class="n">reg_image</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
+
+    <span class="k">if</span> <span class="n">return_np</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">reg_image</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">nib</span><span class="o">.</span><span class="n">Nifti1Image</span><span class="p">(</span><span class="n">reg_image</span><span class="p">,</span> <span class="n">ref_proxy</span><span class="o">.</span><span class="n">affine</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="compute_gradient">
+<a class="viewcode-back" href="../../api/utils.html#utils.def_utils.compute_gradient">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">compute_gradient</span><span class="p">(</span><span class="n">flow</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Compute the spatial gradient of a 3D vector field using central differences.</span>
+
+<span class="sd">    Boundary voxels are left at zero (no padding is applied).</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    flow : np.ndarray</span>
+<span class="sd">        Vector field, shape ``(X, Y, Z, 3)``.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    np.ndarray</span>
+<span class="sd">        Gradient tensor, shape ``(X, Y, Z, 3, 3)``, where entry</span>
+<span class="sd">        ``[..., i, j]`` is ``d flow_i / d x_j``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">gradient_map</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">flow</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="mi">3</span><span class="p">]</span> <span class="o">+</span> <span class="p">(</span><span class="mi">3</span><span class="p">,</span><span class="mi">3</span><span class="p">))</span>
+
+    <span class="k">for</span> <span class="n">it_dim</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">):</span>
+        <span class="n">fmap</span> <span class="o">=</span> <span class="n">flow</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">it_dim</span><span class="p">]</span>
+
+        <span class="n">dx</span> <span class="o">=</span> <span class="n">fmap</span><span class="p">[</span><span class="mi">2</span><span class="p">:,</span> <span class="p">:,</span> <span class="p">:]</span> <span class="o">-</span> <span class="n">fmap</span><span class="p">[:</span><span class="o">-</span><span class="mi">2</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:]</span>
+        <span class="n">dy</span> <span class="o">=</span> <span class="n">fmap</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">:,</span> <span class="p">:]</span> <span class="o">-</span> <span class="n">fmap</span><span class="p">[:,</span> <span class="p">:</span><span class="o">-</span><span class="mi">2</span><span class="p">,</span> <span class="p">:]</span>
+        <span class="n">dz</span> <span class="o">=</span> <span class="n">fmap</span><span class="p">[:,</span> <span class="p">:,</span> <span class="mi">2</span><span class="p">:]</span> <span class="o">-</span> <span class="n">fmap</span><span class="p">[:,</span> <span class="p">:,</span> <span class="p">:</span><span class="o">-</span><span class="mi">2</span><span class="p">]</span>
+
+        <span class="n">gradient_map</span><span class="p">[</span><span class="mi">1</span><span class="p">:</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:,</span> <span class="n">it_dim</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">dx</span><span class="o">/</span><span class="mi">2</span>
+        <span class="n">gradient_map</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">:</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="p">:,</span> <span class="n">it_dim</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">dy</span><span class="o">/</span><span class="mi">2</span>
+        <span class="n">gradient_map</span><span class="p">[:,</span> <span class="p">:,</span> <span class="mi">1</span><span class="p">:</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">it_dim</span><span class="p">,</span> <span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="n">dz</span><span class="o">/</span><span class="mi">2</span>
+
+
+    <span class="k">return</span> <span class="n">gradient_map</span></div>
+
+
+<div class="viewcode-block" id="compute_jacobian">
+<a class="viewcode-back" href="../../api/utils.html#utils.def_utils.compute_jacobian">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">compute_jacobian</span><span class="p">(</span><span class="n">flow</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Compute the Jacobian determinant of a displacement field.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    flow : np.ndarray</span>
+<span class="sd">        Displacement field, shape ``(X, Y, Z, 3)``.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    np.ndarray</span>
+<span class="sd">        Jacobian determinant map, shape ``(X, Y, Z)``.  Values &lt; 0 indicate</span>
+<span class="sd">        folding.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">gradient_map</span> <span class="o">=</span> <span class="n">compute_gradient</span><span class="p">(</span><span class="n">flow</span><span class="p">)</span>
+    <span class="n">gradient_map</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>
+    <span class="n">gradient_map</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>
+    <span class="n">gradient_map</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">det</span><span class="p">(</span><span class="n">gradient_map</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="lie_bracket">
+<a class="viewcode-back" href="../../api/utils.html#utils.def_utils.lie_bracket">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">lie_bracket</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">w</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Compute the Lie bracket (commutator) of two vector fields.</span>
+
+<span class="sd">    The Lie bracket is defined as ``[v, w] = Jw * v - Jv * w``, where</span>
+<span class="sd">    ``Jv`` and ``Jw`` are the Jacobian matrices of ``v`` and ``w``.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    v : np.ndarray</span>
+<span class="sd">        First vector field, shape ``(X, Y, Z, 3)``.</span>
+<span class="sd">    w : np.ndarray</span>
+<span class="sd">        Second vector field, shape ``(X, Y, Z, 3)``.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    np.ndarray</span>
+<span class="sd">        Lie bracket ``[v, w]``, shape ``(X, Y, Z, 3)``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">Jv</span> <span class="o">=</span> <span class="n">compute_gradient</span><span class="p">(</span><span class="n">v</span><span class="p">)</span>
+    <span class="n">Jw</span> <span class="o">=</span> <span class="n">compute_gradient</span><span class="p">(</span><span class="n">w</span><span class="p">)</span>
+
+    <span class="n">vw</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s1">&#39;ijklm,ijkm-&gt;ijkl&#39;</span><span class="p">,</span> <span class="n">Jw</span><span class="p">,</span> <span class="n">v</span><span class="p">)</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s1">&#39;ijklm,ijkm-&gt;ijkl&#39;</span><span class="p">,</span> <span class="n">Jv</span><span class="p">,</span> <span class="n">w</span><span class="p">)</span>
+    <span class="c1"># vw = Jw[..., 0, :]*v[..., 0:1] + Jw[..., 1, :]*v[..., 1:2] + Jw[..., 2, :]*v[..., 2:3] - Jv[..., 0, :]*w[..., 0:1] - Jv[..., 1, :]*w[..., 1:2] - Jv[..., 2, :]*w[..., 2:3]#</span>
+    <span class="c1"># vw = Jv[..., 0, 0]*w[..., 0] + Jv[..., 1, 1]*w[..., 1] + Jv[..., 2,1]*w[..., 2] - Jw[..., 0,0]*v[..., 0] - Jw[..., 1,1]*v[..., 1] - Jw[..., 2,2]*v[..., 2]#</span>
+    <span class="c1"># vw = Jw[..., 0]*v[..., 0:1] + Jw[..., 1]*v[..., 1:2] + Jw[..., 2]*v[..., 2:3] - Jv[..., 0]*w[..., 0:1] - Jv[..., 1]*w[..., 1:2] - Jv[..., 2]*w[..., 2:3]#</span>
+    <span class="k">return</span> <span class="n">vw</span> <span class="c1">#</span></div>
+
+
+<div class="viewcode-block" id="pole_ladder">
+<a class="viewcode-back" href="../../api/utils.html#utils.def_utils.pole_ladder">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">pole_ladder</span><span class="p">(</span><span class="n">long_svf</span><span class="p">,</span> <span class="n">mni_svf</span><span class="p">,</span> <span class="n">steps</span><span class="o">=</span><span class="mi">80</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Parallel-transport a longitudinal SVF along an inter-subject SVF using the pole-ladder scheme.</span>
+
+<span class="sd">    Approximates parallel transport on the diffeomorphism group by</span>
+<span class="sd">    iterating first- and second-order Lie-bracket corrections.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    long_svf : np.ndarray</span>
+<span class="sd">        Longitudinal stationary velocity field to transport,</span>
+<span class="sd">        shape ``(X, Y, Z, 3)``.</span>
+<span class="sd">    mni_svf : np.ndarray</span>
+<span class="sd">        Inter-subject SVF defining the transport path (e.g. subject-to-MNI),</span>
+<span class="sd">        shape ``(X, Y, Z, 3)``.</span>
+<span class="sd">    steps : int, optional</span>
+<span class="sd">        Number of pole-ladder steps. More steps give a better approximation.</span>
+<span class="sd">        Default is 80.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    np.ndarray</span>
+<span class="sd">        Transported SVF, shape ``(X, Y, Z, 3)``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">init_mni_svf</span> <span class="o">=</span> <span class="n">mni_svf</span> <span class="o">/</span> <span class="n">steps</span>
+    <span class="n">u</span> <span class="o">=</span> <span class="n">long_svf</span>
+    <span class="k">for</span> <span class="n">it_step</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">steps</span><span class="p">):</span>
+        <span class="n">first_term</span> <span class="o">=</span> <span class="n">u</span>
+        <span class="n">second_term</span> <span class="o">=</span> <span class="n">lie_bracket</span><span class="p">(</span><span class="n">init_mni_svf</span><span class="p">,</span> <span class="n">u</span><span class="p">)</span>
+        <span class="n">third_term</span> <span class="o">=</span> <span class="n">lie_bracket</span><span class="p">(</span><span class="n">init_mni_svf</span><span class="p">,</span> <span class="n">second_term</span><span class="p">)</span>
+        <span class="n">u</span> <span class="o">=</span> <span class="n">first_term</span> <span class="o">+</span> <span class="n">second_term</span> <span class="o">+</span> <span class="mf">0.5</span><span class="o">*</span><span class="n">third_term</span>
+
+    <span class="k">return</span> <span class="n">u</span></div>
+
+
+<div class="viewcode-block" id="svf_to_vox">
+<a class="viewcode-back" href="../../api/utils.html#utils.def_utils.svf_to_vox">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">svf_to_vox</span><span class="p">(</span><span class="n">proxysvf</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Convert an SVF from RAS to voxel displacement units.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    proxysvf : nibabel.Nifti1Image</span>
+<span class="sd">        SVF image with displacements in RAS mm, shape ``(X, Y, Z, 3)``.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    nibabel.Nifti1Image</span>
+<span class="sd">        SVF in voxel units, same affine as ``proxysvf``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">svf_ras</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">proxysvf</span><span class="o">.</span><span class="n">dataobj</span><span class="p">)</span>
+    <span class="n">ref_shape</span> <span class="o">=</span> <span class="n">proxysvf</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="mi">3</span><span class="p">]</span>
+    <span class="n">svf_ras_zeros</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">((</span><span class="n">svf_ras</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">ref_shape</span> <span class="o">+</span> <span class="p">(</span><span class="mi">1</span><span class="p">,))),</span> <span class="n">axis</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">4</span><span class="p">)</span>
+    <span class="n">svf_vox</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">inv</span><span class="p">(</span><span class="n">proxysvf</span><span class="o">.</span><span class="n">affine</span><span class="p">),</span> <span class="n">svf_ras_zeros</span><span class="o">.</span><span class="n">T</span><span class="p">)</span>
+    <span class="n">svf_vox</span> <span class="o">=</span> <span class="n">svf_vox</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="mi">4</span><span class="p">,)</span> <span class="o">+</span> <span class="n">ref_shape</span><span class="p">)[:</span><span class="mi">3</span><span class="p">]</span>
+
+    <span class="k">return</span> <span class="n">nib</span><span class="o">.</span><span class="n">Nifti1Image</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="n">svf_vox</span><span class="p">,</span> <span class="n">axes</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">2</span><span class="p">,</span><span class="mi">3</span><span class="p">,</span><span class="mi">0</span><span class="p">)),</span> <span class="n">proxysvf</span><span class="o">.</span><span class="n">affine</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="svf_to_ras">
+<a class="viewcode-back" href="../../api/utils.html#utils.def_utils.svf_to_ras">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">svf_to_ras</span><span class="p">(</span><span class="n">proxysvf</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Convert an SVF from voxel to RAS displacement units.</span>
+
+<span class="sd">    Equivalent to multiplying the voxel SVF by the voxel-to-RAS matrix with</span>
+<span class="sd">    a zero translation column (the mosaic centering terms cancel out).</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    proxysvf : nibabel.Nifti1Image</span>
+<span class="sd">        SVF image with displacements in voxel units, shape ``(X, Y, Z, 3)``.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    nibabel.Nifti1Image</span>
+<span class="sd">        SVF in RAS mm, same affine as ``proxysvf``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">svf_vox</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">proxysvf</span><span class="o">.</span><span class="n">dataobj</span><span class="p">)</span>
+    <span class="n">ref_shape</span> <span class="o">=</span> <span class="n">proxysvf</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="mi">3</span><span class="p">]</span>
+    <span class="n">svf_vox_zeros</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">((</span><span class="n">svf_vox</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">ref_shape</span> <span class="o">+</span> <span class="p">(</span><span class="mi">1</span><span class="p">,))),</span> <span class="n">axis</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">4</span><span class="p">)</span>
+    <span class="n">svf_ras</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">proxysvf</span><span class="o">.</span><span class="n">affine</span><span class="p">,</span> <span class="n">svf_vox_zeros</span><span class="o">.</span><span class="n">T</span><span class="p">)</span>
+    <span class="n">svf_ras</span> <span class="o">=</span> <span class="n">svf_ras</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="mi">4</span><span class="p">,)</span> <span class="o">+</span> <span class="n">ref_shape</span><span class="p">)[:</span><span class="mi">3</span><span class="p">]</span>
+
+    <span class="c1"># II, JJ, KK = np.meshgrid(np.arange(0, ref_shape[0]), np.arange(0, ref_shape[1]), np.arange(0, ref_shape[2]), indexing=&#39;ij&#39;)</span>
+    <span class="c1">#</span>
+    <span class="c1"># def_vox = np.zeros_like(svf_vox)</span>
+    <span class="c1"># def_vox[..., 0] = svf_vox[..., 0] + II</span>
+    <span class="c1"># def_vox[..., 1] = svf_vox[..., 1] + JJ</span>
+    <span class="c1"># def_vox[..., 2] = svf_vox[..., 2] + KK</span>
+    <span class="c1">#</span>
+    <span class="c1"># def_vox_ones = np.concatenate((def_vox, np.ones(ref_shape + (1,))), axis=-1).reshape(-1, 4)</span>
+    <span class="c1"># ref_vox_ones = np.concatenate((II[..., np.newaxis], JJ[..., np.newaxis], KK[..., np.newaxis], np.ones(ref_shape + (1,))), axis=-1).reshape(-1, 4)</span>
+    <span class="c1">#</span>
+    <span class="c1"># def_ras = np.dot(proxysvf.affine, def_vox_ones.T)</span>
+    <span class="c1"># ref_ras = np.dot(proxysvf.affine, ref_vox_ones.T)</span>
+    <span class="c1"># svf_ras = def_ras-ref_ras</span>
+    <span class="c1"># svf_ras = svf_ras.reshape((4,) + ref_shape)[:3]</span>
+
+    <span class="k">return</span> <span class="n">nib</span><span class="o">.</span><span class="n">Nifti1Image</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="n">svf_ras</span><span class="p">,</span> <span class="n">axes</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">2</span><span class="p">,</span><span class="mi">3</span><span class="p">,</span><span class="mi">0</span><span class="p">)),</span> <span class="n">proxysvf</span><span class="o">.</span><span class="n">affine</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="network_space">
+<a class="viewcode-back" href="../../api/utils.html#utils.def_utils.network_space">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">network_space</span><span class="p">(</span><span class="n">im</span><span class="p">,</span> <span class="n">shape</span><span class="p">,</span> <span class="n">center</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Construct transform from network space to the voxel space of an image.</span>
+
+<span class="sd">    Constructs a coordinate transform from the space the network will operate</span>
+<span class="sd">    in to the zero-based image index space. The network space has isotropic</span>
+<span class="sd">    1-mm voxels, left-inferior-anterior (LIA) orientation, and no shear. It is</span>
+<span class="sd">    centered on the field of view, or that of a reference image. This space is</span>
+<span class="sd">    an indexed voxel space, not world space.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    im : surfa.Volume</span>
+<span class="sd">        Input image to construct the transform for.</span>
+<span class="sd">    shape : (3,) array-like</span>
+<span class="sd">        Spatial shape of the network space.</span>
+<span class="sd">    center : surfa.Volume, optional</span>
+<span class="sd">        Center the network space on the center of a reference image.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    out : tuple of (3, 4) NumPy arrays</span>
+<span class="sd">        Transform from network to input-image space and its inverse, thinking</span>
+<span class="sd">        coordinates.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">old</span> <span class="o">=</span> <span class="n">im</span><span class="o">.</span><span class="n">geom</span>
+    <span class="n">new</span> <span class="o">=</span> <span class="n">sf</span><span class="o">.</span><span class="n">ImageGeometry</span><span class="p">(</span>
+        <span class="n">shape</span><span class="o">=</span><span class="n">shape</span><span class="p">,</span>
+        <span class="n">voxsize</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">rotation</span><span class="o">=</span><span class="s1">&#39;LIA&#39;</span><span class="p">,</span>
+        <span class="n">center</span><span class="o">=</span><span class="n">old</span><span class="o">.</span><span class="n">center</span> <span class="k">if</span> <span class="n">center</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">center</span><span class="o">.</span><span class="n">geom</span><span class="o">.</span><span class="n">center</span><span class="p">,</span>
+        <span class="n">shear</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="n">net_to_vox</span> <span class="o">=</span> <span class="n">old</span><span class="o">.</span><span class="n">world2vox</span> <span class="o">@</span> <span class="n">new</span><span class="o">.</span><span class="n">vox2world</span>
+    <span class="n">vox_to_net</span> <span class="o">=</span> <span class="n">new</span><span class="o">.</span><span class="n">world2vox</span> <span class="o">@</span> <span class="n">old</span><span class="o">.</span><span class="n">vox2world</span>
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">(</span><span class="n">net_to_vox</span><span class="o">.</span><span class="n">matrix</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">(</span><span class="n">vox_to_net</span><span class="o">.</span><span class="n">matrix</span><span class="p">),</span> <span class="n">new</span><span class="o">.</span><span class="n">vox2world</span><span class="o">.</span><span class="n">matrix</span></div>
+
+
+<div class="viewcode-block" id="getM">
+<a class="viewcode-back" href="../../api/utils.html#utils.def_utils.getM">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">getM</span><span class="p">(</span><span class="n">ref</span><span class="p">,</span> <span class="n">mov</span><span class="p">,</span> <span class="n">use_L1</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Estimate a 4×4 affine matrix from point correspondences.</span>
+
+<span class="sd">    Solves the least-squares problem ``mov ≈ M * ref`` for a 12-DOF affine</span>
+<span class="sd">    matrix. Optionally refines using L1 minimisation via linear programming.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    ref : np.ndarray</span>
+<span class="sd">        Reference points, shape ``(3, N)``.</span>
+<span class="sd">    mov : np.ndarray</span>
+<span class="sd">        Corresponding moving points, shape ``(3, N)``.</span>
+<span class="sd">    use_L1 : bool, optional</span>
+<span class="sd">        If ``True``, refine the L2 solution with an L1 minimisation step.</span>
+<span class="sd">        Default is ``False``.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    np.ndarray</span>
+<span class="sd">        Estimated affine matrix, shape ``(4, 4)``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">zmat</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">ref</span><span class="o">.</span><span class="n">shape</span><span class="p">[::</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+    <span class="n">zcol</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">([</span><span class="n">ref</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="mi">1</span><span class="p">])</span>
+    <span class="n">ocol</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">([</span><span class="n">ref</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="mi">1</span><span class="p">])</span>
+    <span class="n">zero</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">zmat</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+
+    <span class="n">A</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">np</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="n">ref</span><span class="p">),</span> <span class="n">zero</span><span class="p">,</span> <span class="n">zero</span><span class="p">,</span> <span class="n">ocol</span><span class="p">,</span> <span class="n">zcol</span><span class="p">,</span> <span class="n">zcol</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">),</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">zero</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="n">ref</span><span class="p">),</span> <span class="n">zero</span><span class="p">,</span> <span class="n">zcol</span><span class="p">,</span> <span class="n">ocol</span><span class="p">,</span> <span class="n">zcol</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">),</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">zero</span><span class="p">,</span> <span class="n">zero</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="n">ref</span><span class="p">),</span> <span class="n">zcol</span><span class="p">,</span> <span class="n">zcol</span><span class="p">,</span> <span class="n">ocol</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+    <span class="n">b</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">np</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="n">mov</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="p">:]),</span> <span class="n">np</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="n">mov</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="p">:]),</span> <span class="n">np</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="n">mov</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="p">:])],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+    <span class="n">x</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">matmul</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">inv</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">matmul</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="n">A</span><span class="p">),</span> <span class="n">A</span><span class="p">)),</span> <span class="n">np</span><span class="o">.</span><span class="n">matmul</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="n">A</span><span class="p">),</span> <span class="n">b</span><span class="p">))</span>
+
+    <span class="c1"># If L1 minimization: we use L2 solution as initialization and miminize L1</span>
+    <span class="k">if</span> <span class="n">use_L1</span><span class="p">:</span>
+        <span class="n">Apos</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">A</span><span class="p">,</span> <span class="o">-</span><span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="n">A</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">Aneg</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="o">-</span><span class="n">A</span><span class="p">,</span> <span class="o">-</span><span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="n">A</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">A_ub</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">Apos</span><span class="p">,</span> <span class="n">Aneg</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">b_ub</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">b</span><span class="p">,</span> <span class="o">-</span><span class="n">b</span><span class="p">])</span>
+        <span class="n">c</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">12</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">A</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])])</span>
+
+        <span class="n">aux</span> <span class="o">=</span> <span class="n">linprog</span><span class="p">(</span><span class="n">c</span><span class="p">,</span> <span class="n">A_ub</span><span class="o">=</span><span class="n">A_ub</span><span class="p">,</span> <span class="n">b_ub</span><span class="o">=</span><span class="n">b_ub</span><span class="p">,</span> <span class="n">method</span><span class="o">=</span><span class="s1">&#39;interior-point&#39;</span><span class="p">,</span> <span class="n">bounds</span><span class="o">=</span><span class="p">[</span><span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">],</span>
+                      <span class="n">options</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;disp&#39;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span> <span class="s1">&#39;autoscale&#39;</span><span class="p">:</span> <span class="kc">True</span><span class="p">},</span>
+                      <span class="n">x0</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">x</span><span class="p">,</span> <span class="mf">0.1</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">matmul</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">x</span><span class="p">)</span> <span class="o">-</span> <span class="n">b</span><span class="p">)]))</span>
+        <span class="n">x</span> <span class="o">=</span> <span class="n">aux</span><span class="o">.</span><span class="n">x</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">12</span><span class="p">]</span>
+
+
+    <span class="n">M</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span>
+        <span class="p">[</span><span class="n">x</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">x</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">x</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="n">x</span><span class="p">[</span><span class="mi">9</span><span class="p">]],</span>
+        <span class="p">[</span><span class="n">x</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span> <span class="n">x</span><span class="p">[</span><span class="mi">4</span><span class="p">],</span> <span class="n">x</span><span class="p">[</span><span class="mi">5</span><span class="p">],</span> <span class="n">x</span><span class="p">[</span><span class="mi">10</span><span class="p">]],</span>
+        <span class="p">[</span><span class="n">x</span><span class="p">[</span><span class="mi">6</span><span class="p">],</span> <span class="n">x</span><span class="p">[</span><span class="mi">7</span><span class="p">],</span> <span class="n">x</span><span class="p">[</span><span class="mi">8</span><span class="p">],</span> <span class="n">x</span><span class="p">[</span><span class="mi">11</span><span class="p">]],</span>
+        <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]])</span>
+
+    <span class="k">return</span> <span class="n">M</span></div>
+
+
+
+<div class="viewcode-block" id="create_empty_template">
+<a class="viewcode-back" href="../../api/utils.html#utils.def_utils.create_empty_template">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">create_empty_template</span><span class="p">(</span><span class="n">image_list</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Build a bounding-box template that encompasses a list of brain images.</span>
+
+<span class="sd">    Computes the average RAS bounding box across all images (with a 5 mm</span>
+<span class="sd">    margin) and returns a 1 mm isotropic identity-oriented template grid.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    image_list : list of str or nibabel.Nifti1Image</span>
+<span class="sd">        Images whose non-zero voxel extents define the bounding box.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    rasMosaic : np.ndarray</span>
+<span class="sd">        RAS coordinates of all template voxels, shape ``(4, N_vox)``.</span>
+<span class="sd">    template_vox2ras0 : np.ndarray</span>
+<span class="sd">        Voxel-to-RAS affine of the template, shape ``(4, 4)``.</span>
+<span class="sd">    template_size : tuple of int</span>
+<span class="sd">        Spatial dimensions ``(X, Y, Z)`` of the template grid.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">boundaries_min</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="nb">len</span><span class="p">(</span><span class="n">image_list</span><span class="p">),</span> <span class="mi">3</span><span class="p">))</span>
+    <span class="n">boundaries_max</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="nb">len</span><span class="p">(</span><span class="n">image_list</span><span class="p">),</span> <span class="mi">3</span><span class="p">))</span>
+    <span class="n">margin_bb</span> <span class="o">=</span> <span class="mi">5</span>
+    <span class="k">for</span> <span class="n">it_lil</span><span class="p">,</span> <span class="n">lil</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">image_list</span><span class="p">):</span>
+
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">lil</span><span class="p">,</span> <span class="n">nib</span><span class="o">.</span><span class="n">nifti1</span><span class="o">.</span><span class="n">Nifti1Image</span><span class="p">):</span>
+            <span class="n">proxy</span> <span class="o">=</span> <span class="n">lil</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">proxy</span> <span class="o">=</span> <span class="n">nib</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">lil</span><span class="p">)</span>
+
+        <span class="n">mask</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">proxy</span><span class="o">.</span><span class="n">dataobj</span><span class="p">)</span>
+        <span class="n">header</span> <span class="o">=</span> <span class="n">proxy</span><span class="o">.</span><span class="n">affine</span>
+        <span class="n">idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">mask</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="n">vox_min</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">((</span><span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">idx</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">),</span> <span class="p">[</span><span class="mi">1</span><span class="p">]),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">vox_max</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">((</span><span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">idx</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">),</span> <span class="p">[</span><span class="mi">1</span><span class="p">]),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+        <span class="n">minR</span><span class="p">,</span> <span class="n">minA</span><span class="p">,</span> <span class="n">minS</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span>
+        <span class="n">maxR</span><span class="p">,</span> <span class="n">maxA</span><span class="p">,</span> <span class="n">maxS</span> <span class="o">=</span> <span class="o">-</span><span class="n">np</span><span class="o">.</span><span class="n">inf</span><span class="p">,</span> <span class="o">-</span><span class="n">np</span><span class="o">.</span><span class="n">inf</span><span class="p">,</span> <span class="o">-</span><span class="n">np</span><span class="o">.</span><span class="n">inf</span>
+
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="p">[</span><span class="n">vox_min</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">vox_max</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]:</span>
+            <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="p">[</span><span class="n">vox_min</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">vox_max</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]:</span>
+                <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="p">[</span><span class="n">vox_min</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="n">vox_max</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]:</span>
+                    <span class="n">aux</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">header</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">([</span><span class="n">i</span><span class="p">,</span> <span class="n">j</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span><span class="o">.</span><span class="n">T</span><span class="p">)</span>
+
+                    <span class="n">minR</span><span class="p">,</span> <span class="n">maxR</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">minR</span><span class="p">,</span> <span class="n">aux</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="nb">max</span><span class="p">(</span><span class="n">maxR</span><span class="p">,</span> <span class="n">aux</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+                    <span class="n">minA</span><span class="p">,</span> <span class="n">maxA</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">minA</span><span class="p">,</span> <span class="n">aux</span><span class="p">[</span><span class="mi">1</span><span class="p">]),</span> <span class="nb">max</span><span class="p">(</span><span class="n">maxA</span><span class="p">,</span> <span class="n">aux</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+                    <span class="n">minS</span><span class="p">,</span> <span class="n">maxS</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">minS</span><span class="p">,</span> <span class="n">aux</span><span class="p">[</span><span class="mi">2</span><span class="p">]),</span> <span class="nb">max</span><span class="p">(</span><span class="n">maxS</span><span class="p">,</span> <span class="n">aux</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
+
+        <span class="n">minR</span> <span class="o">-=</span> <span class="n">margin_bb</span>
+        <span class="n">minA</span> <span class="o">-=</span> <span class="n">margin_bb</span>
+        <span class="n">minS</span> <span class="o">-=</span> <span class="n">margin_bb</span>
+
+        <span class="n">maxR</span> <span class="o">+=</span> <span class="n">margin_bb</span>
+        <span class="n">maxA</span> <span class="o">+=</span> <span class="n">margin_bb</span>
+        <span class="n">maxS</span> <span class="o">+=</span> <span class="n">margin_bb</span>
+
+        <span class="n">boundaries_min</span><span class="p">[</span><span class="n">it_lil</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">minR</span><span class="p">,</span> <span class="n">minA</span><span class="p">,</span> <span class="n">minS</span><span class="p">]</span>
+        <span class="n">boundaries_max</span><span class="p">[</span><span class="n">it_lil</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">maxR</span><span class="p">,</span> <span class="n">maxA</span><span class="p">,</span> <span class="n">maxS</span><span class="p">]</span>
+        <span class="c1"># boundaries_min += [[minR, minA, minS]]</span>
+        <span class="c1"># boundaries_max += [[maxR, maxA, maxS]]</span>
+
+    <span class="c1"># Get the corners of cuboid in RAS space</span>
+    <span class="n">minR</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">boundaries_min</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">0</span><span class="p">])</span>
+    <span class="n">minA</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">boundaries_min</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span>
+    <span class="n">minS</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">boundaries_min</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">2</span><span class="p">])</span>
+    <span class="n">maxR</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">boundaries_max</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">0</span><span class="p">])</span>
+    <span class="n">maxA</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">boundaries_max</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span>
+    <span class="n">maxS</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">boundaries_max</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">2</span><span class="p">])</span>
+
+    <span class="n">template_size</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span>
+        <span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">maxR</span> <span class="o">-</span> <span class="n">minR</span><span class="p">))</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">maxA</span> <span class="o">-</span> <span class="n">minA</span><span class="p">))</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">maxS</span> <span class="o">-</span> <span class="n">minS</span><span class="p">))</span> <span class="o">+</span> <span class="mi">1</span><span class="p">])</span>
+
+    <span class="c1"># Define header and size</span>
+    <span class="n">template_vox2ras0</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">([[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">minR</span><span class="p">],</span>
+                                    <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">minA</span><span class="p">],</span>
+                                    <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">minS</span><span class="p">],</span>
+                                    <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]])</span>
+
+
+    <span class="c1"># VOX Mosaic</span>
+    <span class="n">II</span><span class="p">,</span> <span class="n">JJ</span><span class="p">,</span> <span class="n">KK</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">meshgrid</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">template_size</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span>
+                             <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">template_size</span><span class="p">[</span><span class="mi">1</span><span class="p">]),</span>
+                             <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">template_size</span><span class="p">[</span><span class="mi">2</span><span class="p">]),</span> <span class="n">indexing</span><span class="o">=</span><span class="s1">&#39;ij&#39;</span><span class="p">)</span>
+
+    <span class="n">RR</span> <span class="o">=</span> <span class="n">II</span> <span class="o">+</span> <span class="n">minR</span>
+    <span class="n">AA</span> <span class="o">=</span> <span class="n">JJ</span> <span class="o">+</span> <span class="n">minA</span>
+    <span class="n">SS</span> <span class="o">=</span> <span class="n">KK</span> <span class="o">+</span> <span class="n">minS</span>
+    <span class="n">rasMosaic</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">((</span><span class="n">RR</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+                                <span class="n">AA</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+                                <span class="n">SS</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+                                <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">((</span><span class="n">np</span><span class="o">.</span><span class="n">prod</span><span class="p">(</span><span class="n">template_size</span><span class="p">),</span> <span class="mi">1</span><span class="p">))),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">T</span>
+
+    <span class="k">return</span> <span class="n">rasMosaic</span><span class="p">,</span> <span class="n">template_vox2ras0</span><span class="p">,</span>  <span class="nb">tuple</span><span class="p">(</span><span class="n">template_size</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="VecInt">
+<a class="viewcode-back" href="../../api/utils.html#utils.def_utils.VecInt">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">VecInt</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Integrate a stationary velocity field via scaling and squaring.</span>
+
+<span class="sd">    Implements the scaling-and-squaring algorithm for diffeomorphic</span>
+<span class="sd">    registration. If you find this layer useful, please cite:</span>
+
+<span class="sd">        Dalca et al., *Unsupervised Learning for Fast Probabilistic</span>
+<span class="sd">        Diffeomorphic Registration*, MICCAI 2018.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    int_steps : int</span>
+<span class="sd">        Number of integration steps.</span>
+<span class="sd">    scale : float</span>
+<span class="sd">        Initial scaling factor ``1 / 2**int_steps``.</span>
+<span class="sd">    transformer : SpatialTransformer</span>
+<span class="sd">        Spatial transformer used to compose intermediate deformations.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">field_shape</span><span class="p">,</span> <span class="n">int_steps</span><span class="o">=</span><span class="mi">7</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        field_shape : tuple of int</span>
+<span class="sd">            Spatial shape of the velocity field ``(X, Y, Z)``.</span>
+<span class="sd">        int_steps : int, optional</span>
+<span class="sd">            Number of scaling-and-squaring steps. Default is 7.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">int_steps</span> <span class="o">=</span> <span class="n">int_steps</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">scale</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">/</span> <span class="p">(</span><span class="mi">2</span> <span class="o">**</span> <span class="bp">self</span><span class="o">.</span><span class="n">int_steps</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">transformer</span> <span class="o">=</span> <span class="n">SpatialTransformer</span><span class="p">(</span><span class="n">field_shape</span><span class="p">)</span>
+
+<div class="viewcode-block" id="VecInt.forward">
+<a class="viewcode-back" href="../../api/utils.html#utils.def_utils.VecInt.forward">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Integrate the velocity field.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        field : torch.Tensor</span>
+<span class="sd">            Stationary velocity field, shape ``(B, 3, X, Y, Z)``.</span>
+<span class="sd">        **kwargs</span>
+<span class="sd">            Optional ``nsteps`` override to reduce integration steps at</span>
+<span class="sd">            inference.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        torch.Tensor</span>
+<span class="sd">            Integrated displacement field, same shape as ``field``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="n">output</span> <span class="o">=</span> <span class="n">field</span>
+        <span class="n">output</span> <span class="o">=</span> <span class="n">output</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">scale</span>
+        <span class="n">nsteps</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">int_steps</span>
+        <span class="k">if</span> <span class="s1">&#39;nsteps&#39;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="n">nsteps</span> <span class="o">=</span> <span class="n">nsteps</span> <span class="o">-</span> <span class="n">kwargs</span><span class="p">[</span><span class="s1">&#39;nsteps&#39;</span><span class="p">]</span>
+
+        <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">nsteps</span><span class="p">):</span>
+            <span class="n">a</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">transformer</span><span class="p">(</span><span class="n">output</span><span class="p">,</span> <span class="n">output</span><span class="p">)</span>
+            <span class="n">output</span> <span class="o">=</span> <span class="n">output</span> <span class="o">+</span> <span class="n">a</span>
+
+        <span class="k">return</span> <span class="n">output</span></div>
+</div>
+
+
+<div class="viewcode-block" id="RescaleTransform">
+<a class="viewcode-back" href="../../api/utils.html#utils.def_utils.RescaleTransform">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">RescaleTransform</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Resize a displacement field and rescale its vector magnitudes accordingly.</span>
+
+<span class="sd">    Resampling a flow field requires both interpolating the field to a new</span>
+<span class="sd">    grid *and* multiplying vector components by the corresponding scale</span>
+<span class="sd">    factors. Optionally applies Gaussian anti-aliasing before downsampling.</span>
+
+<span class="sd">    Credit: VoxelMorph (https://github.com/voxelmorph/voxelmorph).</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    ndims : int</span>
+<span class="sd">        Number of spatial dimensions.</span>
+<span class="sd">    factor : list of float</span>
+<span class="sd">        Per-dimension scale factors.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">inshape</span><span class="p">,</span> <span class="n">factor</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">target_size</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">gaussian_filter_flag</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        inshape : tuple of int</span>
+<span class="sd">            Spatial shape of the input field.</span>
+<span class="sd">        factor : float or list of float, optional</span>
+<span class="sd">            Isotropic or per-dimension scale factor. Mutually exclusive with</span>
+<span class="sd">            ``target_size``.</span>
+<span class="sd">        target_size : tuple of int, optional</span>
+<span class="sd">            Target spatial shape from which the scale factor is derived.</span>
+<span class="sd">            Used only when ``factor`` is ``None``.</span>
+<span class="sd">        gaussian_filter_flag : bool, optional</span>
+<span class="sd">            If ``True``, apply Gaussian anti-aliasing before downsampling.</span>
+<span class="sd">            Default is ``False``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">ndims</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">inshape</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mode</span> <span class="o">=</span> <span class="s1">&#39;linear&#39;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">inshape</span> <span class="o">=</span> <span class="n">inshape</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">gaussian_filter_flag</span> <span class="o">=</span> <span class="n">gaussian_filter_flag</span>
+
+        <span class="k">if</span> <span class="n">factor</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">assert</span> <span class="n">target_size</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">factor</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">([</span><span class="n">b</span><span class="o">/</span><span class="n">a</span> <span class="k">for</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">inshape</span><span class="p">,</span> <span class="n">target_size</span><span class="p">)])</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">factor</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">factor</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">factor</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">factor</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">factor</span> <span class="o">=</span> <span class="p">[</span><span class="n">factor</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">ndims</span><span class="p">)]</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">ndims</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">mode</span> <span class="o">=</span> <span class="s1">&#39;bi&#39;</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">mode</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">ndims</span> <span class="o">==</span> <span class="mi">3</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">mode</span> <span class="o">=</span> <span class="s1">&#39;tri&#39;</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">mode</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">factor</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mi">1</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">gaussian_filter_flag</span><span class="p">:</span>
+            <span class="n">kernel_sigma</span> <span class="o">=</span> <span class="p">[</span><span class="mf">0.44</span> <span class="o">*</span> <span class="mi">1</span> <span class="o">/</span> <span class="n">f</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">factor</span><span class="p">]</span>
+
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">ndims</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+                <span class="n">kernel</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">gaussian_filter_2d</span><span class="p">(</span><span class="n">kernel_sigma</span><span class="o">=</span><span class="n">kernel_sigma</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">ndims</span> <span class="o">==</span> <span class="mi">3</span><span class="p">:</span>
+                <span class="n">kernel</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">gaussian_filter_3d</span><span class="p">(</span><span class="n">kernel_sigma</span><span class="o">=</span><span class="n">kernel_sigma</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;[RESCALE TF] No valid kernel found.&#39;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s1">&#39;kernel&#39;</span><span class="p">,</span> <span class="n">kernel</span><span class="p">)</span>
+
+<div class="viewcode-block" id="RescaleTransform.gaussian_filter_2d">
+<a class="viewcode-back" href="../../api/utils.html#utils.def_utils.RescaleTransform.gaussian_filter_2d">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">gaussian_filter_2d</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">kernel_sigma</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Build a 2D separable Gaussian convolution kernel as a registered buffer.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        kernel_sigma : float or list of float</span>
+<span class="sd">            Standard deviation(s) of the Gaussian in each spatial dimension.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        torch.Tensor</span>
+<span class="sd">            Kernel tensor of shape ``(2, 2, ky, kx)``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">kernel_sigma</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+            <span class="n">kernel_size</span> <span class="o">=</span> <span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">ks</span><span class="o">*</span><span class="mi">3</span><span class="p">)</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">mod</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">ks</span><span class="o">*</span><span class="mi">3</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">))</span> <span class="k">for</span> <span class="n">ks</span> <span class="ow">in</span> <span class="n">kernel_sigma</span><span class="p">]</span>
+
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">kernel_size</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">kernel_sigma</span><span class="o">*</span><span class="mi">3</span><span class="p">)</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">mod</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">kernel_sigma</span><span class="o">*</span><span class="mi">3</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">))</span>
+
+
+        <span class="c1"># Create a x, y coordinate grid of shape (kernel_size, kernel_size, 2)</span>
+        <span class="n">coord</span> <span class="o">=</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">ks</span><span class="p">)</span> <span class="k">for</span> <span class="n">ks</span> <span class="ow">in</span> <span class="n">kernel_size</span><span class="p">]</span>
+
+        <span class="n">YY</span><span class="p">,</span> <span class="n">XX</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">meshgrid</span><span class="p">(</span><span class="n">coord</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">coord</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">indexing</span><span class="o">=</span><span class="s1">&#39;ij&#39;</span><span class="p">)</span>
+        <span class="n">xy_grid</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">((</span><span class="n">YY</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">newaxis</span><span class="p">],</span> <span class="n">XX</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">newaxis</span><span class="p">]),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>  <span class="c1"># 2, y, x</span>
+
+        <span class="n">mean</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">([(</span><span class="n">ks</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">/</span> <span class="mf">2.</span> <span class="k">for</span> <span class="n">ks</span> <span class="ow">in</span> <span class="n">kernel_size</span><span class="p">])</span>
+        <span class="n">mean</span> <span class="o">=</span> <span class="n">mean</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">variance</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">([</span><span class="n">ks</span> <span class="o">**</span> <span class="mf">2.</span> <span class="k">for</span> <span class="n">ks</span> <span class="ow">in</span> <span class="n">kernel_sigma</span><span class="p">])</span>
+        <span class="n">variance</span> <span class="o">=</span> <span class="n">variance</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="c1"># Calculate the 2-dimensional gaussian kernel which is</span>
+        <span class="c1"># the product of two gaussian distributions for two different</span>
+        <span class="c1"># variables (in this case called x and y)</span>
+        <span class="c1"># 2.506628274631 = sqrt(2 * pi)</span>
+
+        <span class="n">norm_kernel</span> <span class="o">=</span> <span class="p">(</span><span class="mf">1.</span> <span class="o">/</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">prod</span><span class="p">(</span><span class="n">kernel_sigma</span><span class="p">)))</span>
+        <span class="n">kernel</span> <span class="o">=</span> <span class="n">norm_kernel</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">((</span><span class="n">xy_grid</span> <span class="o">-</span> <span class="n">mean</span><span class="p">)</span> <span class="o">**</span> <span class="mf">2.</span> <span class="o">/</span> <span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">variance</span><span class="p">),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">))</span>
+
+        <span class="c1"># Make sure sum of values in gaussian kernel equals 1.</span>
+        <span class="n">kernel</span> <span class="o">=</span> <span class="n">kernel</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">kernel</span><span class="p">)</span>
+
+        <span class="c1"># Reshape</span>
+        <span class="n">kernel</span> <span class="o">=</span> <span class="n">kernel</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">kernel_size</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">kernel_size</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+
+        <span class="c1"># Total kernel</span>
+        <span class="n">total_kernel</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span> <span class="o">+</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">kernel_size</span><span class="p">))</span>
+        <span class="n">total_kernel</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">kernel</span>
+        <span class="n">total_kernel</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">kernel</span>
+
+        <span class="n">total_kernel</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">total_kernel</span><span class="p">)</span><span class="o">.</span><span class="n">float</span><span class="p">()</span>
+
+        <span class="k">return</span> <span class="n">total_kernel</span></div>
+
+
+<div class="viewcode-block" id="RescaleTransform.gaussian_filter_3d">
+<a class="viewcode-back" href="../../api/utils.html#utils.def_utils.RescaleTransform.gaussian_filter_3d">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">gaussian_filter_3d</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">kernel_sigma</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Build a 3D separable Gaussian convolution kernel as a registered buffer.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        kernel_sigma : float or list of float</span>
+<span class="sd">            Standard deviation(s) of the Gaussian in each spatial dimension.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        torch.Tensor</span>
+<span class="sd">            Kernel tensor of shape ``(3, 3, kz, ky, kx)``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">kernel_sigma</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+            <span class="n">kernel_size</span> <span class="o">=</span> <span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">ks</span><span class="o">*</span><span class="mi">3</span><span class="p">)</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">mod</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">ks</span><span class="o">*</span><span class="mi">3</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">))</span> <span class="k">for</span> <span class="n">ks</span> <span class="ow">in</span> <span class="n">kernel_sigma</span><span class="p">]</span>
+
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">kernel_size</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">kernel_sigma</span><span class="o">*</span><span class="mi">3</span><span class="p">)</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">mod</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">kernel_sigma</span><span class="o">*</span><span class="mi">3</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">))</span>
+
+        <span class="c1"># Create a x, y coordinate grid of shape (kernel_size, kernel_size, 2)</span>
+        <span class="n">coord</span> <span class="o">=</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">ks</span><span class="p">)</span> <span class="k">for</span> <span class="n">ks</span> <span class="ow">in</span> <span class="n">kernel_size</span><span class="p">]</span>
+
+        <span class="n">YY</span><span class="p">,</span> <span class="n">XX</span><span class="p">,</span> <span class="n">ZZ</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">meshgrid</span><span class="p">(</span><span class="n">coord</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">coord</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">coord</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="n">indexing</span><span class="o">=</span><span class="s1">&#39;ij&#39;</span><span class="p">)</span>
+        <span class="n">xyz_grid</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">((</span><span class="n">YY</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">newaxis</span><span class="p">],</span> <span class="n">XX</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">newaxis</span><span class="p">],</span> <span class="n">ZZ</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">newaxis</span><span class="p">]),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>  <span class="c1"># 2, y, x</span>
+
+        <span class="n">mean</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">([(</span><span class="n">ks</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">/</span> <span class="mf">2.</span> <span class="k">for</span> <span class="n">ks</span> <span class="ow">in</span> <span class="n">kernel_size</span><span class="p">])</span>
+        <span class="n">mean</span> <span class="o">=</span> <span class="n">mean</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">variance</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">([</span><span class="n">ks</span> <span class="o">**</span> <span class="mf">2.</span> <span class="k">for</span> <span class="n">ks</span> <span class="ow">in</span> <span class="n">kernel_sigma</span><span class="p">])</span>
+        <span class="n">variance</span> <span class="o">=</span> <span class="n">variance</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+
+        <span class="c1"># Calculate the 2-dimensional gaussian kernel which is</span>
+        <span class="c1"># the product of two gaussian distributions for two different</span>
+        <span class="c1"># variables (in this case called x and y)</span>
+        <span class="c1"># 2.506628274631 = sqrt(2 * pi)</span>
+        <span class="n">norm_kernel</span> <span class="o">=</span> <span class="p">(</span><span class="mf">1.</span> <span class="o">/</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">prod</span><span class="p">(</span><span class="n">kernel_sigma</span><span class="p">)))</span>
+        <span class="n">kernel</span> <span class="o">=</span> <span class="n">norm_kernel</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">((</span><span class="n">xyz_grid</span> <span class="o">-</span> <span class="n">mean</span><span class="p">)</span> <span class="o">**</span> <span class="mf">2.</span> <span class="o">/</span> <span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">variance</span><span class="p">),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">))</span>
+
+        <span class="c1"># Make sure sum of values in gaussian kernel equals 1.</span>
+        <span class="n">kernel</span> <span class="o">=</span> <span class="n">kernel</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">kernel</span><span class="p">)</span>
+
+        <span class="c1"># Reshape</span>
+        <span class="n">kernel</span> <span class="o">=</span> <span class="n">kernel</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">kernel_size</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">kernel_size</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span><span class="n">kernel_size</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
+
+        <span class="c1"># Total kernel</span>
+
+        <span class="n">total_kernel</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span><span class="mi">3</span><span class="p">)</span> <span class="o">+</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">kernel_size</span><span class="p">))</span>
+        <span class="n">total_kernel</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">kernel</span>
+        <span class="n">total_kernel</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">kernel</span>
+        <span class="n">total_kernel</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="n">kernel</span>
+
+
+        <span class="n">total_kernel</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">total_kernel</span><span class="p">)</span><span class="o">.</span><span class="n">float</span><span class="p">()</span>
+
+        <span class="k">return</span> <span class="n">total_kernel</span></div>
+
+
+<div class="viewcode-block" id="RescaleTransform.forward">
+<a class="viewcode-back" href="../../api/utils.html#utils.def_utils.RescaleTransform.forward">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Rescale the displacement field.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        x : torch.Tensor</span>
+<span class="sd">            Input flow field, shape ``(B, ndims, *spatial)``.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        torch.Tensor</span>
+<span class="sd">            Rescaled flow field at the new spatial resolution.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">x</span> <span class="o">=</span> <span class="n">x</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">factor</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">gaussian_filter_flag</span><span class="p">:</span>
+                <span class="n">padding</span> <span class="o">=</span> <span class="p">[</span><span class="nb">int</span><span class="p">((</span><span class="n">s</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">//</span> <span class="mi">2</span><span class="p">)</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">:]]</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">ndims</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+                    <span class="n">x</span> <span class="o">=</span> <span class="n">F</span><span class="o">.</span><span class="n">conv2d</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="p">,</span> <span class="n">stride</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">padding</span><span class="o">=</span><span class="n">padding</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">x</span> <span class="o">=</span> <span class="n">F</span><span class="o">.</span><span class="n">conv3d</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="p">,</span> <span class="n">stride</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">padding</span><span class="o">=</span><span class="n">padding</span><span class="p">)</span>
+
+            <span class="c1"># resize first to save memory</span>
+            <span class="n">x</span> <span class="o">=</span> <span class="n">F</span><span class="o">.</span><span class="n">interpolate</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">align_corners</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">scale_factor</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">factor</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">mode</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">ndims</span><span class="p">):</span>
+                <span class="n">x</span><span class="p">[:,</span> <span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">x</span><span class="p">[:,</span> <span class="n">i</span><span class="p">]</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">factor</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">factor</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="c1"># multiply first to save memory</span>
+            <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">ndims</span><span class="p">):</span>
+                <span class="n">x</span><span class="p">[:,</span> <span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">x</span><span class="p">[:,</span> <span class="n">i</span><span class="p">]</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">factor</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+            <span class="n">x</span> <span class="o">=</span> <span class="n">F</span><span class="o">.</span><span class="n">interpolate</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">align_corners</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">scale_factor</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">factor</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">mode</span><span class="p">)</span>
+
+        <span class="c1"># don&#39;t do anything if resize is 1</span>
+        <span class="k">return</span> <span class="n">x</span></div>
+</div>
+
+
+<div class="viewcode-block" id="SpatialInterpolation">
+<a class="viewcode-back" href="../../api/utils.html#utils.def_utils.SpatialInterpolation">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">SpatialInterpolation</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Apply a pre-computed normalised grid to a source image via ``grid_sample``.</span>
+
+<span class="sd">    Unlike :class:`SpatialTransformer`, this layer takes an explicit</span>
+<span class="sd">    normalised location grid rather than a flow field relative to a</span>
+<span class="sd">    pre-built identity grid.</span>
+
+<span class="sd">    Credit: VoxelMorph</span>
+<span class="sd">    (https://github.com/voxelmorph/voxelmorph/blob/master/pytorch/model.py).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s1">&#39;bilinear&#39;</span><span class="p">,</span> <span class="n">padding_mode</span><span class="o">=</span><span class="s1">&#39;zeros&#39;</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        mode : str, optional</span>
+<span class="sd">            Interpolation mode passed to ``F.grid_sample``. Default is</span>
+<span class="sd">            ``&#39;bilinear&#39;``.</span>
+<span class="sd">        padding_mode : str, optional</span>
+<span class="sd">            Padding mode for out-of-boundary coordinates. Default is</span>
+<span class="sd">            ``&#39;zeros&#39;``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">mode</span> <span class="o">=</span> <span class="n">mode</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">padding_mode</span> <span class="o">=</span> <span class="n">padding_mode</span>
+
+<div class="viewcode-block" id="SpatialInterpolation.forward">
+<a class="viewcode-back" href="../../api/utils.html#utils.def_utils.SpatialInterpolation.forward">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">src</span><span class="p">,</span> <span class="n">new_locs</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Interpolate ``src`` at the given normalised coordinates.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        src : torch.Tensor</span>
+<span class="sd">            Source image, shape ``(B, C, *spatial)``.</span>
+<span class="sd">        new_locs : torch.Tensor</span>
+<span class="sd">            Sampling grid in voxel coordinates, shape</span>
+<span class="sd">            ``(B, ndims, *spatial)``. Will be normalised to ``[-1, 1]``</span>
+<span class="sd">            internally.</span>
+<span class="sd">        **kwargs</span>
+<span class="sd">            Optional ``&#39;padding_mode&#39;`` and ``&#39;mode&#39;`` overrides.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        torch.Tensor</span>
+<span class="sd">            Warped image, same shape as ``src``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="s1">&#39;padding_mode&#39;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">padding_mode</span> <span class="o">=</span> <span class="n">kwargs</span><span class="p">[</span><span class="s1">&#39;padding_mode&#39;</span><span class="p">]</span>
+        <span class="k">if</span> <span class="s1">&#39;mode&#39;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">mode</span> <span class="o">=</span> <span class="n">kwargs</span><span class="p">[</span><span class="s1">&#39;mode&#39;</span><span class="p">]</span>
+
+        <span class="n">shape</span> <span class="o">=</span> <span class="n">src</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">:]</span>
+
+        <span class="c1"># Need to normalize grid values to [-1, 1] for resampler</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">shape</span><span class="p">)):</span>
+            <span class="n">new_locs</span><span class="p">[:,</span> <span class="n">i</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="mi">2</span> <span class="o">*</span> <span class="p">(</span><span class="n">new_locs</span><span class="p">[:,</span> <span class="n">i</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">/</span> <span class="p">(</span><span class="n">shape</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">-</span> <span class="mf">0.5</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">shape</span><span class="p">)</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="n">new_locs</span> <span class="o">=</span> <span class="n">new_locs</span><span class="o">.</span><span class="n">permute</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+            <span class="n">new_locs</span> <span class="o">=</span> <span class="n">new_locs</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">]]</span>
+
+        <span class="k">elif</span> <span class="nb">len</span><span class="p">(</span><span class="n">shape</span><span class="p">)</span> <span class="o">==</span> <span class="mi">3</span><span class="p">:</span>
+            <span class="n">new_locs</span> <span class="o">=</span> <span class="n">new_locs</span><span class="o">.</span><span class="n">permute</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+            <span class="n">new_locs</span> <span class="o">=</span> <span class="n">new_locs</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">]]</span>
+
+        <span class="k">return</span> <span class="n">F</span><span class="o">.</span><span class="n">grid_sample</span><span class="p">(</span><span class="n">src</span><span class="p">,</span> <span class="n">new_locs</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">mode</span><span class="p">,</span> <span class="n">padding_mode</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">padding_mode</span><span class="p">,</span> <span class="n">align_corners</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span></div>
+</div>
+
+
+<div class="viewcode-block" id="SpatialTransformer">
+<a class="viewcode-back" href="../../api/utils.html#utils.def_utils.SpatialTransformer">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">SpatialTransformer</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Warp a source image by adding a flow field to an identity grid.</span>
+
+<span class="sd">    Registers a fixed identity sampling grid at construction time and adds</span>
+<span class="sd">    the flow field to it at forward time before calling ``F.grid_sample``.</span>
+
+<span class="sd">    Credit: VoxelMorph</span>
+<span class="sd">    (https://github.com/voxelmorph/voxelmorph/blob/master/pytorch/model.py).</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    grid : torch.Tensor</span>
+<span class="sd">        Pre-computed identity sampling grid, shape ``(1, ndims, *size)``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">size</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s1">&#39;bilinear&#39;</span><span class="p">,</span> <span class="n">padding_mode</span><span class="o">=</span><span class="s1">&#39;border&#39;</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        size : tuple of int</span>
+<span class="sd">            Spatial shape of the images to transform, e.g. ``(X, Y, Z)``.</span>
+<span class="sd">        mode : str, optional</span>
+<span class="sd">            Interpolation mode for ``F.grid_sample``. Default is</span>
+<span class="sd">            ``&#39;bilinear&#39;``.</span>
+<span class="sd">        padding_mode : str, optional</span>
+<span class="sd">            Padding mode for out-of-boundary coordinates. Default is</span>
+<span class="sd">            ``&#39;border&#39;``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+
+        <span class="c1"># Create sampling grid</span>
+        <span class="n">vectors</span> <span class="o">=</span> <span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">s</span><span class="p">)</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">size</span><span class="p">]</span>
+        <span class="n">grids</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">meshgrid</span><span class="p">(</span><span class="n">vectors</span><span class="p">,</span> <span class="n">indexing</span><span class="o">=</span><span class="s1">&#39;ij&#39;</span><span class="p">)</span>
+        <span class="n">grid</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">grids</span><span class="p">)</span>  <span class="c1"># y, x, z</span>
+        <span class="n">grid</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="n">grid</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>  <span class="c1"># add batch</span>
+        <span class="n">grid</span> <span class="o">=</span> <span class="n">grid</span><span class="o">.</span><span class="n">type</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">FloatTensor</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s1">&#39;grid&#39;</span><span class="p">,</span> <span class="n">grid</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">mode</span> <span class="o">=</span> <span class="n">mode</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">padding_mode</span> <span class="o">=</span> <span class="n">padding_mode</span>
+
+<div class="viewcode-block" id="SpatialTransformer.forward">
+<a class="viewcode-back" href="../../api/utils.html#utils.def_utils.SpatialTransformer.forward">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">src</span><span class="p">,</span> <span class="n">flow</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Warp ``src`` by adding ``flow`` to the pre-built identity grid.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        src : torch.Tensor</span>
+<span class="sd">            Source image, shape ``(B, C, *spatial)``.</span>
+<span class="sd">        flow : torch.Tensor</span>
+<span class="sd">            Displacement field, shape ``(B, ndims, *spatial)``.</span>
+<span class="sd">        **kwargs</span>
+<span class="sd">            Optional ``&#39;padding_mode&#39;`` and ``&#39;mode&#39;`` overrides.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        torch.Tensor</span>
+<span class="sd">            Warped image, same shape as ``src``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">padding_mode</span> <span class="o">=</span> <span class="n">kwargs</span><span class="p">[</span><span class="s1">&#39;padding_mode&#39;</span><span class="p">]</span> <span class="k">if</span> <span class="s1">&#39;padding_mode&#39;</span> <span class="ow">in</span> <span class="n">kwargs</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">padding_mode</span>
+        <span class="n">mode</span> <span class="o">=</span> <span class="n">kwargs</span><span class="p">[</span><span class="s1">&#39;mode&#39;</span><span class="p">]</span> <span class="k">if</span> <span class="s1">&#39;mode&#39;</span> <span class="ow">in</span> <span class="n">kwargs</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">mode</span>
+
+        <span class="n">new_locs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">grid</span> <span class="o">+</span> <span class="n">flow</span>
+        <span class="n">shape</span> <span class="o">=</span> <span class="n">src</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">:]</span>
+
+        <span class="c1"># Need to normalize grid values to [-1, 1] for resampler</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">shape</span><span class="p">)):</span>
+            <span class="n">new_locs</span><span class="p">[:,</span> <span class="n">i</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="mi">2</span> <span class="o">*</span> <span class="p">(</span><span class="n">new_locs</span><span class="p">[:,</span> <span class="n">i</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">/</span> <span class="p">(</span><span class="n">shape</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">-</span> <span class="mf">0.5</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">shape</span><span class="p">)</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="n">new_locs</span> <span class="o">=</span> <span class="n">new_locs</span><span class="o">.</span><span class="n">permute</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+            <span class="c1"># new_locs = new_locs[..., [1, 0]]</span>
+
+        <span class="k">elif</span> <span class="nb">len</span><span class="p">(</span><span class="n">shape</span><span class="p">)</span> <span class="o">==</span> <span class="mi">3</span><span class="p">:</span>
+            <span class="n">new_locs</span> <span class="o">=</span> <span class="n">new_locs</span><span class="o">.</span><span class="n">permute</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+            <span class="n">new_locs</span> <span class="o">=</span> <span class="n">new_locs</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">]]</span>
+
+        <span class="k">return</span> <span class="n">F</span><span class="o">.</span><span class="n">grid_sample</span><span class="p">(</span><span class="n">src</span><span class="p">,</span> <span class="n">new_locs</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="n">mode</span><span class="p">,</span> <span class="n">padding_mode</span><span class="o">=</span><span class="n">padding_mode</span><span class="p">,</span> <span class="n">align_corners</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span></div>
+</div>
+
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Adrià Casamitjana, Agustín Cartaya Lathulerie, Clara Lisazo, Rachika E. Hamadache.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

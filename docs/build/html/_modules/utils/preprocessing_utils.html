@@ -1,0 +1,667 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>utils.preprocessing_utils &mdash; nicgiprep  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../index.html" class="icon icon-home">
+            nicgiprep
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting Started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../getting_started/installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../getting_started/quickstart.html">Quickstart</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">API Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../api/pipelines.html">Pipelines</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../api/callbacks.html">Callbacks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../api/models.html">Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../api/utils.html">Utils</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">nicgiprep</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">utils.preprocessing_utils</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for utils.preprocessing_utils</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">copy</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">scipy.ndimage</span><span class="w"> </span><span class="kn">import</span>  <span class="n">gaussian_filter</span>
+
+
+
+<span class="n">eps</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">finfo</span><span class="p">(</span><span class="nb">float</span><span class="p">)</span><span class="o">.</span><span class="n">eps</span>
+
+<div class="viewcode-block" id="one_hot_encoding_with_gaussian">
+<a class="viewcode-back" href="../../api/utils.html#utils.preprocessing_utils.one_hot_encoding_with_gaussian">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">one_hot_encoding_with_gaussian</span><span class="p">(</span><span class="n">target</span><span class="p">,</span> <span class="n">num_classes</span><span class="p">,</span> <span class="n">categories</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">sigma</span><span class="o">=</span><span class="mf">0.0</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Convert an integer label map to a (optionally Gaussian-smoothed) one-hot array.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    target : np.ndarray</span>
+<span class="sd">        Integer label map of shape ``(d1, d2, ..., dN)``.</span>
+<span class="sd">    num_classes : int</span>
+<span class="sd">        Number of classes (channels in the output).</span>
+<span class="sd">    categories : list of int, optional</span>
+<span class="sd">        Ordered label values. Defaults to ``[0, 1, ..., num_classes-1]``.</span>
+<span class="sd">    sigma : float, optional</span>
+<span class="sd">        Standard deviation of the Gaussian kernel used to smooth each</span>
+<span class="sd">        one-hot channel. ``0`` (default) returns a hard one-hot array</span>
+<span class="sd">        (dtype ``int``).</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    np.ndarray</span>
+<span class="sd">        One-hot array of shape ``(d1, d2, ..., dN, num_classes)``.</span>
+<span class="sd">        Dtype is ``int`` when ``sigma=0``, ``float64`` otherwise.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">if</span> <span class="n">categories</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">categories</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">num_classes</span><span class="p">))</span>
+
+    <span class="n">labels</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">target</span><span class="o">.</span><span class="n">shape</span> <span class="o">+</span> <span class="p">(</span><span class="n">num_classes</span><span class="p">,))</span>
+    <span class="k">for</span> <span class="n">it_class</span> <span class="ow">in</span> <span class="n">categories</span><span class="p">:</span>
+        <span class="n">idx_class</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">target</span> <span class="o">==</span> <span class="n">it_class</span><span class="p">)</span>
+        <span class="n">idx</span> <span class="o">=</span> <span class="n">idx_class</span> <span class="o">+</span> <span class="p">(</span><span class="n">it_class</span><span class="p">,)</span>
+        <span class="n">labels</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
+
+    <span class="k">if</span> <span class="n">sigma</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">labels</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span>
+
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">gaussian_filter</span><span class="p">(</span><span class="n">labels</span><span class="p">,</span> <span class="n">sigma</span><span class="p">)</span><span class="c1"># size of gaussian kernel is 4*sigma + 0.5 at each side and center=2.</span></div>
+
+
+<div class="viewcode-block" id="get_dct_basis_functions">
+<a class="viewcode-back" href="../../api/utils.html#utils.preprocessing_utils.get_dct_basis_functions">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">get_dct_basis_functions</span><span class="p">(</span><span class="n">image_shape</span><span class="p">,</span> <span class="n">smoothing_kernel_size</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Build DCT-II basis functions for bias-field modelling.</span>
+
+<span class="sd">    Computes the lowest-frequency DCT-II basis functions for each image</span>
+<span class="sd">    dimension independently. The number of basis functions per dimension</span>
+<span class="sd">    is determined by ``ceil(N / delta) + 1``.</span>
+
+<span class="sd">    Credit: SAMSEG (FreeSurfer).</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    image_shape : tuple of int</span>
+<span class="sd">        Spatial shape of the image ``(X, Y, Z)``.</span>
+<span class="sd">    smoothing_kernel_size : array-like of float</span>
+<span class="sd">        Smoothing scale (in voxels) per dimension, controlling the number</span>
+<span class="sd">        of basis functions: larger values → fewer, smoother basis functions.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    list of np.ndarray</span>
+<span class="sd">        One 2D array per dimension of shape ``(N_d, M_d)``, where ``N_d``</span>
+<span class="sd">        is the image size and ``M_d`` is the number of basis functions in</span>
+<span class="sd">        that dimension.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">biasFieldBasisFunctions</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">dimensionNumber</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">image_shape</span><span class="p">)):</span>
+        <span class="n">N</span> <span class="o">=</span> <span class="n">image_shape</span><span class="p">[</span><span class="n">dimensionNumber</span><span class="p">]</span>
+        <span class="n">delta</span> <span class="o">=</span> <span class="n">smoothing_kernel_size</span><span class="p">[</span><span class="n">dimensionNumber</span><span class="p">]</span>
+        <span class="n">M</span> <span class="o">=</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">N</span> <span class="o">/</span> <span class="n">delta</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="s1">&#39;int&#39;</span><span class="p">)</span>
+        <span class="n">Nvirtual</span> <span class="o">=</span> <span class="p">(</span><span class="n">M</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="n">delta</span>
+        <span class="n">js</span> <span class="o">=</span> <span class="p">[(</span><span class="n">index</span> <span class="o">+</span> <span class="mf">0.5</span><span class="p">)</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span> <span class="o">/</span> <span class="n">Nvirtual</span> <span class="k">for</span> <span class="n">index</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">N</span><span class="p">)]</span>
+        <span class="n">scaling</span> <span class="o">=</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="mi">2</span> <span class="o">/</span> <span class="n">Nvirtual</span><span class="p">)]</span> <span class="o">*</span> <span class="n">M</span>
+        <span class="n">scaling</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">/=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+        <span class="n">A</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">freq</span> <span class="o">*</span> <span class="n">m</span><span class="p">)</span> <span class="o">*</span> <span class="n">scaling</span><span class="p">[</span><span class="n">m</span><span class="p">]</span> <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">M</span><span class="p">)]</span> <span class="k">for</span> <span class="n">freq</span> <span class="ow">in</span> <span class="n">js</span><span class="p">])</span>
+        <span class="n">biasFieldBasisFunctions</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">A</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">biasFieldBasisFunctions</span></div>
+
+
+<div class="viewcode-block" id="backprojectKroneckerProductBasisFunctions">
+<a class="viewcode-back" href="../../api/utils.html#utils.preprocessing_utils.backprojectKroneckerProductBasisFunctions">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">backprojectKroneckerProductBasisFunctions</span><span class="p">(</span><span class="n">kroneckerProductBasisFunctions</span><span class="p">,</span> <span class="n">coefficients</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Reconstruct a field from Kronecker-product basis coefficients.</span>
+
+<span class="sd">    Computes ``W * c`` where ``W`` is the full Kronecker product of the</span>
+<span class="sd">    per-dimension basis matrices. This is the inverse of</span>
+<span class="sd">    :func:`projectKroneckerProductBasisFunctions`.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    kroneckerProductBasisFunctions : list of np.ndarray</span>
+<span class="sd">        Per-dimension basis matrices, each of shape ``(N_d, M_d)``.</span>
+<span class="sd">    coefficients : np.ndarray</span>
+<span class="sd">        Coefficient vector of length ``prod(M_d)``.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    np.ndarray</span>
+<span class="sd">        Reconstructed field, shape ``(N_0, N_1, ..., N_{D-1})``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">numberOfDimensions</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">kroneckerProductBasisFunctions</span><span class="p">)</span>
+    <span class="n">Ms</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">numberOfDimensions</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">uint32</span><span class="p">)</span>  <span class="c1"># Number of basis functions in each dimension</span>
+    <span class="n">Ns</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">numberOfDimensions</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">uint32</span><span class="p">)</span>  <span class="c1"># Number of basis functions in each dimension</span>
+    <span class="n">transposedKroneckerProductBasisFunctions</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">dimensionNumber</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">numberOfDimensions</span><span class="p">):</span>
+        <span class="n">Ms</span><span class="p">[</span><span class="n">dimensionNumber</span><span class="p">]</span> <span class="o">=</span> <span class="n">kroneckerProductBasisFunctions</span><span class="p">[</span><span class="n">dimensionNumber</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">Ns</span><span class="p">[</span><span class="n">dimensionNumber</span><span class="p">]</span> <span class="o">=</span> <span class="n">kroneckerProductBasisFunctions</span><span class="p">[</span><span class="n">dimensionNumber</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">transposedKroneckerProductBasisFunctions</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">kroneckerProductBasisFunctions</span><span class="p">[</span><span class="n">dimensionNumber</span><span class="p">]</span><span class="o">.</span><span class="n">T</span><span class="p">)</span>
+    <span class="n">y</span> <span class="o">=</span> <span class="n">projectKroneckerProductBasisFunctions</span><span class="p">(</span><span class="n">transposedKroneckerProductBasisFunctions</span><span class="p">,</span> <span class="n">coefficients</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">Ms</span><span class="p">,</span> <span class="n">order</span><span class="o">=</span><span class="s1">&#39;F&#39;</span><span class="p">)</span> <span class="p">)</span>
+    <span class="n">Y</span> <span class="o">=</span> <span class="n">y</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">Ns</span><span class="p">,</span> <span class="n">order</span><span class="o">=</span><span class="s1">&#39;F&#39;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">Y</span></div>
+
+
+<div class="viewcode-block" id="projectKroneckerProductBasisFunctions">
+<a class="viewcode-back" href="../../api/utils.html#utils.preprocessing_utils.projectKroneckerProductBasisFunctions">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">projectKroneckerProductBasisFunctions</span><span class="p">(</span><span class="n">kroneckerProductBasisFunctions</span><span class="p">,</span> <span class="n">T</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Project a field onto Kronecker-product basis functions.</span>
+
+<span class="sd">    Computes ``c = W&#39; * t`` where ``W`` is the full Kronecker product of the</span>
+<span class="sd">    per-dimension basis matrices and ``t = T.flatten()``.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    kroneckerProductBasisFunctions : list of np.ndarray</span>
+<span class="sd">        Per-dimension basis matrices, each of shape ``(N_d, M_d)``.</span>
+<span class="sd">    T : np.ndarray</span>
+<span class="sd">        Field to project, shape ``(N_0, N_1, ..., N_{D-1})``.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    np.ndarray</span>
+<span class="sd">        Coefficient vector of length ``prod(M_d)``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1">#</span>
+    <span class="c1"># Compute</span>
+    <span class="c1">#   c = W&#39; * t</span>
+    <span class="c1"># where</span>
+    <span class="c1">#   W = W{ numberOfDimensions } \kron W{ numberOfDimensions-1 } \kron ... W{ 1 }</span>
+    <span class="c1"># and</span>
+    <span class="c1">#   t = T( : )</span>
+    <span class="n">numberOfDimensions</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">kroneckerProductBasisFunctions</span><span class="p">)</span>
+    <span class="n">currentSizeOfT</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">T</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">dimensionNumber</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">numberOfDimensions</span><span class="p">):</span>
+        <span class="c1"># Reshape into 2-D, do the work in the first dimension, and shape into N-D</span>
+        <span class="n">T</span> <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="n">currentSizeOfT</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="o">-</span><span class="mi">1</span><span class="p">),</span> <span class="n">order</span><span class="o">=</span><span class="s1">&#39;F&#39;</span><span class="p">)</span>
+        <span class="n">T</span> <span class="o">=</span> <span class="p">(</span> <span class="n">kroneckerProductBasisFunctions</span><span class="p">[</span><span class="n">dimensionNumber</span><span class="p">]</span> <span class="p">)</span><span class="o">.</span><span class="n">T</span> <span class="o">@</span> <span class="n">T</span>
+        <span class="n">currentSizeOfT</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">kroneckerProductBasisFunctions</span><span class="p">[</span><span class="n">dimensionNumber</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">T</span> <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">currentSizeOfT</span><span class="p">,</span> <span class="n">order</span><span class="o">=</span><span class="s1">&#39;F&#39;</span><span class="p">)</span>
+        <span class="c1"># Shift dimension</span>
+        <span class="n">currentSizeOfT</span> <span class="o">=</span> <span class="n">currentSizeOfT</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span> <span class="o">+</span> <span class="p">[</span><span class="n">currentSizeOfT</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span>
+        <span class="n">T</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">rollaxis</span><span class="p">(</span><span class="n">T</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+    <span class="c1"># Return result as vector</span>
+    <span class="n">coefficients</span> <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">flatten</span><span class="p">(</span><span class="n">order</span><span class="o">=</span><span class="s1">&#39;F&#39;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">coefficients</span></div>
+
+
+<div class="viewcode-block" id="computePrecisionOfKroneckerProductBasisFunctions">
+<a class="viewcode-back" href="../../api/utils.html#utils.preprocessing_utils.computePrecisionOfKroneckerProductBasisFunctions">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">computePrecisionOfKroneckerProductBasisFunctions</span><span class="p">(</span><span class="n">kroneckerProductBasisFunctions</span><span class="p">,</span> <span class="n">B</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Compute the precision matrix ``H = W&#39; diag(B) W`` for Kronecker basis functions.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    kroneckerProductBasisFunctions : list of np.ndarray</span>
+<span class="sd">        Per-dimension basis matrices, each of shape ``(N_d, M_d)``.</span>
+<span class="sd">    B : np.ndarray</span>
+<span class="sd">        Weight field, shape ``(N_0, N_1, ..., N_{D-1})``.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    np.ndarray</span>
+<span class="sd">        Precision matrix of shape ``(prod(M_d), prod(M_d))``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1">#</span>
+    <span class="c1"># Compute</span>
+    <span class="c1">#   H = W&#39; * diag( B ) * W</span>
+    <span class="c1"># where</span>
+    <span class="c1">#   W = W{ numberOfDimensions } \kron W{ numberOfDimensions-1 } \kron ... W{ 1 }</span>
+    <span class="c1"># and B is a weight matrix</span>
+    <span class="n">numberOfDimensions</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span> <span class="n">kroneckerProductBasisFunctions</span> <span class="p">)</span>
+
+    <span class="c1"># Compute a new set of basis functions (point-wise product of each combination of pairs) so that we can</span>
+    <span class="c1"># easily compute a mangled version of the result</span>
+    <span class="n">Ms</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span> <span class="n">numberOfDimensions</span> <span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">uint32</span><span class="p">)</span> <span class="c1"># Number of basis functions in each dimension</span>
+    <span class="n">hessianKroneckerProductBasisFunctions</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">dimensionNumber</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">numberOfDimensions</span><span class="p">):</span>
+        <span class="n">M</span> <span class="o">=</span> <span class="n">kroneckerProductBasisFunctions</span><span class="p">[</span><span class="n">dimensionNumber</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">A</span> <span class="o">=</span> <span class="n">kroneckerProductBasisFunctions</span><span class="p">[</span><span class="n">dimensionNumber</span><span class="p">]</span>
+        <span class="n">hessianKroneckerProductBasisFunctions</span><span class="p">[</span><span class="n">dimensionNumber</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">kron</span><span class="p">(</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">M</span> <span class="p">)),</span> <span class="n">A</span> <span class="p">)</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">kron</span><span class="p">(</span> <span class="n">A</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">M</span><span class="p">)</span> <span class="p">)</span> <span class="p">)</span>
+        <span class="n">Ms</span><span class="p">[</span><span class="n">dimensionNumber</span><span class="p">]</span> <span class="o">=</span> <span class="n">M</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">projectKroneckerProductBasisFunctions</span><span class="p">(</span> <span class="n">hessianKroneckerProductBasisFunctions</span><span class="p">,</span> <span class="n">B</span> <span class="p">)</span>
+    <span class="n">new_shape</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">kron</span><span class="p">(</span> <span class="n">Ms</span><span class="p">,</span> <span class="p">[</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span> <span class="p">]</span> <span class="p">))</span>
+    <span class="n">new_shape</span><span class="o">.</span><span class="n">reverse</span><span class="p">()</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">new_shape</span><span class="p">)</span>
+    <span class="n">permutationIndices</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">hstack</span><span class="p">((</span><span class="mi">2</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">r_</span><span class="p">[:</span> <span class="n">numberOfDimensions</span> <span class="p">],</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">r_</span><span class="p">[:</span> <span class="n">numberOfDimensions</span> <span class="p">]</span> <span class="o">+</span><span class="mi">1</span><span class="p">))</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="n">permutationIndices</span><span class="p">)</span>
+    <span class="n">precisionMatrix</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span> <span class="p">(</span> <span class="n">np</span><span class="o">.</span><span class="n">prod</span><span class="p">(</span> <span class="n">Ms</span> <span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">prod</span><span class="p">(</span> <span class="n">Ms</span> <span class="p">)</span> <span class="p">)</span> <span class="p">)</span>
+    <span class="k">return</span> <span class="n">precisionMatrix</span></div>
+
+
+<div class="viewcode-block" id="fitBiasFieldParameters">
+<a class="viewcode-back" href="../../api/utils.html#utils.preprocessing_utils.fitBiasFieldParameters">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">fitBiasFieldParameters</span><span class="p">(</span><span class="n">image</span><span class="p">,</span> <span class="n">soft_seg</span><span class="p">,</span> <span class="n">means</span><span class="p">,</span> <span class="n">variances</span><span class="p">,</span> <span class="n">bias_field_functions</span><span class="p">,</span> <span class="n">mask</span><span class="p">,</span> <span class="n">penalty</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Estimate bias-field DCT coefficients via weighted least squares.</span>
+
+<span class="sd">    Implements Eq. 8 from Van Leemput, *Automated Model-based Bias Field</span>
+<span class="sd">    Correction of MR Images of the Brain*, IEEE TMI 1999.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    image : np.ndarray</span>
+<span class="sd">        Log-transformed image, shape ``(X, Y, Z, n_contrasts)``.</span>
+<span class="sd">    soft_seg : np.ndarray</span>
+<span class="sd">        Soft segmentation posterior probabilities for masked voxels,</span>
+<span class="sd">        shape ``(n_voxels_in_mask, n_gaussians)``.</span>
+<span class="sd">    means : np.ndarray</span>
+<span class="sd">        Gaussian means, shape ``(n_gaussians, n_contrasts, 1)``.</span>
+<span class="sd">    variances : np.ndarray</span>
+<span class="sd">        Gaussian variances/covariances,</span>
+<span class="sd">        shape ``(n_gaussians, n_contrasts, n_contrasts)``.</span>
+<span class="sd">    bias_field_functions : list of np.ndarray</span>
+<span class="sd">        DCT basis functions as returned by :func:`get_dct_basis_functions`.</span>
+<span class="sd">    mask : np.ndarray</span>
+<span class="sd">        Boolean mask of shape ``(X, Y, Z)``.</span>
+<span class="sd">    penalty : float, optional</span>
+<span class="sd">        L2 regularisation weight on the coefficients. Default is 1.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    np.ndarray</span>
+<span class="sd">        Bias-field DCT coefficients,</span>
+<span class="sd">        shape ``(prod(M_d), n_contrasts)``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Bias field correction: implements Eq. 8 in the paper</span>
+    <span class="c1">#    Van Leemput, &quot;Automated Model-based Bias Field Correction of MR Images of the Brain&quot;, IEEE TMI 1999</span>
+
+    <span class="c1">#</span>
+    <span class="n">numberOfGaussians</span> <span class="o">=</span> <span class="n">means</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">numberOfContrasts</span> <span class="o">=</span> <span class="n">means</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+    <span class="n">numberOfBasisFunctions</span> <span class="o">=</span> <span class="p">[</span><span class="n">functions</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="k">for</span> <span class="n">functions</span> <span class="ow">in</span> <span class="n">bias_field_functions</span><span class="p">]</span>
+    <span class="n">numberOf3DBasisFunctions</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">prod</span><span class="p">(</span><span class="n">numberOfBasisFunctions</span><span class="p">)</span>
+
+    <span class="c1"># Set up the linear system lhs * x = rhs</span>
+    <span class="n">precisions</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">variances</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">gaussianNumber</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">numberOfGaussians</span><span class="p">):</span>
+        <span class="n">precisions</span><span class="p">[</span><span class="n">gaussianNumber</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">inv</span><span class="p">(</span><span class="n">variances</span><span class="p">[</span><span class="n">gaussianNumber</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:])</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span>
+            <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">numberOfContrasts</span><span class="p">,</span> <span class="n">numberOfContrasts</span><span class="p">))</span>
+
+    <span class="n">lhs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">numberOf3DBasisFunctions</span> <span class="o">*</span> <span class="n">numberOfContrasts</span><span class="p">,</span>
+                    <span class="n">numberOf3DBasisFunctions</span> <span class="o">*</span> <span class="n">numberOfContrasts</span><span class="p">))</span>  <span class="c1"># left-hand side of linear system</span>
+    <span class="n">rhs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">numberOf3DBasisFunctions</span> <span class="o">*</span> <span class="n">numberOfContrasts</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>  <span class="c1"># right-hand side of linear system</span>
+    <span class="n">weightsImageBuffer</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">mask</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+    <span class="n">tmpImageBuffer</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">mask</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">contrastNumber1</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">numberOfContrasts</span><span class="p">):</span>
+        <span class="c1"># logger.debug(&#39;third time contrastNumber=%d&#39;, contrastNumber)</span>
+        <span class="n">contrast1Indices</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">numberOf3DBasisFunctions</span><span class="p">)</span> <span class="o">+</span> \
+                           <span class="n">contrastNumber1</span> <span class="o">*</span> <span class="n">numberOf3DBasisFunctions</span>
+
+        <span class="n">tmp</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">soft_seg</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+        <span class="k">for</span> <span class="n">contrastNumber2</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">numberOfContrasts</span><span class="p">):</span>
+            <span class="n">contrast2Indices</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">numberOf3DBasisFunctions</span><span class="p">)</span> <span class="o">+</span> \
+                               <span class="n">contrastNumber2</span> <span class="o">*</span> <span class="n">numberOf3DBasisFunctions</span>
+
+            <span class="n">classSpecificWeights</span> <span class="o">=</span> <span class="n">soft_seg</span> <span class="o">*</span> <span class="n">precisions</span><span class="p">[:,</span> <span class="n">contrastNumber1</span><span class="p">,</span> <span class="n">contrastNumber2</span><span class="p">]</span>
+            <span class="n">weights</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">classSpecificWeights</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+
+            <span class="c1"># Build up stuff needed for rhs</span>
+            <span class="n">predicted</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">classSpecificWeights</span> <span class="o">*</span> <span class="n">means</span><span class="p">[:,</span> <span class="n">contrastNumber2</span><span class="p">],</span> <span class="mi">1</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="n">weights</span> <span class="o">+</span> <span class="n">eps</span><span class="p">)</span>
+            <span class="n">residue</span> <span class="o">=</span> <span class="n">image</span><span class="p">[</span><span class="n">mask</span><span class="p">,</span> <span class="n">contrastNumber2</span><span class="p">]</span> <span class="o">-</span> <span class="n">predicted</span>
+            <span class="n">tmp</span> <span class="o">+=</span> <span class="n">weights</span> <span class="o">*</span> <span class="n">residue</span>
+
+            <span class="c1"># Fill in submatrix of lhs</span>
+            <span class="n">weightsImageBuffer</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span> <span class="o">=</span> <span class="n">weights</span>
+            <span class="n">lhs</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ix_</span><span class="p">(</span><span class="n">contrast1Indices</span><span class="p">,</span> <span class="n">contrast2Indices</span><span class="p">)]</span> \
+                <span class="o">=</span> <span class="n">computePrecisionOfKroneckerProductBasisFunctions</span><span class="p">(</span><span class="n">bias_field_functions</span><span class="p">,</span>
+                                                                   <span class="n">weightsImageBuffer</span><span class="p">)</span>
+
+        <span class="n">tmpImageBuffer</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span> <span class="o">=</span> <span class="n">tmp</span>
+        <span class="n">rhs</span><span class="p">[</span><span class="n">contrast1Indices</span><span class="p">]</span> <span class="o">=</span> <span class="n">projectKroneckerProductBasisFunctions</span><span class="p">(</span><span class="n">bias_field_functions</span><span class="p">,</span>
+                                                                      <span class="n">tmpImageBuffer</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+
+    <span class="c1"># Solve the linear system x = lhs \ rhs</span>
+    <span class="n">solution</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span><span class="n">lhs</span> <span class="o">+</span> <span class="n">penalty</span><span class="o">*</span><span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="n">lhs</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="n">rhs</span><span class="p">)</span>
+
+    <span class="c1">#</span>
+    <span class="n">biasFieldCoefficients</span> <span class="o">=</span> <span class="n">solution</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="n">numberOfContrasts</span><span class="p">,</span> <span class="n">numberOf3DBasisFunctions</span><span class="p">))</span><span class="o">.</span><span class="n">transpose</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">biasFieldCoefficients</span></div>
+
+
+<div class="viewcode-block" id="getBiasFields">
+<a class="viewcode-back" href="../../api/utils.html#utils.preprocessing_utils.getBiasFields">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">getBiasFields</span><span class="p">(</span><span class="n">biasFieldCoefficients</span><span class="p">,</span> <span class="n">biasFieldBasisFunctions</span><span class="p">,</span> <span class="n">mask</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Reconstruct bias fields from DCT coefficients and basis functions.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    biasFieldCoefficients : np.ndarray</span>
+<span class="sd">        DCT coefficients, shape ``(prod(M_d), n_contrasts)``.</span>
+<span class="sd">    biasFieldBasisFunctions : list of np.ndarray</span>
+<span class="sd">        Per-dimension DCT basis matrices as returned by</span>
+<span class="sd">        :func:`get_dct_basis_functions`.</span>
+<span class="sd">    mask : np.ndarray, optional</span>
+<span class="sd">        Boolean spatial mask; if provided, the bias field is zeroed outside</span>
+<span class="sd">        the mask.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    np.ndarray</span>
+<span class="sd">        Reconstructed bias fields (log-scale),</span>
+<span class="sd">        shape ``(X, Y, Z, n_contrasts)``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1">#</span>
+    <span class="n">numberOfContrasts</span> <span class="o">=</span> <span class="n">biasFieldCoefficients</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+    <span class="n">imageSize</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span> <span class="p">[</span> <span class="n">functions</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">functions</span> <span class="ow">in</span> <span class="n">biasFieldBasisFunctions</span> <span class="p">]</span> <span class="p">)</span>
+    <span class="n">biasFields</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span> <span class="n">imageSize</span> <span class="o">+</span> <span class="p">(</span><span class="n">numberOfContrasts</span><span class="p">,),</span> <span class="n">order</span><span class="o">=</span><span class="s1">&#39;F&#39;</span> <span class="p">)</span>
+    <span class="k">for</span> <span class="n">contrastNumber</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span> <span class="n">numberOfContrasts</span> <span class="p">):</span>
+        <span class="n">biasField</span> <span class="o">=</span> <span class="n">backprojectKroneckerProductBasisFunctions</span><span class="p">(</span>
+              <span class="n">biasFieldBasisFunctions</span><span class="p">,</span> <span class="n">biasFieldCoefficients</span><span class="p">[</span> <span class="p">:,</span> <span class="n">contrastNumber</span> <span class="p">]</span> <span class="p">)</span>
+        <span class="k">if</span> <span class="n">mask</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">biasField</span> <span class="o">*=</span> <span class="n">mask</span>
+        <span class="n">biasFields</span><span class="p">[</span> <span class="p">:,</span> <span class="p">:,</span> <span class="p">:,</span> <span class="n">contrastNumber</span> <span class="p">]</span> <span class="o">=</span> <span class="n">biasField</span>
+
+    <span class="k">return</span> <span class="n">biasFields</span></div>
+
+
+<div class="viewcode-block" id="undoLogTransformAndBiasField">
+<a class="viewcode-back" href="../../api/utils.html#utils.preprocessing_utils.undoLogTransformAndBiasField">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">undoLogTransformAndBiasField</span><span class="p">(</span><span class="n">imageBuffers</span><span class="p">,</span> <span class="n">biasFields</span><span class="p">,</span> <span class="n">mask</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Undo the log transform and divide out the estimated bias field.</span>
+
+<span class="sd">    Clamps bias-field values outside the mask to the in-mask range (with a</span>
+<span class="sd">    ``log(2)`` margin) to prevent extrapolation artefacts.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    imageBuffers : np.ndarray</span>
+<span class="sd">        Log-transformed image, shape ``(X, Y, Z, n_contrasts)``.</span>
+<span class="sd">    biasFields : np.ndarray</span>
+<span class="sd">        Log-scale bias fields, shape ``(X, Y, Z, n_contrasts)``.</span>
+<span class="sd">    mask : np.ndarray</span>
+<span class="sd">        Boolean spatial mask, shape ``(X, Y, Z)``.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    expImageBuffers : np.ndarray</span>
+<span class="sd">        Bias-corrected image in intensity space,</span>
+<span class="sd">        shape ``(X, Y, Z, n_contrasts)``.</span>
+<span class="sd">    expBiasFields : np.ndarray</span>
+<span class="sd">        Bias field in intensity space, shape ``(X, Y, Z, n_contrasts)``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1">#</span>
+    <span class="n">expBiasFields</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">biasFields</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">order</span><span class="o">=</span><span class="s1">&#39;F&#39;</span><span class="p">)</span>
+    <span class="n">numberOfContrasts</span> <span class="o">=</span> <span class="n">imageBuffers</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+    <span class="k">for</span> <span class="n">contrastNumber</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">numberOfContrasts</span><span class="p">):</span>
+        <span class="c1"># We&#39;re computing it also outside of the mask, but clip the intensities there to the range</span>
+        <span class="c1"># observed inside the mask (with some margin) to avoid crazy extrapolation values</span>
+        <span class="n">biasField</span> <span class="o">=</span> <span class="n">biasFields</span><span class="p">[:,</span> <span class="p">:,</span> <span class="p">:,</span> <span class="n">contrastNumber</span><span class="p">]</span>
+        <span class="n">clippingMargin</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+        <span class="n">clippingMin</span> <span class="o">=</span> <span class="n">biasField</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span><span class="o">.</span><span class="n">min</span><span class="p">()</span> <span class="o">-</span> <span class="n">clippingMargin</span>
+        <span class="n">clippingMax</span> <span class="o">=</span> <span class="n">biasField</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span><span class="o">.</span><span class="n">max</span><span class="p">()</span> <span class="o">+</span> <span class="n">clippingMargin</span>
+        <span class="n">biasField</span><span class="p">[</span><span class="n">biasField</span> <span class="o">&lt;</span> <span class="n">clippingMin</span><span class="p">]</span> <span class="o">=</span> <span class="n">clippingMin</span>
+        <span class="n">biasField</span><span class="p">[</span><span class="n">biasField</span> <span class="o">&gt;</span> <span class="n">clippingMax</span><span class="p">]</span> <span class="o">=</span> <span class="n">clippingMax</span>
+        <span class="n">expBiasFields</span><span class="p">[:,</span> <span class="p">:,</span> <span class="p">:,</span> <span class="n">contrastNumber</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">biasField</span><span class="p">)</span>
+
+    <span class="c1">#</span>
+    <span class="n">expImageBuffers</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">imageBuffers</span><span class="p">)</span> <span class="o">/</span> <span class="n">expBiasFields</span>
+
+    <span class="c1">#</span>
+    <span class="k">return</span> <span class="n">expImageBuffers</span><span class="p">,</span> <span class="n">expBiasFields</span></div>
+
+
+<div class="viewcode-block" id="getGaussianLikelihoods">
+<a class="viewcode-back" href="../../api/utils.html#utils.preprocessing_utils.getGaussianLikelihoods">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">getGaussianLikelihoods</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">mean</span><span class="p">,</span> <span class="n">variance</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Compute univariate Gaussian likelihoods for each voxel and class.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    data : np.ndarray</span>
+<span class="sd">        Observed log-intensities, shape ``(n_contrasts, n_voxels)``.</span>
+<span class="sd">    mean : np.ndarray</span>
+<span class="sd">        Class mean, shape ``(n_contrasts, 1)``.</span>
+<span class="sd">    variance : np.ndarray</span>
+<span class="sd">        Per-contrast variance, shape ``(n_contrasts,)``.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    np.ndarray</span>
+<span class="sd">        Likelihood values, shape ``(n_voxels, n_contrasts)``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">squared_mahalanobis_dist</span> <span class="o">=</span> <span class="p">(</span><span class="n">data</span> <span class="o">-</span> <span class="n">mean</span><span class="p">)</span><span class="o">**</span> <span class="mi">2</span> <span class="o">/</span> <span class="n">variance</span>
+    <span class="n">scaling</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span> <span class="o">*</span> <span class="n">variance</span><span class="p">)</span> <span class="o">**</span> <span class="p">(</span><span class="mi">1</span> <span class="o">/</span> <span class="mi">2</span><span class="p">)</span>
+    <span class="n">gaussianLikelihoods</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="mf">0.5</span> <span class="o">*</span> <span class="n">squared_mahalanobis_dist</span><span class="p">)</span> <span class="o">*</span> <span class="n">scaling</span>
+    <span class="k">return</span> <span class="n">gaussianLikelihoods</span><span class="o">.</span><span class="n">T</span></div>
+
+
+<div class="viewcode-block" id="getGaussianPosteriors">
+<a class="viewcode-back" href="../../api/utils.html#utils.preprocessing_utils.getGaussianPosteriors">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">getGaussianPosteriors</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">classPriors</span><span class="p">,</span> <span class="n">means</span><span class="p">,</span> <span class="n">variances</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Compute normalised Gaussian posterior probabilities for each voxel and class.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    data : np.ndarray</span>
+<span class="sd">        Observed log-intensities for masked voxels,</span>
+<span class="sd">        shape ``(n_voxels, n_contrasts)``.</span>
+<span class="sd">    classPriors : np.ndarray</span>
+<span class="sd">        Class prior probabilities, shape ``(n_voxels, n_classes)``.</span>
+<span class="sd">    means : np.ndarray</span>
+<span class="sd">        Class means, shape ``(n_classes, n_contrasts, 1)``.</span>
+<span class="sd">    variances : np.ndarray</span>
+<span class="sd">        Per-class, per-contrast variances, shape ``(n_classes, n_contrasts)``.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    gaussianPosteriors : np.ndarray</span>
+<span class="sd">        Normalised posteriors, shape ``(n_voxels, n_classes)``.</span>
+<span class="sd">    minLogLikelihood : float</span>
+<span class="sd">        Negative log-likelihood of the data under the current model.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">numberOfClasses</span> <span class="o">=</span> <span class="n">classPriors</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+    <span class="n">numberOfVoxels</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+    <span class="n">gaussianPosteriors</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">numberOfVoxels</span><span class="p">,</span> <span class="n">numberOfClasses</span><span class="p">),</span> <span class="n">order</span><span class="o">=</span><span class="s1">&#39;F&#39;</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">classNumber</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">numberOfClasses</span><span class="p">):</span>
+        <span class="n">classPrior</span> <span class="o">=</span> <span class="n">classPriors</span><span class="p">[:,</span> <span class="n">classNumber</span><span class="p">]</span>
+        <span class="n">mean</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">expand_dims</span><span class="p">(</span><span class="n">means</span><span class="p">[</span><span class="n">classNumber</span><span class="p">,</span> <span class="p">:],</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">variance</span> <span class="o">=</span> <span class="n">variances</span><span class="p">[</span><span class="n">classNumber</span><span class="p">,</span> <span class="p">:]</span>
+
+        <span class="n">gaussianLikelihoods</span> <span class="o">=</span> <span class="n">getGaussianLikelihoods</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">mean</span><span class="p">,</span> <span class="n">variance</span><span class="p">)</span>
+        <span class="n">gaussianPosteriors</span><span class="p">[:,</span> <span class="n">classNumber</span><span class="p">]</span> <span class="o">=</span> <span class="n">gaussianLikelihoods</span> <span class="o">*</span> <span class="n">classPrior</span>
+
+    <span class="n">normalizer</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">gaussianPosteriors</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span> <span class="o">+</span> <span class="n">eps</span>
+    <span class="n">gaussianPosteriors</span> <span class="o">=</span> <span class="n">gaussianPosteriors</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">expand_dims</span><span class="p">(</span><span class="n">normalizer</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+
+    <span class="n">minLogLikelihood</span> <span class="o">=</span> <span class="o">-</span><span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">normalizer</span><span class="p">))</span>
+
+    <span class="k">return</span> <span class="n">gaussianPosteriors</span><span class="p">,</span> <span class="n">minLogLikelihood</span></div>
+
+
+<div class="viewcode-block" id="bias_field_corr">
+<a class="viewcode-back" href="../../api/utils.html#utils.preprocessing_utils.bias_field_corr">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">bias_field_corr</span><span class="p">(</span><span class="n">init_image</span><span class="p">,</span> <span class="n">init_seg</span><span class="p">,</span> <span class="n">penalty</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">patience</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">VERBOSE</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">filter_exceptions</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Perform iterative MRI bias-field correction using a Gaussian mixture model.</span>
+
+<span class="sd">    Estimates and removes the multiplicative bias field from an MRI volume</span>
+<span class="sd">    using DCT basis functions and EM-style updates (Van Leemput, TMI 1999).</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    init_image : np.ndarray</span>
+<span class="sd">        Input MRI volume, shape ``(X, Y, Z)`` or ``(X, Y, Z, 1)``.</span>
+<span class="sd">    init_seg : np.ndarray</span>
+<span class="sd">        Soft segmentation (class posteriors) aligned with the image,</span>
+<span class="sd">        shape ``(X, Y, Z, n_labels)``.</span>
+<span class="sd">    penalty : float, optional</span>
+<span class="sd">        L2 regularisation weight on the DCT coefficients. Default is 0</span>
+<span class="sd">        (no regularisation).</span>
+<span class="sd">    patience : int, optional</span>
+<span class="sd">        Stop after this many consecutive iterations with relative</span>
+<span class="sd">        log-likelihood improvement &lt; 1e-3. Default is 3.</span>
+<span class="sd">    VERBOSE : bool, optional</span>
+<span class="sd">        If ``True``, print iteration progress and total runtime. Default</span>
+<span class="sd">        is ``True``.</span>
+<span class="sd">    filter_exceptions : bool, optional</span>
+<span class="sd">        If ``True``, return ``(None, None)`` when the log-likelihood is NaN</span>
+<span class="sd">        instead of raising. Default is ``True``.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    image_corr : np.ndarray or None</span>
+<span class="sd">        Bias-corrected image, same spatial shape as ``init_image``, or</span>
+<span class="sd">        ``None`` if NaN was encountered and ``filter_exceptions=True``.</span>
+<span class="sd">    bias_field : np.ndarray or None</span>
+<span class="sd">        Estimated multiplicative bias field, same shape, or ``None``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">init_image</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">==</span> <span class="mi">3</span><span class="p">:</span> <span class="n">init_image</span> <span class="o">=</span> <span class="n">init_image</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">newaxis</span><span class="p">]</span>
+    <span class="n">init_image_log</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">init_image</span> <span class="o">+</span> <span class="mf">1e-5</span><span class="p">)</span>
+
+    <span class="n">init_mask</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">init_seg</span><span class="p">,</span> <span class="n">axis</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span>
+    <span class="n">mask</span> <span class="o">=</span> <span class="n">init_mask</span> <span class="c1"># mask, crop_coord = image_utils.crop_label(init_mask, margin=10)</span>
+    <span class="n">processing_shape</span> <span class="o">=</span> <span class="n">mask</span><span class="o">.</span><span class="n">shape</span>
+
+    <span class="n">image_log</span> <span class="o">=</span> <span class="n">init_image_log</span> <span class="c1"># image_log = image_utils.apply_crop(init_image_log, crop_coord)</span>
+    <span class="n">seg</span> <span class="o">=</span> <span class="n">init_seg</span> <span class="c1"># seg = image_utils.apply_crop(init_seg, crop_coord)</span>
+
+
+    <span class="n">basis_functions</span> <span class="o">=</span> <span class="n">get_dct_basis_functions</span><span class="p">(</span><span class="n">processing_shape</span><span class="p">,</span> <span class="p">[</span><span class="mi">50</span><span class="p">]</span><span class="o">*</span><span class="mi">3</span><span class="p">)</span>
+    <span class="n">num_coeff</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">prod</span><span class="p">([</span><span class="n">b</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="n">basis_functions</span><span class="p">]))</span>
+    <span class="n">coeff</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">num_coeff</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+    <span class="n">llh_last</span> <span class="o">=</span> <span class="mi">1</span>
+    <span class="k">if</span> <span class="n">VERBOSE</span><span class="p">:</span> <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;# Bias field correction #&#39;</span><span class="p">)</span>
+
+    <span class="n">init_t</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+    <span class="n">it_break</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="k">for</span> <span class="n">it</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">100</span><span class="p">):</span>
+        <span class="n">bias_field_log</span> <span class="o">=</span> <span class="n">getBiasFields</span><span class="p">(</span><span class="n">coeff</span><span class="p">,</span> <span class="n">basis_functions</span><span class="p">)</span>
+        <span class="n">image_log_corr</span> <span class="o">=</span> <span class="n">image_log</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span> <span class="o">-</span> <span class="n">bias_field_log</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span>
+        <span class="n">image_posteriors</span> <span class="o">=</span> <span class="n">seg</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span>
+
+        <span class="n">u_j</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">image_posteriors</span> <span class="o">*</span> <span class="n">image_log_corr</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">image_posteriors</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">s_j</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">image_posteriors</span> <span class="o">*</span> <span class="p">(</span><span class="n">image_log_corr</span><span class="o">-</span><span class="n">u_j</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">image_posteriors</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">u_j</span> <span class="o">=</span> <span class="n">u_j</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">s_j</span> <span class="o">=</span> <span class="n">s_j</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+
+        <span class="n">_</span><span class="p">,</span> <span class="n">llh</span> <span class="o">=</span> <span class="n">getGaussianPosteriors</span><span class="p">(</span><span class="n">image_log_corr</span><span class="p">,</span> <span class="n">image_posteriors</span><span class="p">,</span> <span class="n">u_j</span><span class="p">,</span> <span class="n">s_j</span><span class="p">)</span>
+        <span class="n">coeff</span> <span class="o">=</span> <span class="n">fitBiasFieldParameters</span><span class="p">(</span><span class="n">image_log</span><span class="p">,</span> <span class="n">image_posteriors</span><span class="p">,</span> <span class="n">u_j</span><span class="p">,</span> <span class="n">s_j</span><span class="p">,</span> <span class="n">basis_functions</span><span class="p">,</span> <span class="n">mask</span><span class="p">,</span> <span class="n">penalty</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">llh</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">filter_exceptions</span><span class="p">:</span>
+                <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;    [!] Log-likelihood is nan, please check the images.&#39;</span><span class="p">)</span>
+                <span class="k">return</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;    [!] Log-likelihood is nan, please check the images.&#39;</span><span class="p">)</span>
+
+        <span class="n">improv</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">((</span><span class="n">llh</span> <span class="o">-</span> <span class="n">llh_last</span><span class="p">)</span> <span class="o">/</span> <span class="n">llh_last</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">VERBOSE</span><span class="p">:</span> <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;          &#39;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">it</span><span class="p">)</span> <span class="o">+</span> <span class="s1">&#39;. Loglikelihood improvement: &#39;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">improv</span><span class="p">))</span>
+        <span class="n">llh_last</span> <span class="o">=</span> <span class="n">llh</span>
+        <span class="k">if</span> <span class="n">improv</span> <span class="o">&lt;</span> <span class="mf">1e-3</span><span class="p">:</span>
+            <span class="n">it_break</span> <span class="o">+=</span> <span class="mi">1</span>
+            <span class="k">if</span> <span class="n">it_break</span> <span class="o">&gt;</span> <span class="n">patience</span><span class="p">:</span>
+                <span class="k">break</span>
+
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">it_break</span> <span class="o">=</span> <span class="mi">0</span>
+
+    <span class="k">if</span> <span class="n">VERBOSE</span><span class="p">:</span> <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;### Total running time: &#39;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">-</span> <span class="n">init_t</span><span class="p">))</span>
+
+    <span class="n">bias_field_log</span> <span class="o">=</span> <span class="n">getBiasFields</span><span class="p">(</span><span class="n">coeff</span><span class="p">,</span> <span class="n">basis_functions</span><span class="p">)</span>
+    <span class="n">image_corr</span><span class="p">,</span> <span class="n">bias_field</span> <span class="o">=</span> <span class="n">undoLogTransformAndBiasField</span><span class="p">(</span><span class="n">image_log</span><span class="p">,</span> <span class="n">bias_field_log</span><span class="p">,</span> <span class="n">mask</span><span class="p">)</span>
+    <span class="n">image_corr</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">image_corr</span><span class="p">)]</span> <span class="o">=</span> <span class="mi">0</span>
+
+    <span class="c1">#undo cropping</span>
+    <span class="c1"># fi_image_corr = np.zeros(vol_shape)</span>
+    <span class="c1"># fi_image_corr[crop_coord[0][0]: crop_coord[0][1],</span>
+    <span class="c1">#               crop_coord[1][0]: crop_coord[1][1],</span>
+    <span class="c1">#               crop_coord[2][0]: crop_coord[2][1]] = np.squeeze(image_corr)</span>
+    <span class="c1"># fi_bias_field = np.zeros(vol_shape)</span>
+    <span class="c1"># fi_bias_field[crop_coord[0][0]: crop_coord[0][1],</span>
+    <span class="c1">#               crop_coord[1][0]: crop_coord[1][1],</span>
+    <span class="c1">#               crop_coord[2][0]: crop_coord[2][1]] = np.squeeze(bias_field)</span>
+
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="n">image_corr</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="n">bias_field</span><span class="p">)</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Adrià Casamitjana, Agustín Cartaya Lathulerie, Clara Lisazo, Rachika E. Hamadache.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
