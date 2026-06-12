@@ -887,7 +887,6 @@ class USLRLinear(LongitudinalProcessor):
 
         return exit_dict
 
-
     @staticmethod
     def init_st2_lineal(session_list: list[object], input_dir: str, eps: float = 1e-6):
         """Load pairwise rigid affines and compute their log-space representations.
@@ -1665,9 +1664,9 @@ class USLRDeformable(LongitudinalProcessor):
             im_proxy.uncache()
 
             seg_arr = np.array(seg_proxy.dataobj)
-            onehot_arr = one_hot_encoding(
-                seg_arr, categories=self.labels_lut
-            ).astype("float")
+            onehot_arr = one_hot_encoding(seg_arr, categories=self.labels_lut).astype(
+                "float"
+            )
             onehot_proxy = nib.Nifti1Image(
                 onehot_arr, np.linalg.inv(aff_arr) @ seg_proxy.affine
             )
@@ -1866,9 +1865,7 @@ class USLRDeformable(LongitudinalProcessor):
                 )
                 filepath = join(DIR_PIPELINES["nicgiprep-long"], filename)
                 create_dir(dirname(filepath))
-                save_volume(
-                    T_latent[sess_id].astype("float32"), svf_v2r, path=filepath
-                )
+                save_volume(T_latent[sess_id].astype("float32"), svf_v2r, path=filepath)
 
             self._update_subject_layout(subject)
 
