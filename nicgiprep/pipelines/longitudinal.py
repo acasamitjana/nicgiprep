@@ -5,21 +5,18 @@ Provides base and specialised pipeline classes that wrap PyBIDS layout queries,
 coordinate volumetric resampling, label fusion, and longitudinal volume tracking.
 """
 
-import pdb
 import traceback
 from typing import Optional, Literal
-from os.path import isfile, join, dirname, basename, exists
-from os import makedirs
+from os.path import join, dirname, exists
 from joblib import delayed, Parallel
 import itertools
 
 from bids.layout import BIDSLayout
-from sympy.tensor.array import ndim_array
+import torch
 from torch import nn
 from skimage.morphology import ball, binary_dilation
 from scipy.optimize import linprog
 from sklearn.linear_model import LinearRegression
-import tensorflow as tf
 import numpy as np
 import nibabel as nib
 import pandas as pd
@@ -28,15 +25,14 @@ import surfa as sf
 
 from setup import *
 from nicgiprep.pipelines.base import Processor
-from nicgiprep.models import InstanceRigidModelLOG, ST2Nonlinear
-from nicgiprep.callbacks import *
+from nicgiprep.models import InstanceRigidModelLOG
+# from nicgiprep.callbacks import *
 from nicgiprep.utils.preprocessing_utils import *
 from nicgiprep.utils.label_utils import SYNTHSEG_APARC_LUT
-from nicgiprep.utils.io_utils import create_dir, save_volume, remove_dir, ProcessResult
-from nicgiprep.utils.synthmorph_utils import synthmorph_register, integrate_svf, compose_transforms
+from nicgiprep.utils.io_utils import create_dir, save_volume, ProcessResult
+from nicgiprep.utils.synthmorph_utils import synthmorph_register, integrate_svf
 from nicgiprep.utils.def_utils import vol_resample_fast, network_space, create_empty_template, compute_jacobian, getM
-from nicgiprep.utils.fn_utils import one_hot_encoding, rescale_voxel_size, compute_centroids_ras, gaussian_antialiasing
-from nicgiprep.utils.synthmorph_utils import warp
+from nicgiprep.utils.fn_utils import one_hot_encoding,  compute_centroids_ras, gaussian_antialiasing
 
 
 
@@ -57,33 +53,74 @@ class LongitudinalProcessor(Processor):
 
         - ``aff_long_ent`` — entities for subject-to-template affine files.
         - ``im_long_ent`` — entities for linearly registered images.
-        - ``mask_long_entities`` — entities for brain masks in USLR space.
-        - ``svf_long_entities`` — entities for nonlinear SVF graph files.
-        - ``template_long_entities`` — entities for the linear template.
+        - ``mask_long_ent`` — entities for brain masks in USLR space.
+        - ``svf_long_ent`` — entities for nonlinear SVF graph files.
+        - ``template_long_ent`` — entities for the linear template.
         - ``net_shape`` / ``svf_shape`` — default network and SVF spatial shapes.
-        - ``net_v2r_entities`` / ``svf_v2r_entities`` — v2r affine file entities.
+        - ``net_v2r_ent`` / ``svf_v2r_ent`` — v2r affine file entities.
         """
         super()._build_processor()
-        self.long_entities = {'space': 'subject', 'acquisition': '1', 'extension': 'nii.gz'}
+        self.long_ent = {'space': 'subject', 'acquisition': '1', 'extension': 'nii.gz'}
         self.aff_long_ent = {'desc': 'raw2temp', 'suffix': 'aff', 'extension': '.npy'}
-        self.im_long_ent = {'suffix': 'T1w', **self.long_entities}
-        self.mask_long_entities = {'suffix': 'T1wmask', **self.long_entities}
-        self.svf_long_entities = {'suffix': 'svf', 'extension': 'nii.gz', 'space': 'uslr', 'scope': 'nonlin'}
-        self.template_long_entities = {'desc': 'template', 'suffix': 'T1w', **self.long_entities}
+        self.im_long_ent = {'suffix': 'T1w', **self.long_ent}
+        self.mask_long_ent = {'suffix': 'T1wmask', **self.long_ent}
+        self.svf_long_ent = {'space': 'subject', 'suffix': 'svf', 'extension': 'nii.gz', 'datatype': 'utils'}
+        self.template_long_ent = {'desc': 'template', 'suffix': 'T1w', **self.long_ent}
 
         self.net_shape = (192, 192, 192)
         self.svf_shape = (96, 96, 96)
 
-        self.net_v2r_entities = {'desc': 'template', 'suffix': 'v2r', 'extension': '.npy', 'space': 'subject'}
-        self.svf_v2r_entities = {'desc': 'svf', 'suffix': 'v2r', 'extension': '.npy', 'space': 'subject'}
+        self.v2r_ent = {'datatype': 'utils', 'suffix': 'v2r', 'extension': '.npy', 'space': 'subject'}
+        self.net_v2r_ent = {'desc': 'template', **self.v2r_ent}
+        self.svf_v2r_ent = {'desc': 'svf', **self.v2r_ent}
 
         self.tmp_dir = join(self.tmp_dir, 'long')
+
+        self.pipeline_dir = 'nicgiprep-long'
 
 
     def _name(self) -> str:
         """Return the display name of this pipeline."""
         return 'LongitudinalProcessor'
 
+
+    def _get_sessions_file(self, subject: str) -> pd.DataFrame | ProcessResult:
+        sess_fpath = join(DIR_PIPELINES[self.pipeline_dir], 'sub-' + subject, 'sub-' + subject + '_sessions.tsv')
+        if exists(join(DIR_PIPELINES[self.pipeline_dir], 'sub-' + subject, 'sub-' + subject + '_sessions.tsv')):
+            return pd.read_csv(sess_fpath, sep='\t')
+
+        sess_df = {'session_id': [], 'orig_t1w': [], 'orig_seg': []}
+        im_ent = {'scope': 'nicgiprep-cross', 'extension': 'nii.gz', 'suffix': 'T1w'}
+        for sess_id in self.bids_loader.get_session(subject=subject):
+            im_files = self.bids_loader.get(**{'subject': subject, 'session': sess_id, **im_ent})
+            if len(im_files) == 0:
+                return ProcessResult(exit_code=-1,
+                                     message='[error] no T1w files are found for subject: ' + subject + ' and session '
+                                             + str(sess_id) + '. Please run nicgiprep-cross first.')
+            elif len(im_files) > 1:
+                idx = np.random.choice(len(im_files), 1)
+                im_file = im_files[idx]
+            else:
+                im_file = im_files[0]
+
+            seg_ent = im_file.get_entities()
+            seg_ent['suffix'] = ['T1wdseg', 'dseg']
+            seg_files = self.bids_loader.get(**{'subject': subject, 'session': sess_id, **seg_ent})
+            if len(im_files) == 0:
+                return ProcessResult(exit_code=-1,
+                                     message = '[error] no segmentation files are found for subject: ' + subject +
+                                               ' and session ' + str(sess_id) + '. Please run nicgiprep-cross first.')
+
+            seg_file = seg_files[0]
+
+            sess_df['session_id'] += [sess_id]
+            sess_df['orig_t1w'] += [im_file.path]
+            sess_df['orig_seg'] += [seg_file.path]
+
+        sess_df = pd.DataFrame(sess_df)
+        sess_df.to_csv(sess_fpath, sep='\t', index=False)
+
+        return sess_df
 
     def _get_session_time(self,
                           subject: str,
@@ -175,7 +212,6 @@ class LongitudinalProcessor(Processor):
         return tp_id[np.argmin(tp_time)]
 
 
-
 class USLRLinear(LongitudinalProcessor):
     """Rigid longitudinal registration via the USLR spanning-tree algorithm.
 
@@ -194,9 +230,11 @@ class USLRLinear(LongitudinalProcessor):
         create_dir(self.tmp_dir)
         self.pipeline_dir = 'nicgiprep-long'
 
-    def _check_running_subject(self, subject: str,
+    def _check_running_subject(self,
+                               subject: str,
                                session_list: list[str],
-                               force_flag: bool = False) -> ProcessResult:
+                               force_flag: bool = False,
+                               ) -> ProcessResult:
 
         """Determine the processing checkpoint for a subject.
 
@@ -214,7 +252,7 @@ class USLRLinear(LongitudinalProcessor):
         dict
             ``{'exit_code': int, 'message': str}``.  Exit codes:
             ``-1`` error, ``0`` run full pipeline, ``1`` skip,
-            ``2`` graph done, ``3`` template done, ``4`` eTIV done,
+            ``2`` graph done,
             ``5`` single timepoint.
         """
         # do not run if only 1 timepoint available
@@ -225,10 +263,6 @@ class USLRLinear(LongitudinalProcessor):
         elif len(session_list) == 0:
             return ProcessResult(exit_code=1, message='[done] It has 0 sessions available. Skipping.\n')
 
-        # do not run if some timepoint is not properly segmented
-        elif any([self._get_data(**{'subject': subject, 'session': t, **self.seg_entities})
-                  is None for t in session_list]):
-            return ProcessResult(exit_code=-1, message='[error] not all sessions are correctly segmented. Please check.\n')
 
         # do not run if it has already been processed
         elif (self._get_data(**{'subject': subject, **self.aff_long_ent}, curr_len=len(session_list), verbose=False)
@@ -240,7 +274,6 @@ class USLRLinear(LongitudinalProcessor):
                 return ProcessResult(exit_code=1,
                                      message='[done] subject already processed. Check the results in [..]/'
                                              + self.pipeline_dir + '/sub-' + subject + '.\n')
-
 
         # need to entire pipeline
         else:
@@ -306,16 +339,14 @@ class USLRLinear(LongitudinalProcessor):
 
         np.save(affine_filepath, aff)
 
-    def _get_centroids(self, subject: str, session_list: list[str]):
+    def _get_centroids(self, sess_df: pd.DataFrame):
         """Compute RAS centroids (mm) for each ROI segmented on all the available sessions .
         Each segmentation provides N_label ROIs.
 
         Parameters
         ----------
-        subject : str
-            Subject ID.
-        session_list : list of str
-            Session IDs to include
+        sess_df : pd.DataFrame
+            Dataframe with session_id as index and orig_t1w and orig_seg as columns
 
         Returns
         -------
@@ -326,13 +357,13 @@ class USLRLinear(LongitudinalProcessor):
         """
         centroid_dict = {}
         ok = {}
-        for sess_id in session_list:
-            seg_file = self._get_data(**{**self.seg_entities, 'subject': subject, 'session': sess_id})
-            centroid_dict[sess_id], ok[sess_id] = compute_centroids_ras(seg_file.path, labels_registration)
+        for sess_id, sess_files in sess_df.iterrows():
+            seg_filepath = sess_files['orig_seg']
+            centroid_dict[sess_id], ok[sess_id] = compute_centroids_ras(seg_filepath, labels_registration)
 
         return centroid_dict, ok
 
-    def _compute_cog(self, subject: str, session_list: list[str]) -> dict:
+    def _compute_cog(self, sess_df: pd.DataFrame) -> dict:
         """Compute and save a centring-to-COG transform for each session.
 
         The centre-of-gravity (COG) is computed from the non-zero voxels of
@@ -340,16 +371,14 @@ class USLRLinear(LongitudinalProcessor):
 
         Parameters
         ----------
-        subject : str
-            Subject ID.
-        session_list : list of str
-            Session IDs to include.
+        sess_df : pd.DataFrame
+            Dataframe with session_id as index and orig_t1w and orig_seg as columns
         """
         T_cog_d = {}
-        for sess_id in session_list:
-            seg_file = self._get_data(**{**self.seg_entities, 'subject': subject, 'session': sess_id})
+        for sess_id, sess_files in sess_df.iterrows():
+            seg_filepath = sess_files['orig_seg']
 
-            seg_proxy = nib.load(seg_file.path)
+            seg_proxy = nib.load(seg_filepath)
             data = np.array(seg_proxy.dataobj)
             aux = np.where(data>0)
             i, j, k = np.median(aux[0]), np.median(aux[1]), np.median(aux[2])
@@ -358,33 +387,31 @@ class USLRLinear(LongitudinalProcessor):
             T_cog[:3, -1] = -ras_cog[:3]
             T_cog_d[sess_id] = T_cog
 
-        return T_cog
+        return T_cog_d
 
-    def _init_graph(self, subject: str, session_list: list[str], def_dir: str, force_flag: bool=False) -> dict:
+    def _init_graph(self,  sess_df: pd.DataFrame, def_dir: str, force_flag: bool=False) -> dict:
         """Compute pairwise rigid affines between all timepoints via centroid SVD.
 
         Parameters
         ----------
-        subject : str
-            Subject ID.
-        session_list : list of str
-            Session IDs to include.
+        sess_df : pd.DataFrame
+            DataFrame with session_id as index and orig_t1w and orig_seg as columns
         def_dir : str
             Directory where pairwise ``.npy`` affine files are written.
         force_flag : bool
             If ``True``, recompute even when files exist.
         """
         # compute centroids
-        t_cog_d = self._compute_cog(subject, session_list)
-        centroids_dict, ok_dict = self._get_centroids(subject, session_list)
+        t_cog_d = self._compute_cog(sess_df)
+        centroids_dict, ok_dict = self._get_centroids(sess_df)
 
-        for sess_id in session_list:
+        for sess_id in sess_df.index:
             t_cog = t_cog_d[sess_id]
             centroids_dict[sess_id] = t_cog @ np.concatenate([centroids_dict[sess_id], np.ones((1, centroids_dict[sess_id].shape[1]))])
             centroids_dict[sess_id] = centroids_dict[sess_id][:3]
 
         # pairwise registration
-        for sess_ref, sess_flo in itertools.combinations(session_list, 2):
+        for sess_ref, sess_flo in itertools.combinations(sess_df.index, 2):
             output_filepath = join(def_dir, str(sess_ref) + '_to_' + str(sess_flo) + '.npy')
             ok_cent = (ok_dict[sess_ref] == 1) & (ok_dict[sess_flo] == 1)
             self._register_timepoints(centroids_dict[sess_ref], centroids_dict[sess_flo], output_filepath,
@@ -392,7 +419,7 @@ class USLRLinear(LongitudinalProcessor):
 
         return t_cog_d
 
-    def _solve_graph(self, subject: str, session_list: list[str], def_dir: str, t_cog_d: dict, **kwargs) -> None:
+    def _solve_graph(self, subject: str, sess_df: pd.DataFrame, def_dir: str, t_cog_d: dict, **kwargs) -> ProcessResult:
         """Solve the rigid spanning-tree problem and save per-timepoint affines.
 
         Reads pairwise log-rigid observations, fits the USLR model via
@@ -402,8 +429,9 @@ class USLRLinear(LongitudinalProcessor):
         ----------
         subject : str
             Subject ID.
-        session_list : list of str
-            Session IDs to include.
+        sess_df: pd.DataFrame
+            DataFrame with session_id as index and orig_t1w and orig_seg as columns, def_dir: str, t_cog_d: dict, **kwargs) -> ProcessResult:
+
         def_dir : str
             Directory containing pairwise ``<ref>_to_<flo>.npy`` files.
 
@@ -419,13 +447,13 @@ class USLRLinear(LongitudinalProcessor):
         dict
             Checkpoint dict with ``exit_code=2``.
         """
-        log_r = USLRLinear.init_st2_lineal(session_list, def_dir)
-        t_res = USLRLinear.st2_lineal_pytorch(log_r, session_list, verbose=False, **kwargs)
+        log_r = USLRLinear.init_st2_lineal(sess_df.index, def_dir)
+        t_res = USLRLinear.st2_lineal_pytorch(log_r, sess_df.index, verbose=False, **kwargs)
 
         if np.sum(np.isnan(t_res)) > 0:
-            return {'exit_code': -1, 'message': '[error] Something went wrong in the rigid registration step.\n'}
+            return ProcessResult(exit_code=-1, message='[error] Something went wrong in the rigid registration step.\n')
 
-        for it_sess_id, sess_id in enumerate(session_list):
+        for it_sess_id, sess_id in enumerate(sess_df.index):
 
             extra_kwargs = {'session': sess_id, 'subject': subject}
             filename = self.build_path({**extra_kwargs, **self.aff_long_ent})
@@ -438,155 +466,32 @@ class USLRLinear(LongitudinalProcessor):
 
             np.save(output_filepath, np.linalg.inv(T_cog) @ affine_matrix)
 
-        return None
+        return ProcessResult(exit_code=0, message='[success]\n')
 
-    # def _create_subject_space(self, subject: str, session_list: list[str]):
-    #     """Build a 1 mm isotropic network-space template for the subject.
-    #
-    #     Computes an average bounding box from all timepoints' brain masks,
-    #     defines a network space (LIA, 1 mm, 192³), resamples each session's
-    #     image and segmentation there, takes the median image and majority-vote
-    #     segmentation, and saves everything to ``uslr-lin``.
-    #
-    #     Parameters
-    #     ----------
-    #     subject : str
-    #         Subject ID.
-    #     timepoints : list of str
-    #         Session IDs to include
-    #
-    #     Returns
-    #     -------
-    #     dict
-    #         Checkpoint dict with ``exit_code=3``.
-    #     """
-    #     # load segs, binarize, dilate and crop with 5 voxels per side.
-    #     aff = {}
-    #     masks = {}
-    #     masks_dilated = {}
-    #     orig_v2r = {}
-    #     for sess_id in session_list:
-    #         # filename = self.build_path({'session': sess_id, 'subject': subject, **self.aff_long_ent})
-    #         aff_file = self._get_data(**{'session': sess_id, 'subject': subject, **self.aff_long_ent})
-    #         seg_file = self._get_data(**{'session': sess_id, 'subject': subject, **self.seg_entities})
-    #         if aff_file is not None and seg_file is not None:
-    #             m = np.load(aff_file)
-    #             if np.sum(np.isnan(m)) > 0:
-    #                 return {'exit_code': -1, 'message': '[error] Something went wrong in the rigid registration step.\n'}
-    #
-    #             aff[tp] = m
-    #
-    #             proxyseg = nib.load(seg_file)
-    #             orig_v2r[tp] = proxyseg.affine
-    #
-    #             seg = np.array(proxyseg.dataobj)
-    #             mask = (seg > 0) & (seg != 24)
-    #             masks[tp] = nib.Nifti1Image(mask.astype('float'), np.linalg.inv(m) @ proxyseg.affine)
-    #
-    #             mask_dilated = binary_dilation(mask, ball(3)).astype('float')
-    #             masks_dilated[tp] = nib.Nifti1Image(mask_dilated, np.linalg.inv(m) @ proxyseg.affine)
-    #
-    #     # create subject space
-    #     rasMosaic, template_vox2ras0, template_size = create_empty_template(list(masks_dilated.values()))
-    #     save_nii(np.zeros(template_size), template_vox2ras0, join(self.tmp_dir, subject + '_template.nii.gz'))
-    #
-    #     # move subject space to network space
-    #     template = sf.load_volume(join(self.tmp_dir, subject + '_template.nii.gz'))
-    #     net2vox, vox2net, net_v2r = network_space(template, shape=self.net_shape, center=template)
-    #     proxytemplate = nib.Nifti1Image(np.zeros(self.net_shape), net_v2r)
-    #
-    #     filename_ssspace = self.build_path({'subject': subject, **self.template_long_entities})
-    #     filename_ssseg = self.build_path({'subject': subject, **self.template_long_entities, 'suffix': 'T1wdseg'})
-    #     filename_ssmask = self.build_path({'subject': subject, **self.template_long_entities, 'suffix': 'T1wmask'})
-    #     filename_t_v2r = self.build_path({'subject': subject, **self.net_v2r_entities})
-    #
-    #     create_dir(dirname(join(DIR_PIPELINES[self.pipeline_dir], filename_t_v2r)))
-    #     np.save(join(DIR_PIPELINES[self.pipeline_dir], filename_t_v2r), net_v2r)
-    #     os.remove(join(self.tmp_dir, subject + '_template.nii.gz'))
-    #
-    #     # resample each timepoint to network space (images and dilated masks)
-    #     image_list = []
-    #     seg_list = []
-    #     for tp in timepoints:
-    #         proxymask = vol_resample_fast(proxytemplate, masks[tp])
-    #
-    #         image_file = self._get_data(**{'subject': subject, 'session': tp, **self.bf_entities})
-    #         if image_file is None:
-    #             continue
-    #
-    #         proxyraw = nib.load(image_file.path)
-    #         pixdim = np.sqrt(np.sum(proxyraw.affine * proxyraw.affine, axis=0))[:-1]
-    #         new_vox_size = np.array([1, 1, 1])
-    #         factor = pixdim / new_vox_size
-    #         sigmas = 0.25 / factor
-    #         sigmas[factor > 1] = 0  # don't blur if upsampling
-    #
-    #         im_array = np.array(proxyraw.dataobj)
-    #         im_array = gaussian_filter(im_array, sigmas)
-    #         proxyraw = nib.Nifti1Image(im_array, np.linalg.inv(aff[tp]) @ proxyraw.affine)
-    #         proxyraw = vol_resample_fast(proxytemplate, proxyraw)
-    #         image_list.append(proxyraw)
-    #
-    #         seg_file = self._get_data(**{'subject': subject, 'session': tp, **self.seg_entities})
-    #         proxyseg = nib.load(seg_file.path)
-    #         arrayseg = np.array(proxyseg.dataobj)
-    #         proxyseg = nib.Nifti1Image(arrayseg, np.linalg.inv(aff[tp]) @ proxyseg.affine)
-    #         proxyseg = vol_resample_fast(proxytemplate, proxyseg, mode='nearest')
-    #         seg_list.append(proxyseg)
-    #         # arrayseg = np.array(proxyseg.dataobj)
-    #         # arrayonehot = one_hot_encoding(arrayseg, categories=SYNTHSEG_APARC_LUT).astype('float')
-    #         # proxyonehot = nib.Nifti1Image(arrayonehot, np.linalg.inv(aff[tp]) @ proxyseg.affine)
-    #         # proxyonehot = vol_resample_fast(proxytemplate, proxyonehot)
-    #         # proxyonehot.uncache()
-    #         # seg_list.append(proxyonehot)
-    #
-    #         # saving
-    #         extra_kwargs = {'subject': subject, 'session': tp}
-    #         filename_mask = self.build_path({**extra_kwargs, **self.mask_long_entities})
-    #         filename_im = self.build_path({**extra_kwargs, **self.im_long_entities})
-    #         filename_seg = self.build_path({**extra_kwargs, **self.im_long_entities, 'suffix': 'T1wdseg'})
-    #
-    #         nib.save(proxymask, join(DIR_PIPELINES[self.pipeline_dir], filename_mask))
-    #         nib.save(proxyraw, join(DIR_PIPELINES[self.pipeline_dir], filename_im))
-    #         nib.save(proxyseg, join(DIR_PIPELINES[self.pipeline_dir], filename_seg))
-    #
-    #     temp_array = np.stack([np.array(x.dataobj) for x in image_list], axis=0)
-    #     temp_array = np.median(temp_array, axis=0)
-    #     save_nii(temp_array, net_v2r, join(DIR_PIPELINES[self.pipeline_dir], filename_ssspace))
-    #
-    #     template_seg = np.zeros(proxytemplate.shape + (len(SYNTHSEG_APARC_LUT),))
-    #     for proxyseg in seg_list:
-    #         template_seg += one_hot_encoding(np.array(proxyseg.dataobj), categories=SYNTHSEG_APARC_LUT).astype('float')
-    #         # template_seg += np.array(proxyseg.dataobj)
-    #
-    #     template_seg = np.argmax(template_seg, axis=-1)
-    #     template_seg = self._undo_one_hot(template_seg)
-    #     template_mask = (template_seg > 0) & (template_seg != 24)
-    #
-    #     save_nii(template_seg, net_v2r, join(DIR_PIPELINES[self.pipeline_dir], filename_ssseg))
-    #     save_nii(template_mask, net_v2r, join(DIR_PIPELINES[self.pipeline_dir], filename_ssmask))
-    #
-    #     return {'exit_code': 3, 'message': '[partly done] graph and template are already computed; subject etiv missing.\n'}
+    def _create_subject_space(self, subject: str, sess_df: pd.DataFrame) -> ProcessResult|None:
+        """Build a 1 mm isotropic network-space template for the subject.
 
-    def _compute_etiv(self, subject: str, session_list: list[str]) -> ProcessResult:
-        """Estimate and save the total intra-cranial volume (eTIV) for a subject.
-
-        Averages binary brain masks across timepoints in the network space and
-        saves the resulting voxel count.
+        Computes an average bounding box from all timepoints' brain masks,
+        defines a network space (LIA, 1 mm, 192³), resamples each session's
+        image and segmentation there, takes the median image and majority-vote
+        segmentation, and saves everything to ``uslr-lin``.
 
         Parameters
         ----------
         subject : str
             Subject ID.
-        timepoints : list of str
-            Session IDs.
-        """
+        sess_df : pd.DataFrame
+            DataFrame with session_id as index and orig_t1w and orig_seg as columns
 
+        Returns
+        -------
+        dict
+            Checkpoint dict with ``exit_code=3``.
+        """
         masks, masks_dilated = [], []
-        template_mask = np.zeros(self.net_shape + (len(SYNTHSEG_APARC_LUT),))
-        for sess_id in session_list:
+        for sess_id, sess_files in sess_df.iterrows():
             aff_file = self._get_data(**{'session': sess_id, 'subject': subject, **self.aff_long_ent})
-            seg_file = self._get_data(**{'session': sess_id, 'subject': subject, **self.seg_entities})
+            seg_file = sess_files['orig_seg']
 
             if aff_file is None or seg_file is None:
                 return ProcessResult(exit_code=-1,
@@ -597,19 +502,146 @@ class USLRLinear(LongitudinalProcessor):
                 return ProcessResult(exit_code=-1,
                                      message='[error] Something went wrong in the rigid registration step.\n')
 
-
             seg_proxy = nib.load(seg_file)
             seg_arr = np.array(seg_proxy.dataobj)
             mask_arr = (seg_arr > 0)
-            masks.append(nib.Nifti1Image(mask_arr.astype('uint8'), np.linalg.inv(aff) @ seg_proxy.affine))
             mask_dilated_arr = binary_dilation(mask_arr, ball(3)).astype('float')
             masks_dilated.append(nib.Nifti1Image(mask_dilated_arr, np.linalg.inv(aff) @ seg_proxy.affine))
 
         # create subject space
-        _, template_vox2ras0, template_size = create_empty_template(masks_dilated)
-        proxytemplate = nib.Nifti1Image(np.zeros(template_size, dtype='uint8'), template_vox2ras0)
-        for mask_proxy in masks:
-            template_mask += vol_resample_fast(proxytemplate, mask_proxy) / len(session_list)
+        _, template_v2r, template_size = create_empty_template(masks_dilated, margin_bb=5)
+        save_volume(np.zeros(template_size), template_v2r, join(self.tmp_dir, subject + '_template.nii.gz'))
+
+        # move subject space to network space.
+        # this is necessary because mri_synthmorph does not output the SVF files needed in this project.
+        # thus, we already initialize subject space in the "network space" so that the longitudinal trajectories
+        # already lie in the subject space.
+        template = sf.load_volume(join(self.tmp_dir, subject + '_template.nii.gz'))
+        net2vox, vox2net, net_v2r = network_space(template, shape=self.net_shape, center=template)
+        svf_v2r = net_v2r.copy()
+        for c in range(3):
+            svf_v2r[:-1, c] = svf_v2r[:-1, c] / 0.5
+        svf_v2r[:-1, -1] = svf_v2r[:-1, -1] - np.matmul(svf_v2r[:-1, :-1], 0.5 * (np.array([0.5] * 3) - 1))
+
+        sss_kwargs = self.template_long_ent.copy()
+        sss_kwargs['subject'] = 'subject'
+        sss_kwargs['suffix'] = 'empty'
+        sss_kwargs['datatype'] = 'utils'
+
+        root_dir = DIR_PIPELINES[self.pipeline_dir]
+        sss_filepath = join(root_dir, self.build_path({'subject': subject, **sss_kwargs}))
+        sss_v2r_filepath = join(root_dir, self.build_path({'subject': subject, **self.net_v2r_ent}))
+        svf_v2r_filepath = join(root_dir, self.build_path({'subject': subject, **self.svf_v2r_ent}))
+        save_volume(np.zeros(self.net_shape), net_v2r, sss_filepath)
+        np.save(sss_v2r_filepath, net_v2r)
+        np.save(svf_v2r_filepath, svf_v2r)
+
+        subprocess.call(['rm', '-rf', join(self.tmp_dir, subject + '_template.nii.gz')])
+
+        return None
+
+    def _resample_to_subject_space(self, subject: str, sess_df: pd.DataFrame) -> ProcessResult:
+        """Estimate and save the total intra-cranial volume (eTIV) for a subject.
+
+        Averages binary brain masks across timepoints in the network space and
+        saves the resulting voxel count.
+
+        Parameters
+        ----------
+        subject : str
+            Subject ID.
+        sess_df : pd.DataFrame
+            DataFrame with session_id as index and orig_t1w and orig_seg as columns
+        """
+
+        sss_kwargs = self.template_long_ent.copy()
+        sss_kwargs['subject'] = 'subject'
+        sss_kwargs['suffix'] = 'empty'
+        sss_kwargs['datatype'] = 'utils'
+
+        root_dir = DIR_PIPELINES[self.pipeline_dir]
+        sss_filepath = join(root_dir, self.build_path({'subject': subject, **sss_kwargs}))
+        if not exists(sss_filepath):
+            return ProcessResult(exit_code=-1, message='[error] Subject-space has not been created.\n')
+
+        sss_proxy = nib.load(sss_filepath)
+        for sess_id, sess_files in sess_df.iterrows():
+            im_file = sess_files['orig_t1w']
+            extra_kwargs = {'subject': subject, 'session': sess_id}
+            aff_file = self._get_data(**{**extra_kwargs, **self.aff_long_ent})
+            im_fname = self.build_path({**extra_kwargs, **self.im_long_ent})
+
+            if aff_file is None:
+                return ProcessResult(exit_code=-1, message='[error] Something went wrong in the rigid registration '
+                                                           'step for' + str(extra_kwargs) + '.\n')
+
+            aff = np.load(aff_file)
+            if np.sum(np.isnan(aff)) > 0:
+                return ProcessResult(exit_code=-1, message='[error] Something went wrong in the rigid registration '
+                                                           'step for' + str(extra_kwargs) + '.\n')
+
+            im_proxy = nib.load(im_file.path)
+            voxsize = np.sqrt(np.sum(im_proxy.affine * im_proxy.affine, axis=0))[:-1]
+            voxsize_new = np.sqrt(np.sum(sss_proxy.affine * sss_proxy.affine, axis=0))[:-1]
+            factor = voxsize / voxsize_new
+            sigmas = 0.25 / factor
+            sigmas[factor > 1] = 0  # don't blur if upsampling
+
+            im_array = np.array(im_proxy.dataobj)
+            im_array = gaussian_filter(im_array, sigmas)
+            im_proxy = nib.Nifti1Image(im_array, np.linalg.inv(aff) @ im_proxy.affine)
+            im_proxy = vol_resample_fast(sss_proxy, im_proxy)
+
+            nib.save(im_proxy, join(DIR_PIPELINES[self.pipeline_dir], im_fname))
+
+        return ProcessResult(exit_code=0, message='succeed')
+
+    def _compute_etiv(self, subject: str, sess_df: pd.DataFrame) -> ProcessResult:
+        """Estimate and save the total intra-cranial volume (eTIV) for a subject.
+
+        Averages binary brain masks across timepoints in the network space and
+        saves the resulting voxel count.
+
+        Parameters
+        ----------
+        subject : str
+            Subject ID.
+        sess_df : pd.DataFrame
+            DataFrame with session_id as index and orig_t1w and orig_seg as columns
+        """
+
+        sss_kwargs = self.template_long_ent.copy()
+        sss_kwargs['subject'] = 'subject'
+        sss_kwargs['suffix'] = 'empty'
+        sss_kwargs['datatype'] = 'utils'
+
+        root_dir = DIR_PIPELINES[self.pipeline_dir]
+        sss_filepath = join(root_dir, self.build_path({'subject': subject, **sss_kwargs}))
+        if not exists(sss_filepath):
+            return ProcessResult(exit_code=-1, message='[error] Subject-space has not been created.\n')
+
+        sss_proxy = nib.load(sss_filepath)
+        template_mask = np.zeros(self.net_shape + (len(SYNTHSEG_APARC_LUT),))
+        for sess_id, sess_files in sess_df.iterrows():
+            extra_kwargs = {'subject': subject, 'session': sess_id}
+            aff_file = self._get_data(**{**extra_kwargs, **self.aff_long_ent})
+            seg_file = sess_files['orig_seg']
+
+            if aff_file is None or seg_file is None:
+                return ProcessResult(exit_code=-1, message='[error] Something went wrong in the rigid registration '
+                                                           'step for' + str(extra_kwargs) + '.\n')
+
+            aff = np.load(aff_file)
+            if np.sum(np.isnan(aff)) > 0:
+                return ProcessResult(exit_code=-1, message='[error] Something went wrong in the rigid registration '
+                                                           'step for' + str(extra_kwargs) + '.\n')
+
+
+            seg_proxy = nib.load(seg_file)
+            seg_arr = np.array(seg_proxy.dataobj)
+            mask_arr = (seg_arr > 0)
+            mask_proxy = nib.Nifti1Image(mask_arr.astype('uint8'), np.linalg.inv(aff) @ seg_proxy.affine)
+            template_mask += vol_resample_fast(sss_proxy, mask_proxy, return_np=True) / len(sess_df)
 
         etiv = np.sum(template_mask)
         etiv_path = self.build_path({'subject': subject, 'suffix': 'T1wetiv', 'extension':'npy'})
@@ -643,36 +675,47 @@ class USLRLinear(LongitudinalProcessor):
             def_dir = join(self.tmp_dir, 'sub-' + subject)
             create_dir(def_dir)
 
-            session_list = self._get_sessions(subject=subject)
+            sess_df = self._get_sessions_file(subject)
+            if not isinstance(sess_df, pd.DataFrame):
+                if kwargs.get('verbose', False): print(sess_df['message'])
+                return sess_df
+
+            session_list = sess_df['session_id']
+            sess_df.set_index('session_id', drop=False, inplace=True)
+
             checkpoint = self._check_running_subject(subject, session_list, force_flag)
 
             if kwargs.get('verbose', False): print('* Subject: ' + subject)
-            if checkpoint['exit_code'] == -1 or checkpoint['exit_code'] == 1:
-                if kwargs.get('verbose', False): print(checkpoint['message'])
-                return checkpoint
-
-            if checkpoint['exit_code'] in [5]:
+            if checkpoint['exit_code'] == -1 or checkpoint['exit_code'] == 1 or checkpoint['exit_code'] == 5:
                 if kwargs.get('verbose', False): print(checkpoint['message'])
                 return checkpoint
 
             if checkpoint['exit_code'] in [0]:
                 # initialize graph
-                t_cog_d = self._init_graph(subject, session_list, def_dir, force_flag)
+                t_cog_d = self._init_graph(sess_df, def_dir, force_flag)
                 self._update_subject_layout(subject)
 
                 # compute graph
                 tmp_dir = join(self.tmp_dir, subject)
                 create_dir(tmp_dir)
                 graph_kwargs = {'n_epochs': 30, 'cost': 'l1', 'lr': 0.1, 'dir_results': tmp_dir, 'max_iter': 20}
-                self._solve_graph(subject, session_list, def_dir, t_cog_d, **graph_kwargs)
+                self._solve_graph(subject, sess_df, def_dir, t_cog_d, **graph_kwargs)
                 self._update_subject_layout(subject)
 
             if checkpoint['exit_code'] in [0, 2]:
                 # create subject space
-                # self._create_subject_space(subject, session_list)
-                pr = self._compute_etiv(subject, session_list)
+                pr = self._create_subject_space(subject, sess_df)
                 if pr['exit_code'] != 0:
-                    exit_dict = pr
+                    return pr
+
+                pr = self._resample_to_subject_space(subject, sess_df)
+                if pr['exit_code'] != 0:
+                    return pr
+
+                pr = self._compute_etiv(subject, sess_df)
+                if pr['exit_code'] != 0:
+                    return pr
+
                 self._update_subject_layout(subject)
 
             return exit_dict
@@ -784,12 +827,6 @@ class USLRLinear(LongitudinalProcessor):
             Per-timepoint 4×4 rigid matrices, shape ``(4, 4, N)``.
         """
         if len(session_list) > 2:
-            log_keys = ['loss', 'time_duration (s)']
-            logger = History(log_keys)
-            model_checkpoint = ModelCheckpoint(join(dir_results, 'checkpoints'), -1)
-            callbacks = [logger, model_checkpoint]
-            if verbose: callbacks += [PrinterCallback()]
-
             model = InstanceRigidModelLOG(session_list, cost=cost, device=device, reg_weight=0)
             optimizer = torch.optim.LBFGS(params=model.parameters(), lr=lr, max_iter=max_iter,
                                           line_search_fn='strong_wolfe')
@@ -798,12 +835,7 @@ class USLRLinear(LongitudinalProcessor):
             iter_break = 0
             log_dict = {}
             logr = torch.FloatTensor(logr)
-            for cb in callbacks:
-                cb.on_train_init(model)
-
             for epoch in range(n_epochs):
-                for cb in callbacks:
-                    cb.on_epoch_init(model, epoch)
 
                 def closure():
                     """L-BFGS closure: zero gradients, compute loss, backprop."""
@@ -831,9 +863,6 @@ class USLRLinear(LongitudinalProcessor):
 
                 log_dict['loss'] = loss.item()
 
-                for cb in callbacks:
-                    cb.on_step_fi(log_dict, model, epoch, iteration=1, N=1)
-
             T = model.matrix
 
         else:
@@ -853,7 +882,6 @@ class USLRLinear(LongitudinalProcessor):
         return T
 
 
-
 class USLRDeformable(LongitudinalProcessor):
     """Nonlinear longitudinal registration via BCH-approximated USLR.
 
@@ -863,17 +891,22 @@ class USLRDeformable(LongitudinalProcessor):
     """
 
     @staticmethod
-    def init_st2(timepoints: list[str], input_dir: str, image_shape: tuple[int], factor: int=1,
-                 mask_path=None, se=None, penalty=1, dict_flag=False):
+    def init_st2(session_list: list[str],
+                 def_dir: str,
+                 svf_shape: tuple[int],
+                 factor: int=1,
+                 mask_path: Optional[str]=None,
+                 se: Optional[np.ndarray]=None,
+                 penalty: float=1.) -> tuple[np.ndarray, np.ndarray, np.ndarray, int]:
         """Load pairwise SVFs and assemble the spanning-tree observation tensors.
 
         Parameters
         ----------
-        timepoints : list of str
+        session_list : list of str
             Ordered session IDs.
-        input_dir : str
+        def_dir : str
             Directory containing ``<ref>_to_<flo>.nii.gz`` SVF files.
-        image_shape : tuple of int
+        svf_shape : tuple of int
             Spatial shape of the SVF grid ``(X, Y, Z)``.
         factor : float, optional
             Multiplicative scale applied to loaded SVF values. Default is 1.
@@ -885,102 +918,92 @@ class USLRDeformable(LongitudinalProcessor):
         penalty : float, optional
             Weight for the regularisation row added to the weight matrix.
             Default is 1.
-        dict_flag : bool, optional
-            If ``True``, return dicts keyed by ``'ref_to_flo'`` instead of
-            numpy arrays. Default is ``False``.
 
         Returns
         -------
-        phi : np.ndarray or dict
+        phi : np.ndarray
             Pairwise SVF observations.
-        obs_mask : np.ndarray or dict
+        obs_mask : np.ndarray
             Per-pair spatial masks.
         w : np.ndarray
             Weight matrix, shape ``(K+1, N)``.
         nk : int
             Number of pairs loaded.
         """
-        timepoints_dict = {t: it_t for it_t, t in enumerate(timepoints)}
+        sessions_dict = {t: it_t for it_t, t in enumerate(session_list)}
 
-        N = len(timepoints)
+        N = len(session_list)
         K = int(N * (N - 1) / 2) + 1
         w = np.zeros((K, N), dtype='int')
 
-        if dict_flag:
-            obs_mask = {}
-            phi = {}
-
-        else:
-            obs_mask = np.zeros(image_shape + (K,))
-            phi = np.zeros(image_shape + (3, K,))
+        obs_mask = np.zeros(svf_shape + (K,))
+        phi = np.zeros(svf_shape + (3, K,))
 
         nk = 0
-        for tp_ref, tp_flo in itertools.combinations(timepoints, 2):
-            t0 = timepoints_dict[tp_ref]
-            t1 = timepoints_dict[tp_flo]
+        for tp_ref, tp_flo in itertools.combinations(session_list, 2):
+            t0 = sessions_dict[tp_ref]
+            t1 = sessions_dict[tp_flo]
             filename = str(tp_ref) + '_to_' + str(tp_flo)
 
-            proxysvf = nib.load(join(input_dir, filename + '.nii.gz'))
-            arrsvf = np.asarray(proxysvf.dataobj)
+            svf_proxy = nib.load(join(def_dir, filename + '.nii.gz'))
+            svf_arr = np.asarray(svf_proxy.dataobj)
 
             # Masks
             if mask_path is not None:
                 mask_proxy = nib.load(mask_path)
-                mask_proxy = vol_resample_fast(proxysvf, mask_proxy)
-                mask = np.array(mask_proxy.dataobj)
+                mask_proxy = vol_resample_fast(svf_proxy, mask_proxy)
+                mask_arr = np.array(mask_proxy.dataobj)
 
             else:
-                mask = np.ones(image_shape)
+                mask_arr = np.ones(svf_shape)
 
             if se is not None:
-                mask = binary_dilation(mask, se)
+                mask_arr = binary_dilation(mask_arr, se)
 
-            if dict_flag:
-                phi[filename] = factor * arrsvf
-                obs_mask[filename] = mask
-            else:
-                phi[..., nk] = factor * arrsvf
-                obs_mask[..., nk] = mask
+            phi[..., nk] = factor * svf_arr
+            obs_mask[..., nk] = mask_arr
 
             w[nk, t0] = -1
             w[nk, t1] = 1
             nk += 1
-
-        if not dict_flag:
-            obs_mask[..., nk] = (np.sum(obs_mask[..., :nk - 1]) > 0).astype('uint8')
 
         w[nk, :] = penalty
         nk += 1
         return phi, obs_mask, w, nk
 
     @staticmethod
-    def st2_L2_global(phi, W, N):
+    def st2_L2_global(phi: np.ndarray, w: np.ndarray, n_sess: int) -> np.ndarray:
         """Solve the ST² problem globally in L2 via the normal equations.
 
         Parameters
         ----------
         phi : np.ndarray
             Pairwise SVF observations, shape ``(*image_shape, 3, K)``.
-        W : np.ndarray
-            Weight matrix, shape ``(K+1, N)``.
-        N : int
-            Number of timepoints.
+        w : np.ndarray
+            Weight matrix, shape ``(K+1, n_sess)``.
+        n_sess : int
+            Number of sessions.
 
         Returns
         -------
         np.ndarray
-            Per-timepoint SVFs, shape ``(*image_shape, 3, N)``.
+            Per-timepoint SVFs, shape ``(*image_shape, 3, n_sess)``.
         """
         precision = 1e-6
-        lambda_control = np.linalg.inv((W.T @ W) + precision * np.eye(N)) @ W.T
+        lambda_control = np.linalg.inv((w.T @ w) + precision * np.eye(n_sess)) @ w.T
         Tres = lambda_control @ np.transpose(phi, [0, 1, 2, 4, 3])
         Tres = np.transpose(Tres, [0, 1, 2, 4, 3])
 
         return Tres
 
     @staticmethod
-    def st2_L1(phi, obs_mask, w, N, chunk_id=None, verbose=True):
-        """Solve the ST² problem voxel-wise in L1 via linear programming.
+    def st2_L1(phi: np.ndarray,
+               obs_mask: np.ndarray,
+               w: np.ndarray,
+               n_sess: int,
+               chunk_id: Optional[int]=None,
+               verbose: bool=True) -> np.ndarray:
+        """Solve the ST2 problem voxel-wise in L1 via linear programming.
 
         Parameters
         ----------
@@ -990,8 +1013,8 @@ class USLRDeformable(LongitudinalProcessor):
             Per-pair spatial mask, shape ``(*image_shape, K)``.
         w : np.ndarray
             Weight matrix, shape ``(K+1, N)``.
-        N : int
-            Number of timepoints.
+        n_sess : int
+            Number of sessions.
         chunk_id : int, optional
             Chunk identifier printed when processing a spatial sub-block.
         verbose : bool, optional
@@ -1000,13 +1023,13 @@ class USLRDeformable(LongitudinalProcessor):
         Returns
         -------
         np.ndarray
-            Per-timepoint SVFs, shape ``(*image_shape, 3, N)``.
+            Per-timepoint SVFs, shape ``(*image_shape, 3, n_sess)``.
         """
         if chunk_id is not None and verbose:
             print("Processing chunk " + str(chunk_id))
 
         image_shape = obs_mask.shape[:3]
-        Tres = np.zeros(image_shape + (3, N))
+        Tres = np.zeros(image_shape + (3, n_sess))
 
         for it_control_row in range(image_shape[0]):
             if np.mod(it_control_row, 10) == 0 and chunk_id is None and verbose:
@@ -1024,10 +1047,10 @@ class USLRDeformable(LongitudinalProcessor):
 
                         for it_dim in range(3):
                             # Set objective
-                            c_lp = np.concatenate((np.ones((n_control,)), np.zeros((N,))), axis=0)
+                            c_lp = np.concatenate((np.ones((n_control,)), np.zeros((n_sess,))), axis=0)
 
                             # Set the inequality
-                            A_lp = np.zeros((2 * n_control, n_control + N))
+                            A_lp = np.zeros((2 * n_control, n_control + n_sess))
                             A_lp[:n_control, :n_control] = -np.eye(n_control)
                             A_lp[:n_control, n_control:] = -w_control
                             A_lp[n_control:, :n_control] = -np.eye(n_control)
@@ -1042,7 +1065,13 @@ class USLRDeformable(LongitudinalProcessor):
         return Tres
 
     @staticmethod
-    def st2_L1_chunks(phi, obs_mask, w, N, num_chunks=2, num_cores=4):
+    def st2_L1_chunks(phi: np.ndarray,
+                      obs_mask: np.ndarray,
+                      w: np.ndarray,
+                      n_sess: int,
+                      num_chunks: int=2,
+                      num_cores: int=4,
+                      verbose: bool=True) -> np.ndarray:
         """Parallelise :meth:`st2_L1` by dividing the volume into chunks.
 
         Parameters
@@ -1052,22 +1081,24 @@ class USLRDeformable(LongitudinalProcessor):
         obs_mask : np.ndarray
             Spatial mask, shape ``(*image_shape, K)``.
         w : np.ndarray
-            Weight matrix, shape ``(K+1, N)``.
+            Weight matrix, shape ``(K+1, n_sess)``.
         N : int
-            Number of timepoints.
+            Number of sessions.
         num_chunks : int, optional
             Number of chunks per spatial dimension (total ``num_chunks³``
             jobs). Default is 2.
         num_cores : int, optional
             Parallel workers. ``1`` falls back to serial. Default is 4.
+        verbose : bool, optional
+            If ``True``, print row progress. Default is ``True``.
 
         Returns
         -------
         np.ndarray
-            Per-timepoint SVFs, shape ``(*image_shape, 3, N)``.
+            Per-timepoint SVFs, shape ``(*image_shape, 3, n_sess)``.
         """
         if num_cores == 1:
-            Tres = USLR_Deformable.st2_L1(phi, obs_mask, w, N)
+            Tres = USLRDeformable.st2_L1(phi, obs_mask, w, n_sess, verbose=verbose)
 
         else:
             chunk_list = []
@@ -1084,11 +1115,11 @@ class USLRDeformable(LongitudinalProcessor):
                                         slice(z * chunk_size[2], max_z)]]
 
             results = Parallel(n_jobs=num_cores)(
-                delayed(USLR_Deformable.st2_L1)(
+                delayed(USLRDeformable.st2_L1)(
                     phi[chunk[0], chunk[1], chunk[2]], obs_mask[chunk[0], chunk[1], chunk[2]],
-                    w, N, chunk_id=it_chunk) for it_chunk, chunk in enumerate(chunk_list))
+                    w, n_sess, chunk_id=it_chunk, verbose=verbose) for it_chunk, chunk in enumerate(chunk_list))
 
-            Tres = np.zeros(phi.shape[:4] + (N,))
+            Tres = np.zeros(phi.shape[:4] + (n_sess,))
             for it_chunk, chunk in enumerate(chunk_list):
                 Tres[chunk[0], chunk[1], chunk[2]] = results[it_chunk]
 
@@ -1104,20 +1135,19 @@ class USLRDeformable(LongitudinalProcessor):
         self.tmp_dir = join(self.tmp_dir, 'long-lin-reg')
         create_dir(self.tmp_dir)
         self.pipeline_dir = 'nicgiprep-long'
+        self.trajectory_ent = {'space': 'subject', 'task': 'linfit', 'scope': self.pipeline_dir, 'extension': 'nii.gz'}
 
-    def _check_running_subject(self, subject: str, session_list: list[str], force_flag: bool=False, register_MNI: bool=False):
+    def _check_running_subject(self, subject: str, session_list: list[str], force_flag: bool=False) -> ProcessResult:
         """Determine the processing checkpoint for a subject.
 
         Parameters
         ----------
         subject : str
             Subject ID.
-        timepoints : list of str
+        session_list : list of str
             Available session IDs.
         force_flag : bool
             If ``True``, ignore existing outputs.
-        register_MNI : bool, optional
-            Whether MNI registration is expected. Default is ``False``.
 
         Returns
         -------
@@ -1127,103 +1157,88 @@ class USLRDeformable(LongitudinalProcessor):
             ``2`` SVF graph done, ``3`` eTIV done, ``4`` mean SVF done,
             ``5`` single timepoint.
         """
-        dict_base = {'subject': subject, 'scope': 'uslr', 'extension': 'nii.gz'}
-        dict_svf = {'space': 'uslr', 'task': 'linfit', 'suffix': 'jac', **dict_base}
-        dict_MNI = {'space': 'MNI', 'task': 'linfit', 'suffix': 'jac', 'desc': 'mean', **dict_base }
-
         # do not run if only 1 timepoint available
-        if len(timepoints) == 1:
-            if register_MNI:
-                return {'exit_code': 5, 'message': '[partly done] It has only 1 timepoint. Linking files and registering to MNI \n'}
-            else:
-                return {'exit_code': 5, 'message': '[done] It has only 1 timepoint. Linking files. \n'}
+        if len(session_list) == 1:
+            return ProcessResult(exit_code=5, message='[done] It has only 1 timepoint. Linking files. \n')
 
         # do not run if only 0 timepoint available
-        elif len(timepoints) == 0:
-            return {'exit_code': 1, 'message': '[done] It has 0 timepoints available. Skipping.\n'}
+        elif len(session_list) == 0:
+            return ProcessResult(exit_code=1, message='[done] It has 0 sessions available. Skipping.\n')
 
         # check if all timepoints are linearly registered
-        elif any([self._get_data(**{'subject': subject, 'session': t, **self.im_long_entities}) is None
-                  for t in timepoints]):
-            return {'exit_code': -1, 'message': '[error] not all timepoints are correctly registered in uslr. '
-                                                'Please check. This may be to preprocessing errors.\n'}
+        elif any([self._get_data(**{'subject': subject, 'session': t, **self.im_long_ent}) is None for t in session_list]):
+            return ProcessResult(exit_code=-1, message='[error] not all sessions are correctly registered to '
+                                                       'subject space. Please check.\n')
 
         # check if the graph has been solved
-        elif (self._get_data(**{'subject': subject, 'session': timepoints, **self.svf_long_entities}, curr_len=len(timepoints), verbose=False) is not None and not force_flag):
+        elif (self._get_data(**{'subject': subject, 'session': session_list, **self.svf_long_ent},
+                             curr_len=len(session_list), verbose=False) is not None and not force_flag):
 
-            if not exists(join(DIR_PIPELINES[self.pipeline_dir], 'sub-' + subject, 'sub-' + subject + '_T1wetiv.npy')):
-                return {'exit_code': 2,
-                        'message': '[partly done] graph and template are already computed.\n'}
+            filename_template = self.build_path({'suffix': 'T1w', 'subject': subject, **self.template_long_ent})
+            if not exists(join(DIR_PIPELINES[self.pipeline_dir], filename_template)):
+                return ProcessResult(exit_code=2, message='[partly done] graph already solved; '
+                                                          'computing template and trajectories.\n')
 
-            elif (self._get_data(**dict_svf, verbose=False) is None):
-                return {'exit_code': 3,
-                        'message': '[partly done] graph, template and etiv done. Computing mean trajectories.\n'}
-
-            elif (self._get_data(**dict_MNI, verbose=False) is None and register_MNI is True):
-                return {'exit_code': 4,
-                        'message': '[partly done] graph, template, etiv and mean SVF done; MNI registration is missing.\n'}
+            elif self._get_data(**{'subject': subject, 'suffix': 'jac', **self.trajectory_ent}, verbose=False) is None:
+                return ProcessResult(exit_code=3, message='[partly done] graph, template done. '
+                                                          'Computing mean trajectories.\n')
 
             else:
-                return {'exit_code': 1,
-                        'message': '[done] subject already processed. '
-                                   'Check the results in [..]/uslr/sub-' + subject + '.\n'}
-
-        # do not run if more segmentations than timepoints are found
-        elif self._get_data(**{'subject': subject, **self.seg_entities}, curr_len=len(timepoints)) is None:
-            return {'exit_code': -1,
-                    'message': '[error] not all timepoints are segmented. Please, run preprocess/synthseg.py first.\n'}
+                return ProcessResult(exit_code=2, message='[done] subject already processed. Check the results in '
+                                                          '[..]/' + self.pipeline_dir + '/sub-' + subject + '.\n')
 
         else:
-            return {'exit_code': 0, 'message': 'running USLR'}
+            return ProcessResult(exit_code=0, message='Subject needs to be processed')
 
-    def _init_graph(self,subject: str, session_list: list[str], def_dir, force_flag=False):
+
+    def _init_graph(self, subject: str, session_list: list[str], def_dir: str, force_flag: bool=False) -> None:
         """Register all pairs of timepoints with SynthMorph and save the SVFs.
 
         Parameters
         ----------
         subject : str
             Subject ID.
-        timepoints : list of str
-            Session IDs.
+        session_list : list of str
+            Session IDs to include
         def_dir : str
             Directory where ``<ref>_to_<flo>.nii.gz`` SVF files are written.
         force_flag : bool, optional
             If ``True``, recompute even when files exist. Default is
             ``False``.
         """
-        svf_v2r = np.load(self._get_data(**{'subject': subject, **self.svf_v2r_entities}).path)
-        for tp_ref, tp_flo in itertools.permutations(timepoints, 2):
-            output_filepath = join(def_dir, str(tp_ref) + '_to_' + str(tp_flo) + '.nii.gz')
+        svf_v2r = np.load(self._get_data(**{'subject': subject, **self.svf_v2r_ent}).path)
+        for sess_ref, sess_flo in itertools.permutations(session_list, 2):
+            output_filepath = join(def_dir, str(sess_ref) + '_to_' + str(sess_flo) + '.nii.gz')
             if exists(output_filepath) and not force_flag:
                 continue
 
             # read image and mask
-            imageref_file = self._get_data(**{'subject': subject, 'session': tp_ref, **self.im_long_entities})
-            imageflo_file = self._get_data(**{'subject': subject, 'session': tp_flo, **self.im_long_entities})
+            imref_file = self._get_data(**{'subject': subject, 'session': sess_ref, **self.im_long_ent})
+            imflo_file = self._get_data(**{'subject': subject, 'session': sess_flo, **self.im_long_ent})
 
-            maskref_file = self._get_data(**{'subject': subject, 'session': tp_ref, **self.mask_long_entities})
-            maskflo_file = self._get_data(**{'subject': subject, 'session': tp_flo, **self.mask_long_entities})
-
-            if imageref_file is None or imageflo_file is None or maskref_file is None or maskflo_file is None:
+            if imref_file is None or imflo_file is None:
                 continue
 
-            fw_svf = synthmorph_register(imageref_file, imageflo_file)
+            fw_svf = synthmorph_register(imref_file, imflo_file)
+            if fw_svf is None:
+                return ProcessResult(exit_code=-1, message="[error] deformable registration has failed.")
+            else:
+                save_volume(fw_svf, svf_v2r, output_filepath)
 
-            img = nib.Nifti1Image(fw_svf, svf_v2r)
-            nib.save(img, output_filepath)
+    def _solve_graph(self,
+                     session_list: list[str],
+                     def_dir: str,
+                     cost: Literal['bch-l1', 'bch-l2']='bch-l2') -> dict:
 
-    def _solve_graph(self, subject: str, session_list: list[str], def_dir, cost, **kwargs):
         """Solve the deformable spanning-tree problem with BCH approximation.
 
         Parameters
         ----------
-        subject : str
-            Subject ID.
-        timepoints : list of str
-            Session IDs.
+        session_list : list of str
+            Session IDs to include,
         def_dir : str
             Directory with pairwise SVF NIfTI files.
-        cost : {'bch-l1', 'bch-l2', 'l1', 'l2'}
+        cost : {'bch-l1', 'bch-l2'}
             Optimisation strategy: BCH variants use the additive SVF
             approximation; plain L1/L2 use linear programming.
 
@@ -1233,19 +1248,19 @@ class USLRDeformable(LongitudinalProcessor):
             ``{session_id: np.ndarray}`` per-timepoint SVFs,
             shape ``(*svf_shape, 3)``.
         """
-        R, M, W, NK = USLR_Deformable.init_st2(timepoints, def_dir, self.svf_shape, se=None, dict_flag=False)
+        R, M, W, NK = USLRDeformable.init_st2(session_list, def_dir, self.svf_shape, se=None)
 
         if cost == 'bch-l2':
-            T_latent = USLR_Deformable.st2_L2_global(R, W, len(timepoints))
-            T_latent = {t: T_latent[..., it_t] for it_t, t in enumerate(timepoints)}
+            T_latent = USLRDeformable.st2_L2_global(R, W, len(session_list))
+            T_latent = {t: T_latent[..., it_t] for it_t, t in enumerate(session_list)}
 
         else:
-            T_latent = USLR_Deformable.st2_L1_chunks(R, M, W, len(timepoints), num_cores=1)
-            T_latent = {t: T_latent[..., it_t] for it_t, t in enumerate(timepoints)}
+            T_latent = USLRDeformable.st2_L1_chunks(R, M, W, len(session_list), num_cores=1)
+            T_latent = {t: T_latent[..., it_t] for it_t, t in enumerate(session_list)}
 
         return T_latent
 
-    def _compute_template(self, subject: str, session_list: list[str], **kwargs):
+    def _compute_template(self, subject: str, sess_df: pd.DataFrame) -> ProcessResult|None:
         """Build the nonlinear template image, segmentation, mask, and eTIV.
 
         Warps each timepoint to the linear template space using the estimated
@@ -1256,82 +1271,77 @@ class USLRDeformable(LongitudinalProcessor):
         ----------
         subject : str
             Subject ID.
-        timepoints : list of str
-            Session IDs.
-        **kwargs
-            Ignored.
+        sess_df : pd.DataFrame
+            DataFrame with session_id as index and orig_t1w and orig_seg as columns
         """
-        sss_file = self._get_data(**{'subject': subject, 'session': None, 'scope':'uslr-lin', **self.template_long_entities})
-        if sss_file is None:
-            return
+        sss_kwargs = self.template_long_ent.copy()
+        sss_kwargs['subject'] = 'subject'
+        sss_kwargs['suffix'] = 'empty'
+        sss_kwargs['datatype'] = 'utils'
+        sss_file = self._get_data(**{'subject': subject, **sss_kwargs})
 
-        proxyref = nib.load(sss_file.path)
+        if sss_file is None:
+            return ProcessResult(exit_code=-1, message='[error] Subject-space has not been created. Please check.\n')
+
+        sss_proxy = nib.load(sss_file.path)
 
         # build path template: image, mask, seg
-        image_filename = self.build_path({'suffix': 'T1w', 'subject': subject, **self.template_nonlin_entities})
-        image_std_filename = self.build_path({'suffix': 'T1wstd', 'subject': subject, **self.template_nonlin_entities})
-        mask_filename = self.build_path({'suffix': 'T1wmask', 'subject': subject, **self.template_nonlin_entities})
-        seg_filename = self.build_path({'suffix': 'T1wdseg', 'subject': subject, **self.template_nonlin_entities})
+        image_filename = self.build_path({'suffix': 'T1w', 'subject': subject, **self.template_long_ent})
+        seg_filename = self.build_path({'suffix': 'T1wdseg', 'subject': subject, **self.template_long_ent})
 
         # compute template: image, mask, seg
         image_list = []
         seg_list = []
-        for tp in timepoints:
-            im_file = self._get_data(**{'subject': subject, 'session': tp, **self.bf_entities})
-            seg_file = self._get_data(**{'subject': subject, 'session': tp, **self.seg_entities})
-            aff_file = self._get_data(**{'subject': subject, 'session': tp, **self.aff_graph_entities})
-            svf_file = self._get_data(**{'subject': subject, 'session': tp, **self.svf_graph_entities})
+        for sess_id, sess_files in sess_df.iterrows():
+            im_file = sess_files['orig_t1w']
+            seg_file = sess_files['orig_seg']
+            aff_file = self._get_data(**{'subject': subject, 'session': sess_id, **self.aff_long_ent})
+            svf_file = self._get_data(**{'subject': subject, 'session': sess_id, **self.svf_long_ent})
 
-            if svf_file is None or aff_file is None or im_file is None or seg_file is None:
-                continue
+            if svf_file is None or aff_file is None:
+                return ProcessResult(exit_code=-1,
+                                     message='[error] Some intermediate steps have failed. Please check.\n')
 
-            proxyimage = nib.load(im_file.path)
-            proxyseg = nib.load(seg_file.path)
-            aff = np.load(aff_file.path)
-            proxysvf = nib.load(svf_file.path)
-            flow = integrate_svf(np.array(proxysvf.dataobj), self.net_shape, scaling_factor=2, int_steps=7)
-            proxyflow = nib.Nifti1Image(flow, affine=proxyref.affine)
+            im_proxy = nib.load(im_file.path)
+            seg_proxy = nib.load(seg_file.path)
+            aff_arr = np.load(aff_file.path)
+            svf_proxy = nib.load(svf_file.path)
+            flow_arr = integrate_svf(np.array(svf_proxy.dataobj), self.net_shape, scaling_factor=2, int_steps=7)
+            flow_proxy = nib.Nifti1Image(flow_arr, affine=sss_proxy.affine)
 
             # Image
-            arrayim = np.array(proxyimage.dataobj)
-            arrayim = gaussian_antialiasing(arrayim, proxyimage.affine, [1, 1, 1])
-            proxyimage = nib.Nifti1Image(arrayim, np.linalg.inv(aff) @ proxyimage.affine)
-            proxyimage = vol_resample_fast(proxyref, proxyimage, proxyflow=proxyflow)
-            proxyimage.uncache()
+            im_arr = np.array(im_proxy.dataobj)
+            im_arr = gaussian_antialiasing(im_arr, im_proxy.affine, [1, 1, 1])
+            im_proxy = nib.Nifti1Image(im_arr, np.linalg.inv(aff_arr) @ im_proxy.affine)
+            im_proxy = vol_resample_fast(sss_proxy, im_proxy, proxyflow=flow_proxy)
+            im_proxy.uncache()
 
-            arrayseg = np.array(proxyseg.dataobj)
-            arrayonehot = one_hot_encoding(arrayseg, categories=SYNTHSEG_APARC_LUT).astype('float')
-            proxyonehot = nib.Nifti1Image(arrayonehot, np.linalg.inv(aff) @ proxyseg.affine)
-            proxyonehot = vol_resample_fast(proxyref, proxyonehot, proxyflow=proxyflow)
-            proxyonehot.uncache()
+            seg_arr = np.array(seg_proxy.dataobj)
+            onehot_arr = one_hot_encoding(seg_arr, categories=SYNTHSEG_APARC_LUT).astype('float')
+            onehot_proxy = nib.Nifti1Image(onehot_arr, np.linalg.inv(aff_arr) @ seg_proxy.affine)
+            onehot_proxy = vol_resample_fast(sss_proxy, onehot_proxy, proxyflow=flow_proxy)
+            onehot_proxy.uncache()
 
-            image_list.append(proxyimage)
-            seg_list.append(proxyonehot)
+            image_list.append(im_proxy)
+            seg_list.append(onehot_proxy)
 
         # save image (median and std), mask (and etiv) and seg.
-        arr_image_list = np.stack([np.array(proxyim.dataobj) for proxyim in image_list], axis=0)
-        template = np.median(arr_image_list, axis=0)
-        template_std = np.std(arr_image_list, axis=0)
-        del arr_image_list
+        image_list_arr = np.stack([np.array(im_proxy.dataobj) for im_proxy in image_list], axis=0)
+        im_template_arr = np.median(image_list_arr, axis=0)
+        del image_list
 
-        template_seg = np.zeros(template.shape + (len(SYNTHSEG_APARC_LUT),))
-        for proxyseg in seg_list:
-            template_seg += np.array(proxyseg.dataobj)
+        seg_template_arr = np.zeros(im_template_arr.shape + (len(SYNTHSEG_APARC_LUT),))
+        for seg_proxy in seg_list:
+            seg_template_arr += np.array(seg_proxy.dataobj)
 
-        template_seg = np.argmax(template_seg, axis=-1)
-        template_seg = self._undo_one_hot(template_seg)
-        template_mask = (template_seg > 0) & (template_seg != 24)
-        etiv = np.sum(template_seg > 0)
+        del seg_list
+        seg_template_arr = np.argmax(seg_template_arr, axis=-1)
+        seg_template_arr = self._undo_one_hot(seg_template_arr)
 
-        save_volume(template, proxyref.affine, join(DIR_PIPELINES['uslr'], image_filename))
-        save_volume(template_std, proxyref.affine, join(DIR_PIPELINES['uslr'], image_std_filename))
-        save_volume(template_seg, proxyref.affine, join(DIR_PIPELINES['uslr'], seg_filename))
-        save_volume(template_mask, proxyref.affine, join(DIR_PIPELINES['uslr'], mask_filename))
+        save_volume(im_template_arr, sss_proxy.affine, join(DIR_PIPELINES[self.pipeline_dir], image_filename))
+        save_volume(seg_template_arr, sss_proxy.affine, join(DIR_PIPELINES[self.pipeline_dir], seg_filename))
 
-        sid = 'sub-' + str(subject)
-        np.save(join(DIR_PIPELINES['uslr'], sid, sid + '_T1wetiv.npy'), etiv)
-
-    def _compute_mean_svf(self, subject: str, session_list: list[str], **kwargs):
+    def _compute_mean_trajectories(self, subject: str, session_list: list[str]) -> ProcessResult|None:
         """Fit a linear trajectory through per-timepoint SVFs and save statistics.
 
         Runs ordinary least squares over time to decompose per-timepoint
@@ -1342,43 +1352,37 @@ class USLRDeformable(LongitudinalProcessor):
         ----------
         subject : str
             Subject ID.
-        timepoints : list of str
-            Session IDs.
-        **kwargs
-            Ignored.
+        session_list : list of str
+            Session IDs to include
         """
-        fit_entities = {'subject': subject, 'space': 'uslr', 'task': 'linfit', 'extension': 'nii.gz', 'scope': 'uslr', 'suffix': 'svf'}
-        image_filename = self.build_path({'desc': 'mean', **fit_entities})
-        error_filename = self.build_path({'desc': 'error', **fit_entities})
-        std_filename = self.build_path({'desc': 'std', **fit_entities})
-
-        fit_entities['suffix'] = 'def'
-        error_flow_filename = self.build_path({'desc': 'error', **fit_entities})
-        std_flow_filename = self.build_path({'desc': 'std', **fit_entities})
-
-        fit_entities['suffix'] = 'jac'
-        jac_filename = self.build_path({'desc': 'mean', **fit_entities})
-
         linreg = LinearRegression()
-        time_list = self._get_time_list(subject, timepoints)
+        time_list = self._get_session_time(subject, session_list)
 
-        file_v2r = self._get_data(**{'subject': subject, **self.svf_v2r_entities})
-        if file_v2r is None:
-            return
+        svf_filename = self.build_path({'subject': subject, 'suffix': 'svf', **self.trajectory_ent})
+        flow_filename = self.build_path({'subject': subject, 'suffix': 'def', **self.trajectory_ent})
+        jac_filename = self.build_path({'subject': subject, 'suffix': 'jac', **self.trajectory_ent})
 
-        svf_v2r = np.load(file_v2r.path)
+        net_v2r_file = self._get_data(**{'subject': subject, **self.net_v2r_ent})
+        svf_v2r_file = self._get_data(**{'subject': subject, **self.svf_v2r_ent})
+        if svf_v2r_file is None or net_v2r_file is None:
+            return ProcessResult(exit_code=-1, message='[error] Some error occurred in the rigid registration step. '
+                                                       'Please check.\n')
+
+        net_v2r = np.load(net_v2r_file.path)
+        svf_v2r = np.load(svf_v2r_file.path)
 
         svf_list = []
         features_list = []
-        for tp in timepoints:
-            svf_file = self._get_data(**{'subject': subject, 'session': tp, **self.svf_graph_entities})
+        for sess_id in session_list:
+            svf_file = self._get_data(**{'subject': subject, 'session': sess_id, **self.svf_long_ent})
             if svf_file is None:
-                continue
+                return ProcessResult(exit_code=-1,
+                                     message='[error] Subject SVFs have not been computed. Please check.\n')
 
-            proxysvf = nib.load(svf_file.path)
-            svf_list.append(np.array(proxysvf.dataobj).reshape(-1))
+            svf_proxy = nib.load(svf_file.path)
+            svf_list.append(np.array(svf_proxy.dataobj).reshape(-1))
 
-            age = float(time_list[tp])
+            age = float(time_list[sess_id])
             features_list.append([age])
 
         X = np.array(features_list)
@@ -1388,139 +1392,23 @@ class USLRDeformable(LongitudinalProcessor):
         coef_list = [linreg.coef_[:, it_f].reshape(self.svf_shape + (3,)) for it_f in range(len(features_list[0]))]
         intercept_list = [linreg.intercept_.reshape(self.svf_shape + (3,))]
         results_vol = np.stack(intercept_list + coef_list, axis=-1)
+        save_volume(results_vol, svf_v2r, join(DIR_PIPELINES[self.pipeline_dir], svf_filename))
 
-        y_pred = linreg.predict(X)
-        error_vol = np.sum((Y - y_pred) ** 2 / len(svf_list), axis=0).reshape(self.svf_shape + (3,))
-        std_vol = np.sum((Y - np.mean(Y, axis=0)) ** 2 / len(svf_list), axis=0).reshape(self.svf_shape + (3,))
-
-        save_volume(results_vol, svf_v2r, join(DIR_PIPELINES['uslr'], image_filename))
-        save_volume(error_vol, svf_v2r, join(DIR_PIPELINES['uslr'], error_filename))
-        save_volume(std_vol, svf_v2r, join(join(DIR_PIPELINES['uslr'], std_filename)))
-
-        # Flow error
-        flow_pred = []
-        flow = []
-        for it_tp in range(Y.shape[0]):
-            svf_pred = y_pred[it_tp].reshape(self.svf_shape + (3,))
-            svf = Y[it_tp].reshape(self.svf_shape + (3,))
-            flow_pred += [integrate_svf(svf_pred, self.net_shape, scaling_factor=2, int_steps=7)]
-            flow += [integrate_svf(svf, self.net_shape, scaling_factor=2, int_steps=7)]
-
-        flow_pred = np.stack(flow_pred, axis=0)
-        flow = np.stack(flow, axis=0)
-        flow_error_vol = np.abs(flow - flow_pred).reshape((len(flow),) + self.net_shape + (3,))
-        flow_std_vol = (flow - np.mean(flow, axis=0) ** 2).reshape((len(flow),) + self.net_shape + (3,))
-
-        save_volume(flow_error_vol, svf_v2r, join(DIR_PIPELINES['uslr'], error_flow_filename))
-        save_volume(flow_std_vol, svf_v2r, join(join(DIR_PIPELINES['uslr'], std_flow_filename)))
-
-        net_v2r = np.load(self._get_data(**{'subject': subject, **self.net_v2r_entities}).path)
         svf = results_vol[..., 1]
         if max(time_list.values()) - min(time_list.values()) > 30:
-            svf = svf*365.25
-
+            svf = svf * 365.25
         flow = integrate_svf(svf, self.net_shape, scaling_factor=2, int_steps=7)
+        save_volume(flow, net_v2r, join(DIR_PIPELINES[self.pipeline_dir], flow_filename))
+
         jac = compute_jacobian(flow)
-        save_volume(jac, net_v2r, join(DIR_PIPELINES['uslr'], jac_filename))
+        save_volume(jac, net_v2r, join(DIR_PIPELINES[self.pipeline_dir], jac_filename))
 
 
-        seg_filename = self.build_path({'suffix': 'T1wdseg', 'subject': subject, **self.template_nonlin_entities})
-        proxyseg = nib.load(join(DIR_PIPELINES['uslr'], seg_filename))
-        seg_cort = np.array(proxyseg.dataobj)
-
-        proxyseg = nib.load(join(DIR_PIPELINES['uslr-lin'], seg_filename))
-        seg_subcort = np.array(proxyseg.dataobj)
-
-        filepath = join(DIR_PIPELINES['uslr'], 'sub-' + str(subject), 'sub-' + str(subject) + '_jac.csv')
-
-        if exists(filepath):
-            data_df = pd.read_csv(filepath, dtype=str)
-        else:
-            data_df = pd.DataFrame(columns=['metric'] + list(self.labels_dict.values()))
-
-        for mn, mf in {'mean': np.mean, 'median': np.median, 'std': np.std, 'min': np.min, 'max': np.max}.items():
-            d = {'metric': [mn]}
-            for lnum, lname in self.labels_dict.items():
-                if 'ctx' in lname:
-                    seg = seg_cort
-                else:
-                    seg = seg_subcort
-
-                jval = jac[seg == lnum]
-                if lnum in seg:
-                    d[lname] = [mf(jval)]
-                else:
-                    d[lname] = [np.nan]
-
-            data_df = pd.concat([data_df, pd.DataFrame(d)], ignore_index=True)
-
-        data_df.to_csv(filepath, index=False)
-
-    # def _register_to_MNI(self, subject, **kwargs):
-    #     """Register the nonlinear template to MNI via centroid affine + SynthMorph.
-    #
-    #     Saves the affine, SVF, and Jacobian determinant in MNI space.
-    #
-    #     Parameters
-    #     ----------
-    #     subject : str
-    #         Subject ID.
-    #     **kwargs
-    #         Ignored.
-    #     """
-    #     scope = 'uslr'
-    #
-    #     jac_entities = {'subject': subject, 'task': 'linfit', 'scope': scope, 'suffix': 'jac', 'desc': 'mean'}
-    #     mni_entities = {'subject': subject, 'space': 'MNI', 'desc': 'tosubject'}
-    #     aff_fname = self.build_path({'suffix': 'aff', 'extension': 'npy', **mni_entities})
-    #     svf_fname = self.build_path({'suffix': 'svf', 'extension': 'nii.gz', **mni_entities})
-    #     v2r_fname = self.build_path({'suffix': 'v2r', 'extension': 'npy', **mni_entities})
-    #
-    #     template_im = self._get_data(**{'suffix': 'T1w', 'subject': subject, **self.template_nonlin_entities})
-    #     template_seg = self._get_data(**{'suffix': 'T1wdseg', 'subject': subject, **self.template_nonlin_entities})
-    #     if template_seg is None or template_im is None:
-    #         return
-    #
-    #     centroid_ref, ok_ref = compute_centroids_ras(MNI_TEMPLATE_SEG, labels_registration)
-    #     centroid_flo, ok_flo = compute_centroids_ras(template_seg.path, labels_registration)
-    #
-    #     M_sbj = getM(centroid_ref[:, ok_ref > 0], centroid_flo[:, ok_ref > 0], use_L1=False)
-    #     np.save(join(DIR_PIPELINES[scope], aff_fname), M_sbj)
-    #
-    #     sfmni = sf.load_volume(MNI_TEMPLATE)
-    #     net2vox, vox2net, net_v2r = network_space(sfmni, shape=self.net_shape, center=sfmni)
-    #     np.save(join(DIR_PIPELINES[scope], v2r_fname), net_v2r)
-    #     svf_v2r = net_v2r.copy()
-    #     for c in range(3):
-    #         svf_v2r[:-1, c] = svf_v2r[:-1, c] / 0.5
-    #     svf_v2r[:-1, -1] = svf_v2r[:-1, -1] - np.matmul(svf_v2r[:-1, :-1], 0.5 * (np.array([0.5] * 3) - 1))
-    #
-    #     proxynet = nib.Nifti1Image(np.zeros(self.net_shape, dtype='float32'), net_v2r)
-    #     proxytemplate = nib.load(MNI_TEMPLATE)
-    #     proxytemplate = vol_resample_fast(proxynet, proxytemplate)
-    #
-    #     proxysubject = nib.load(template_im)
-    #     arrsubject = np.array(proxysubject.dataobj)
-    #     proxysubject = nib.Nifti1Image(arrsubject, np.linalg.inv(M_sbj) @ proxysubject.affine)
-    #     proxysubject = vol_resample_fast(proxynet, proxysubject)
-    #
-    #     fw_svf = synthmorph_register(proxytemplate, proxysubject, reg_param=0.4)
-    #     save_nii(fw_svf, svf_v2r, join(DIR_PIPELINES[scope], svf_fname))
-    #
-    #     jac_entities['space'] = 'uslr'
-    #     jac_file = self._get_data(**jac_entities)
-    #     if jac_file is not None:
-    #         proxyjac = nib.load(jac_file.path)
-    #         arrjac = np.array(proxyjac.dataobj)
-    #         proxyjac = nib.Nifti1Image(arrjac, np.linalg.inv(M_sbj) @ proxyjac.affine)
-    #         flow = integrate_svf(fw_svf, self.net_shape, scaling_factor=2, int_steps=7)
-    #         proxyflow = nib.Nifti1Image(flow, net_v2r)
-    #         proxysubject = vol_resample_fast(proxynet, proxyjac, proxyflow=proxyflow)
-    #         jac_entities['space'] = 'MNI'
-    #         jac_filename = self.build_path(jac_entities)
-    #         nib.save(proxysubject, join(DIR_PIPELINES[scope], jac_filename))
-
-    def process_subject(self, subject, cost=Literal['bch-l1', 'bch-l2'], force_flag: bool=False, **kwargs):
+    def process_subject(self,
+                        subject: str,
+                        cost: Literal['bch-l1', 'bch-l2']='bch-l2',
+                        force_flag: bool=False,
+                        **kwargs) -> ProcessResult:
         """Run the full nonlinear USLR pipeline for one subject.
 
         Orchestrates: SVF graph initialisation (pairwise SynthMorph),
@@ -1538,68 +1426,93 @@ class USLRDeformable(LongitudinalProcessor):
         **kwargs
             Forwarded to :meth:`_solve_graph`.
         """
-        print('* Subject: ' + subject)
-        assert cost in ['bch-l1', 'bch-l2']
-        self.svf_long_entities['scope'] = 'nicgiprep-long'
+        exit_dict = ProcessResult(exit_code=0, message='success')
+        try:
+            assert cost in ['bch-l1', 'bch-l2']
 
-        session_list = self._get_sessions(subject=subject, uslr=False)
-        checkpoint = self._check_running_subject(subject, session_list, force_flag)
-        print('  -->', checkpoint['message'])
-        if checkpoint['exit_code'] == -1 or checkpoint['exit_code'] == 1:
-            return
+            sess_df = self._get_sessions_file(subject)
+            if not isinstance(sess_df, pd.DataFrame):
+                if kwargs.get('verbose', False): print(sess_df['message'])
+                return sess_df
 
-        def_dir = join(self.tmp_dir, 'sub-' + subject)
-        create_dir(def_dir)
+            session_list = sess_df['session_id']
+            sess_df.set_index('session_id', drop=False, inplace=True)
 
-        if checkpoint['exit_code'] in [0]:
-            # compute svf v2r
-            svf_v2r_file = self._get_data(subject=subject, **self.svf_v2r_entities)
-            if svf_v2r_file is None:
-                net_v2r = np.load(self._get_data(subject=subject, **self.net_v2r_entities).path)
-                svf_v2r = net_v2r.copy()
-                for c in range(3):
-                    svf_v2r[:-1, c] = svf_v2r[:-1, c] / 0.5
-                svf_v2r[:-1, -1] = svf_v2r[:-1, -1] - np.matmul(svf_v2r[:-1, :-1], 0.5 * (np.array([0.5] * 3) - 1))
+            checkpoint = self._check_running_subject(subject, session_list, force_flag)
+            if kwargs.get('verbose', False):
+                print('* Subject: ' + subject)
 
-                filename_v2r = self.build_path({'subject': subject, **self.svf_v2r_entities})
-                np.save(join(DIR_PIPELINES['uslr-lin'], str(filename_v2r)), svf_v2r)
+            if checkpoint['exit_code'] == -1 or checkpoint['exit_code'] == 1:
+                if kwargs.get('verbose', False): print(checkpoint['message'])
+                return checkpoint
 
-            else:
-                svf_v2r = np.load(svf_v2r_file.path)
+            if checkpoint['exit_code'] in [5]:
+                if kwargs.get('verbose', False): print(checkpoint['message'])
+                return checkpoint
 
-            # build the entire graph
-            self._init_graph(subject, session_list, def_dir, force_flag)
-            self._update_subject_layout(subject)
+            def_dir = join(self.tmp_dir, 'sub-' + subject)
+            create_dir(def_dir)
 
-            # solve spanning tree
-            T_latent = self._solve_graph(subject, session_list, def_dir, cost, **kwargs)
-            for sess_id in session_list:
-                filename = self.build_path({'subject': subject, 'session': sess_id, **self.svf_long_entities})
-                create_dir(dirname(join(DIR_PIPELINES['nicgiprep-long'], filename)))
+            if checkpoint['exit_code'] in [0]:
+                # compute svf v2r
+                svf_v2r_file = self._get_data(subject=subject, **self.svf_v2r_ent)
+                if svf_v2r_file is None:
+                    return ProcessResult(exit_code=-1, message="[error] please, something went wrong in the rigid "
+                                                               "registration step. Please check.")
+                else:
+                    svf_v2r = np.load(svf_v2r_file.path)
 
-                img = nib.Nifti1Image(T_latent[sess_id].astype('float32'), svf_v2r)
-                save_volume(T_latent[sess_id].astype('float32'), svf_v2r, path=join(DIR_PIPELINES['uslr'], filename))
+                # build the entire graph
+                self._init_graph(subject, session_list, def_dir, force_flag)
+                self._update_subject_layout(subject)
 
-            self._update_subject_layout(subject)
+                # solve spanning tree
+                T_latent = self._solve_graph(session_list, def_dir, cost)
+                for sess_id in sess_df.index:
+                    filename = self.build_path({'subject': subject, 'session': sess_id, **self.svf_long_ent})
+                    filepath = join(DIR_PIPELINES['nicgiprep-long'], filename)
+                    create_dir(dirname(filepath))
+                    save_volume(T_latent[sess_id].astype('float32'), svf_v2r, path=filepath)
 
-        if checkpoint['exit_code'] in [0, 2]:
-            # create subject space
-            self._compute_template(subject, session_list)
-            self._update_subject_layout(subject)
+                self._update_subject_layout(subject)
 
-        if checkpoint['exit_code'] in [0, 2, 3]:
-            # compute mean SVF
-            self._compute_mean_svf(subject, session_list)
-            self._update_subject_layout(subject)
+            if checkpoint['exit_code'] in [0, 2]:
+                # compute template
+                self._compute_template(subject, sess_df)
+                self._update_subject_layout(subject)
 
-        # if checkpoint['exit_code'] in [0, 2, 3, 4, 5]:
-        #     # register to MNI
-        #     self._register_to_MNI(subject)
+            if checkpoint['exit_code'] in [0, 2, 3]:
+                # compute mean SVF
+                self._compute_mean_trajectories(subject, session_list)
+                self._update_subject_layout(subject)
 
-        print('DONE. \n')
+            return exit_dict
+
+        except Exception as e:
+            if kwargs.get('verbose', False): print(traceback.format_exc())
+            return ProcessResult(exit_code=-1, message=f'[error] subject {subject} failed: {e}')
 
 
 class LongitudinalRegistration(LongitudinalProcessor):
+
+    def __init__(self, bids_loader, subject_list=None, **kwargs):
+        """
+        Parameters
+        ----------
+        bids_loader : BIDSLayout
+            Initialised PyBIDS layout.
+        subject_list : list of str, optional
+            Subject IDs to process. If ``None``, all subjects in the layout
+            are used.
+        **kwargs
+            Forwarded to :meth:`_build_processor`.
+        """
+        super().__init__(bids_loader=bids_loader, subject_list=subject_list, **kwargs)
+
+        self.linear_reg = USLRLinear(bids_loader=bids_loader, subject_list=subject_list, **kwargs)
+        self.nonlinear_reg = USLRDeformable(bids_loader=bids_loader, subject_list=subject_list, **kwargs)
+
+
     def _build_processor(self):
         """Extend the base processor with longitudinal registration tmp and pipeline directories."""
         super()._build_processor()
@@ -1607,6 +1520,8 @@ class LongitudinalRegistration(LongitudinalProcessor):
         self.tmp_dir = join(self.tmp_dir, 'long-reg')
         create_dir(self.tmp_dir)
         self.pipeline_dir = 'nicgiprep-long'
+
+
 
     def _check_running_subject(self,
                                subject: str,
@@ -1683,628 +1598,83 @@ class LongitudinalRegistration(LongitudinalProcessor):
         else:
             return {'exit_code': 0, 'message': ''}
 
+    def _register_to_MNI(self, subject: str, sess_df: pd.DataFrame):
+        """Register the nonlinear template to MNI via centroid affine.
+
+        Saves the affine, SVF, and Jacobian determinant in MNI space.
+
+        Parameters
+        ----------
+        subject : str
+            Subject ID.
+        sess_df : pd.DataFrame
+            DataFrame with session_id as index and orig_t1w and orig_seg as columns
+        """
+        mni_ent = {'subject': subject, 'space': 'MNI'}
+        aff_fname = self.build_path({'suffix': 'aff', 'extension': 'npy', 'datatype': 'utils', 'desc': 'tosubject', **mni_ent})
+
+        template_im = self._get_data(**{'suffix': 'T1w', 'subject': subject, **self.template_long_ent})
+        template_seg = self._get_data(**{'suffix': 'T1wdseg', 'subject': subject, **self.template_long_ent})
+        if template_seg is None or template_im is None:
+            return ProcessResult(exit_code=-1, message='[error] subject ' + subject + ' does not have a template.')
+
+        centroid_ref, ok_ref = compute_centroids_ras(MNI_TEMPLATE_SEG, labels_registration)
+        centroid_flo, ok_flo = compute_centroids_ras(template_seg.path, labels_registration)
+
+        aff_MNI = getM(centroid_ref[:, ok_ref > 0], centroid_flo[:, ok_ref > 0], use_L1=False)
+        np.save(join(DIR_PIPELINES[self.pipeline_dir], aff_fname), aff_MNI)
+
+        mni_proxy = nib.load(MNI_TEMPLATE)
+        for sess_id, sess_files in sess_df.iterrows():
+            im_file = sess_files['orig_t1w']
+            extra_kwargs = {'subject': subject, 'session': sess_id}
+            aff_file = self._get_data(**{**extra_kwargs, **self.aff_long_ent})
+            im_fname = self.build_path({'session': sess_id, 'suffix': 'T1w', 'extension': 'nii.gz', **mni_ent})
+
+            if aff_file is None:
+                return ProcessResult(exit_code=-1, message='[error] Something went wrong in the rigid registration '
+                                                           'step for' + str(extra_kwargs) + '.\n')
+
+            aff = np.load(aff_file)
+            if np.sum(np.isnan(aff)) > 0:
+                return ProcessResult(exit_code=-1, message='[error] Something went wrong in the rigid registration '
+                                                           'step for' + str(extra_kwargs) + '.\n')
+
+            im_proxy = nib.load(im_file.path)
+            voxsize = np.sqrt(np.sum(im_proxy.affine * im_proxy.affine, axis=0))[:-1]
+            voxsize_new = np.sqrt(np.sum(mni_proxy.affine * mni_proxy.affine, axis=0))[:-1]
+            factor = voxsize / voxsize_new
+            sigmas = 0.25 / factor
+            sigmas[factor > 1] = 0  # don't blur if upsampling
+
+            im_array = np.array(im_proxy.dataobj)
+            im_array = gaussian_filter(im_array, sigmas)
+            im_proxy = nib.Nifti1Image(im_array, np.linalg.inv(aff_MNI) @ np.linalg.inv(aff) @ im_proxy.affine)
+            im_proxy = vol_resample_fast(mni_proxy, im_proxy)
+
+            nib.save(im_proxy, join(DIR_PIPELINES[self.pipeline_dir], im_fname))
+
+        return ProcessResult(exit_code=0, message='succeed')
 
     def process_subject(self, subject: str, force_flag: bool=False, **kwargs) -> ProcessResult:
 
+        # build sessions file with the filename used for each session (T1w)
+        sess_df = self._get_sessions_file(subject)
+        if not isinstance(sess_df, pd.DataFrame):
+            if kwargs.get('verbose', False): print(sess_df['message'])
+            return sess_df
+
         # call linear --> save etiv and T1w in subject space
+        lin_res = self.linear_reg.process_subject(subject=subject, force_flag=force_flag, **kwargs)
+        self._update_subject_layout(subject)
+
         # call nonlinear --> save nonlinear templates (T1w, T1wdseg) and SVF and JAC.
+        nonlin_res = self.nonlinear_reg.process_subject(subject=subject, force_flag=force_flag, **kwargs)
+        self._update_subject_layout(subject)
+
         # deform nonlinear template to MNI
-        # propagate all to MNI.
-        return
+        self._register_to_MNI(subject, sess_df)
 
+        return ProcessResult(exit_code=0, message='success')
 
-class LongitudinalSegmentationProcessor(LongitudinalProcessor):
-    """Processing subclass for longitudinal segmentation and volumetry.
 
-    Adds helpers for computing and saving volumetric measurements from
-    hard segmentations and soft posteriors.
-    """
-
-    def __init__(self, bids_loader, subject_list=None, pipeline_dir=None, **kwargs):
-        """
-        Parameters
-        ----------
-        bids_loader : BIDSLayout
-            Initialised PyBIDS layout.
-        subject_list : list of str, optional
-            Subject IDs to process. Defaults to all subjects.
-        pipeline_dir : str, optional
-            Output pipeline directory key (looked up in ``DIR_PIPELINES``).
-        **kwargs
-            Forwarded to :class:`Processing`.
-        """
-        self._pipeline_dir = pipeline_dir
-        super(LongitudinalSegmentationProcessor, self).__init__(bids_loader=bids_loader, subject_list=subject_list,
-                                                                 **kwargs)
-
-    def _name(self):
-        """Return the display name of this pipeline."""
-        return 'LongitudinalSegmentation'
-
-    @property
-    def pipeline_dir(self):
-        """Output pipeline directory key.
-
-        Raises
-        ------
-        NotImplementedError
-            Subclasses must implement this property.
-        """
-        raise NotImplementedError("The pipeline_dir property should be implemented by sub-classes")
-
-    def _save_vols(self, vols, filepath, labels_lut=None, *args, **kwargs):
-        """Append volumetric measurements to a per-subject CSV file.
-
-        Existing rows for the same ``(session, method)`` key are dropped and
-        replaced.
-
-        Parameters
-        ----------
-        vols : dict
-            Nested dict ``{session: {method: {channel_index: volume_mm3}}}``.
-        filepath : str
-            Path to the output CSV file (created if it does not exist).
-        labels_lut : dict, optional
-            Label LUT mapping integer label IDs to channel indices. Defaults
-            to ``self.labels_lut``.
-        """
-        # filepath = join(DIR_PIPELINES[self.pipeline_dir], 'sub-' + subject, 'sub-' + subject + '_vols.csv')
-        if labels_lut is None:
-            labels_lut = self.labels_lut
-
-        if exists(filepath):
-            data_df = pd.read_csv(filepath)
-        else:
-            data_df = pd.DataFrame(columns=['session', 'method'] + list(self.labels_dict.values()))
-
-        data_df.set_index(['session', 'method'], drop=False, inplace=True)
-        for tp, tp_dict in vols.items():
-            for method, method_dict in tp_dict.items():
-                if (tp, method) in data_df.index:
-                    data_df.drop((tp, method), inplace=True)
-
-                v_dict = {v: method_dict[labels_lut[k]] if labels_lut[k] in method_dict.keys() else 0 for k, v in
-                          self.labels_dict.items() if k in labels_lut.keys()}
-                df = pd.Series({'session': tp, 'method': method, **v_dict})
-                data_df = pd.concat([data_df, df.to_frame().T], ignore_index=True)
-                data_df.set_index(['session', 'method'], drop=False, inplace=True)
-
-        data_df.set_index('session', inplace=True, drop=False)
-        data_df.to_csv(filepath, index=False)
-
-    def _get_vols(self, y, res=1, labels=None):
-        """Compute label volumes from a hard segmentation.
-
-        Parameters
-        ----------
-        y : np.ndarray
-            Integer label map.
-        res : float or list of float, optional
-            Voxel size in mm (isotropic or per-axis). Default is 1.
-        labels : array-like, optional
-            Label values to compute volumes for. Defaults to
-            ``np.unique(y)``.
-
-        Returns
-        -------
-        dict
-            Mapping ``{label_int: volume_mm3}``.
-        """
-        if labels is None:
-            labels = np.unique(y)
-
-        n_dims = len(y.shape)
-        if isinstance(res, int):
-            res = [res] * n_dims
-        vol_vox = np.prod(res)
-
-        vols = {}
-        for l in labels:
-            mask_l = y == l
-            vols[int(l)] = np.round(np.sum(mask_l) * vol_vox, 2)
-
-        return vols
-
-    def _get_vols_post(self, post, res=1):
-        """Compute expected label volumes from soft posteriors.
-
-        Normalises posteriors to sum to one, then sums each channel over
-        the spatial dimensions.
-
-        Parameters
-        ----------
-        post : np.ndarray
-            Soft segmentation, shape ``(*spatial, n_labels)``.
-        res : float or list of float, optional
-            Voxel size in mm. Default is 1.
-
-        Returns
-        -------
-        dict
-            Mapping ``{channel_index: expected_volume_mm3}``.
-        """
-        n_labels = post.shape[-1]
-        n_dims = len(post.shape[:-1])
-        if isinstance(res, int):
-            res = [res] * n_dims
-        vol_vox = np.prod(res)
-
-        post /= np.sum(post, axis=-1, keepdims=True)
-
-        vols = {}
-        for l in range(n_labels):
-            mask_l = post[..., l]
-            vols[l] = np.round(np.sum(mask_l) * vol_vox, 2)
-
-        return vols
-
-    def _undo_one_hot(self, y, labels_lut=None, dtype='float32'):
-        """Convert a one-hot channel index array back to integer label values.
-
-        Parameters
-        ----------
-        y : np.ndarray
-            Array of channel indices.
-        labels_lut : dict, optional
-            Label LUT. Defaults to ``self.labels_lut``.
-        dtype : str, optional
-            Output NumPy dtype. Default is ``'float32'``.
-
-        Returns
-        -------
-        np.ndarray
-            Integer label map, same shape as ``y``.
-        """
-        if labels_lut is None:
-            labels_lut = self.labels_lut
-
-        y_true = np.zeros_like(y)
-        for ul, it_ul in labels_lut.items():
-            y_true[y == it_ul] = ul
-
-        return y_true.astype(dtype)
-
-class LongLabelFusionProcessor(LongitudinalSegmentationProcessor):
-    """Label-fusion pipeline for longitudinal segmentation.
-
-    Warps each timepoint's image and one-hot segmentation to every other
-    timepoint's space and fuses them with optional temporal and appearance
-    weighting kernels.
-    """
-
-    def _name(self):
-        """Return the display name of this pipeline."""
-        return 'LabelFusion'
-
-    def _get_tp_displacement(self, subject, target_tp, atlas_tp, **kwargs):
-        """Return the dense displacement field mapping ``atlas_tp`` to ``target_tp``.
-
-        Parameters
-        ----------
-        subject : str
-            Subject ID.
-        target_tp : str
-            Session ID of the target (reference) timepoint.
-        atlas_tp : str
-            Session ID of the atlas (moving) timepoint.
-        **kwargs
-            Pipeline-specific arguments.
-
-        Raises
-        ------
-        NotImplementedError
-            Must be overridden by subclasses.
-        """
-        raise NotImplementedError
-
-    def _deform_atlases(self, subject, target_tp, timepoints, results_dir, *args, **kwargs):
-        """Warp all atlas timepoints to the target timepoint space and save them.
-
-        For each atlas timepoint, resamples the T1w image and the one-hot
-        segmentation to the target space using the displacement returned by
-        :meth:`_get_tp_displacement`. The target timepoint itself is saved
-        as-is (no warping).
-
-        Parameters
-        ----------
-        subject : str
-            Subject ID.
-        target_tp : str
-            Session ID of the target timepoint.
-        timepoints : list of str
-            All session IDs (including the target).
-        results_dir : str
-            Directory where warped images (``<tp>.im.nii.gz``) and one-hot
-            arrays (``<tp>.onehot.nii.gz``) are written.
-        """
-        seg_ref_file = self._get_data(**{**self.seg_entities, 'subject': subject, 'session': target_tp})
-        if seg_ref_file is None:
-            return
-
-        proxysegref = nib.load(seg_ref_file.path)
-        for atlas_tp in timepoints:
-            im_file = self._get_data(**{**self.bf_entities, 'subject': subject, 'session': atlas_tp})
-            seg_file = self._get_data(**{**self.seg_entities, 'subject': subject, 'session': atlas_tp})
-
-            if im_file is None or seg_file is None:
-                continue
-
-            output_image_filepath = join(results_dir, str(atlas_tp) + '.im.nii.gz')
-            output_onehot_filepath = join(results_dir, str(atlas_tp) + '.onehot.nii.gz')
-
-            # One-hot encoding of the labels
-            proxyseg = nib.load(seg_file.path)
-            seg_arr = np.array(proxyseg.dataobj)
-            onehot_arr = one_hot_encoding(seg_arr, categories=self.labels_lut)
-
-            # Gaussian filter for [1, 1, 1] segmentation
-            proxyim = nib.load(im_file.path)
-            arrayim = np.array(proxyim.dataobj)
-            arrayim = gaussian_antialiasing(arrayim, proxyim.affine, [1, 1, 1])
-            proxyim = nib.Nifti1Image(arrayim, proxyim.affine)
-            proxyim = vol_resample_fast(proxyseg, proxyim)
-            arrayim = np.array(proxyim.dataobj)
-
-            if target_tp == atlas_tp:
-                proxyonehot = nib.Nifti1Image(onehot_arr.astype('float32'), proxyseg.affine)
-                nib.save(proxyonehot, output_onehot_filepath)
-                nib.save(proxyim, output_image_filepath)
-
-            else:
-                tp_displ = self._get_tp_displacement(subject, target_tp, atlas_tp, **kwargs)
-
-                # Image
-                arrayim_mov = warp(arrayim, tp_displ)
-                proxyim = nib.Nifti1Image(arrayim_mov.astype('float32'), proxysegref.affine)
-                nib.save(proxyim, output_image_filepath)
-
-                arrayonehot_mov = warp(onehot_arr, tp_displ)
-                proxyonehot = nib.Nifti1Image(arrayonehot_mov.astype('float32'), proxysegref.affine)
-                nib.save(proxyonehot, output_onehot_filepath)
-
-    def _label_fusion(self, target_tp, timepoints, results_dir, time_scale=None, g_std=None, **kwargs):
-        """Fuse warped atlas one-hot arrays at the target timepoint.
-
-        Computes a weighted average of all available atlas one-hot arrays,
-        with optional appearance (Gaussian) and temporal (exponential decay)
-        kernels.
-
-        Parameters
-        ----------
-        target_tp : str
-            Session ID of the target timepoint.
-        timepoints : list of str
-            All session IDs to include as atlases.
-        results_dir : str
-            Directory containing pre-warped atlas files (``<tp>.im.nii.gz``
-            and ``<tp>.onehot.nii.gz``).
-        time_scale : float, optional
-            Temporal kernel scale (exponential decay). ``None`` disables
-            temporal weighting.
-        g_std : float, optional
-            Appearance kernel standard deviation (Gaussian on intensity
-            difference). ``None`` disables appearance weighting.
-        **kwargs
-            Must contain ``'time_list'`` (dict) when ``time_scale`` is set.
-
-        Returns
-        -------
-        seg : np.ndarray
-            Hard segmentation (argmax), same spatial shape as target.
-        posteriors : np.ndarray
-            Soft fused posteriors, shape ``(*spatial, n_labels)``.
-        affine : np.ndarray
-            Affine matrix of the target image, shape ``(4, 4)``.
-        """
-        image_targ_filepath = join(results_dir, str(target_tp) + '.im.nii.gz')
-        proxyim_targ = nib.load(image_targ_filepath)
-        arrayim_targ = np.array(proxyim_targ.dataobj)
-        # arrayim_targ = gaussian_antialiasing(arrayim_targ, proxyim_targ.affine, [1, 1, 1])
-
-        arrayonehot_targ = None
-        for atlas_tp in timepoints:
-            image_filepath = join(results_dir, str(atlas_tp) + '.im.nii.gz')
-            onehot_filepath = join(results_dir, str(atlas_tp) + '.onehot.nii.gz')
-            if not exists(image_filepath) or not exists(onehot_filepath):
-                continue
-
-            proxyim = nib.load(image_filepath)
-            arrayim = np.array(proxyim.dataobj)
-
-            if g_std == None:
-                g_ker = 1
-            else:
-                g_ker = 1 / np.sqrt(2 * np.pi) / g_std * np.exp(-0.5 / (g_std ** 2) * (arrayim_targ - arrayim) ** 2)
-
-            if time_scale == None:
-                t_ker = 1
-            else:
-                t_targ = kwargs['time_list'][target_tp]
-                t_atlas = kwargs['time_list'][atlas_tp]
-                t_ker = time_scale * np.exp(-time_scale * (t_targ - t_atlas))
-
-            pdata = t_ker * g_ker
-            if g_std != None or time_scale != None:
-                pdata = pdata[..., np.newaxis]
-
-            proxyonehot = nib.load(onehot_filepath)
-            arrayonehot = np.array(proxyonehot.dataobj)
-
-            if arrayonehot_targ is None:
-                arrayonehot_targ = np.zeros(arrayonehot.shape)
-
-            arrayonehot_targ += pdata * arrayonehot
-
-        mask = np.sum(arrayonehot_targ[..., 1:], axis=-1) > 0
-        arrayonehot_targ[~mask, 0] = 1
-        arrayonehot_targ /= np.sum(arrayonehot_targ, axis=-1, keepdims=True)
-        return np.argmax(arrayonehot_targ, axis=-1), arrayonehot_targ, proxyim_targ.affine
-
-    def _save_vols(self, vols, filepath, time_scale=None, g_std=None, labels_lut=None, **kwargs):
-        """Append label-fusion volumetric results to a CSV file.
-
-        Extends :meth:`LongitudinalSegmentationProcessing._save_vols` with
-        extra columns for ``time_scale`` and ``g_std`` kernel parameters.
-
-        Parameters
-        ----------
-        vols : dict
-            Nested dict ``{session: {method: {channel_index: volume_mm3}}}``.
-        filepath : str
-            Path to the output CSV.
-        time_scale : float or None, optional
-            Temporal kernel parameter recorded in the CSV.
-        g_std : float or None, optional
-            Appearance kernel parameter recorded in the CSV.
-        labels_lut : dict, optional
-            Label LUT. Defaults to ``self.labels_lut``.
-        """
-        if labels_lut is None:
-            labels_lut = self.labels_lut
-
-        if exists(filepath):
-            data_df = pd.read_csv(filepath, dtype=str)
-        else:
-            data_df = pd.DataFrame(
-                columns=['session', 'method', 'time_scale', 'g_std'] + list(self.labels_dict.values()))
-
-        data_df.set_index(['session', 'method'], drop=False, inplace=True)
-        for tp, tp_dict in vols.items():
-            for method, method_dict in tp_dict.items():
-                if (tp, method) in data_df.index:
-                    data_df.drop((tp, method), inplace=True)
-
-                vols = {v: method_dict[labels_lut[k]] if labels_lut[k] in method_dict.keys() else 0 for k, v in
-                        self.labels_dict.items()}
-                df = pd.Series({'session': tp, 'method': method, 'time_scale': time_scale, 'g_std': g_std, **vols})
-                data_df = pd.concat([data_df, df.to_frame().T], ignore_index=True)
-                data_df.set_index(['session', 'method'], drop=False, inplace=True)
-
-        data_df.set_index('session', inplace=True, drop=False)
-        data_df.to_csv(filepath, index=False)
-
-    def process_subject(self, subject, force_flag=False, *args, **kwargs):
-        """Run label fusion and volumetry for all timepoints of one subject.
-
-        Iterates over each target timepoint, deforms all other timepoints'
-        atlases to the target space, fuses them, saves the hard segmentation
-        and a volumetric CSV.
-
-        Parameters
-        ----------
-        subject : str
-            Subject ID.
-        force_flag : bool, optional
-            If ``True``, reprocess even when volumes CSV already exists.
-            Default is ``False``.
-        *args
-            Unused positional arguments.
-        **kwargs
-            Forwarded to :meth:`_deform_atlases` and :meth:`_label_fusion`.
-            Should include ``'time_list'`` (dict) when temporal kernels are
-            used.
-        """
-        print('\nSubject: ' + subject)
-        timepoints = self._get_timepoints(subject=subject, uslr=True)
-
-        kwargs['time_list'] = self._get_time_list(subject, timepoints)
-
-        if 'output_pipeline' in kwargs.keys():
-            output_pipeline = kwargs['output_pipeline']
-        else:
-            output_pipeline = self.pipeline_dir
-
-        vols_filepath = join(DIR_PIPELINES[output_pipeline], 'sub-' + subject, 'sub-' + subject + '_vols.csv')
-        if exists(vols_filepath) and not force_flag:
-            return
-
-        # Save image and label registration
-        sbj_vols = {}
-        print(' * Timepoint: ', end=' ', flush=True)
-        for target_tp in timepoints:
-            print(target_tp, end='', flush=True)
-
-            # I/O data
-            seg_file = self._get_data(**{**self.seg_entities, 'subject': subject, 'session': target_tp})
-            if seg_file is None:
-                continue
-
-            tmp_dir = join(self.tmp_dir, subject, str(target_tp))
-            create_dir(tmp_dir)
-
-            filename = self.bids_loader.build_path({'subject': subject, 'session': target_tp, 'extension': 'nii.gz',
-                                                    'suffix': 'T1wdseg', 'acquisition': '1'},
-                                                   absolute_paths=False, path_patterns=BIDS_PATH_PATTERN,
-                                                   strict=False, validate=False)
-            create_dir(dirname(join(DIR_PIPELINES[output_pipeline], filename)))
-
-            # Main processes
-            self._deform_atlases(subject, target_tp, timepoints, tmp_dir, **kwargs)
-            seg, posteriors, v2r = self._label_fusion(target_tp, timepoints, tmp_dir, **kwargs)
-
-            # Store results
-            seg_true = self._undo_one_hot(seg, dtype='int16')
-            img = nib.Nifti1Image(seg_true, v2r)
-            nib.save(img, join(DIR_PIPELINES[output_pipeline], filename))
-
-            pixdim = np.sqrt(np.sum(v2r * v2r, axis=0))[:-1]
-            vols = self._get_vols(seg, res=pixdim, labels=list(self.labels_lut.values()))
-            vols_post = self._get_vols_post(posteriors, res=pixdim)
-            sbj_vols[target_tp] = {'seg': vols, 'post': vols_post}
-
-            self._save_vols(sbj_vols, vols_filepath, **kwargs)
-
-            remove_dir(tmp_dir)
-            if target_tp == timepoints[-1]:
-                print('.')
-            else:
-                print(',', end='', flush=True)
-
-        print('DONE\n')
-
-
-class USLR_LongSegment(LongLabelFusionProcessor, LongitudinalProcessor):
-    """Label-fusion longitudinal segmentation using USLR affine displacements.
-
-    Inherits from both :class:`~nicgiprep.processing.LongLabelFusionProcessing`
-    (label-fusion logic) and :class:`~nicgiprep.processing.USLRProcessing`
-    (BIDS entity templates). The displacement used to warp each atlas to the
-    target space is derived from the linear USLR affine graph.
-    """
-
-    @property
-    def pipeline_dir(self):
-        """Output pipeline directory key."""
-        return self._pipeline_dir
-
-    @pipeline_dir.setter
-    def pipeline_dir(self, value):
-        """Set the output pipeline directory key."""
-        self._pipeline_dir = value
-
-    def _name(self):
-        """Return the display name of this pipeline."""
-        return 'USLRLabelFusion (gaussian kernel)'
-
-    def _build_processor(self):
-        """Extend the base processor with a pipeline-specific temp directory."""
-        super()._build_processor()
-        self.tmp_dir = join(self.tmp_dir, 'USLR-LF-' + str(self.pipeline_dir))
-        create_dir(self.tmp_dir)
-
-    def _get_tp_displacement(self, subject, target_tp, atlas_tp, **kwargs):
-        """Build a composite displacement (affine + zero-field) from atlas to target.
-
-        Composes the USLR affine transforms to produce a displacement field
-        that maps the atlas timepoint to the target timepoint's segmentation
-        space.
-
-        Parameters
-        ----------
-        subject : str
-            Subject ID.
-        target_tp : str
-            Session ID of the target (reference) timepoint.
-        atlas_tp : str
-            Session ID of the atlas (moving) timepoint.
-        **kwargs
-            Ignored.
-
-        Returns
-        -------
-        np.ndarray or None
-            Dense displacement field in the target space, or ``None`` if any
-            required file is missing.
-        """
-        seg_ref_file = self._get_data(**{**self.seg_entities, 'subject': subject, 'session': target_tp})
-        aff_ref_file = self._get_data(**{'subject': subject, 'session': target_tp, **self.aff_graph_entities})
-        if seg_ref_file is None or aff_ref_file is None:
-            return
-
-        proxysegref = nib.load(seg_ref_file.path)
-        affref = np.linalg.inv(np.load(aff_ref_file.path))
-
-        seg_flo_file = self._get_data(**{**self.seg_entities, 'subject': subject, 'session': atlas_tp})
-        aff_flo_file = self._get_data(**{'subject': subject, 'session': atlas_tp, **self.aff_graph_entities})
-        if seg_flo_file is None or aff_flo_file is None:
-            return
-
-        proxysegflo = nib.load(seg_flo_file.path)
-        affflo = np.load(aff_flo_file.path)
-
-        flow = np.zeros(self.net_shape + (3,))
-        return compose_transforms((tf.cast(np.linalg.inv(proxysegflo.affine) @ affflo, tf.float32), flow,
-                                   tf.cast(affref @ proxysegref.affine, tf.float32)),
-                                  shift_center=False, shape=proxysegref.shape)
-
-
-    # def _deform_atlases(self, subject, target_tp, timepoints, results_dir, *args, **kwargs):
-    #     seg_ref_file = self._get_data(**{**self.seg_entities, 'subject': subject, 'session': target_tp})
-    #     if seg_ref_file is None:
-    #         return
-    #
-    #     proxysegref = nib.load(seg_ref_file.path)
-    #     for atlas_tp in timepoints:
-    #         im_file = self._get_data(**{**self.bf_entities, 'subject': subject, 'session': atlas_tp})
-    #         seg_file = self._get_data(**{**self.seg_entities, 'subject': subject, 'session': atlas_tp})
-    #
-    #         if im_file is None or seg_file is None:
-    #             continue
-    #
-    #         output_image_filepath = join(results_dir, str(atlas_tp) + '.im.nii.gz')
-    #         output_onehot_filepath = join(results_dir, str(atlas_tp) + '.onehot.nii.gz')
-    #
-    #         # One-hot encoding of the labels
-    #         proxyseg = nib.load(seg_file.path)
-    #         seg_arr = np.array(proxyseg.dataobj)
-    #         onehot_arr = one_hot_encoding(seg_arr, categories=self.labels_lut)
-    #
-    #         # Gaussian filter for [1, 1, 1] segmentation
-    #         proxyim = nib.load(im_file.path)
-    #         arrayim = np.array(proxyim.dataobj)
-    #         arrayim = gaussian_antialiasing(arrayim, proxyim.affine, [1, 1, 1])
-    #         proxyim = nib.Nifti1Image(arrayim, proxyim.affine)
-    #         proxyim = vol_resample_fast(proxyseg, proxyim)
-    #         arrayim = np.array(proxyim.dataobj)
-    #
-    #         if target_tp == atlas_tp:
-    #             proxyonehot = nib.Nifti1Image(onehot_arr.astype('float32'), proxyseg.affine)
-    #             nib.save(proxyonehot, output_onehot_filepath)
-    #             nib.save(proxyim, output_image_filepath)
-    #
-    #         else:
-    #             tp_displ = self._get_tp_displacement(subject, target_tp, atlas_tp, **kwargs)
-    #
-    #             # Image
-    #             arrayim_mov = warp(arrayim, tp_displ)
-    #             proxyim = nib.Nifti1Image(arrayim_mov.astype('float32'), proxysegref.affine)
-    #             nib.save(proxyim, output_image_filepath)
-    #
-    #             arrayonehot_mov = warp(onehot_arr, tp_displ)
-    #             proxyonehot = nib.Nifti1Image(arrayonehot_mov.astype('float32'), proxysegref.affine)
-    #             nib.save(proxyonehot, output_onehot_filepath)
-
-    def process_subject(self, subject, cost='bch-l2', time_scale=None, g_std=None, **kwargs):
-        """Run USLR label-fusion segmentation for one subject.
-
-        Parameters
-        ----------
-        subject : str
-            Subject ID.
-        cost : {'uslr', 'uslr-lin'}, optional
-            Which USLR derivative to use as displacement source. Default is
-            ``'bch-l2'`` (treated as ``'uslr'``).
-        time_scale : float, optional
-            Temporal kernel scale. ``None`` disables temporal weighting.
-        g_std : float, optional
-            Appearance kernel standard deviation. ``None`` disables
-            appearance weighting.
-        **kwargs
-            Forwarded to
-            :meth:`~nicgiprep.processing.LongLabelFusionProcessing.process_subject`.
-        """
-        assert cost in ['uslr', 'uslr-lin']
-        if cost not in ['uslr-lin']:
-            self.svf_graph_entities['scope'] = 'uslr'
-
-        super(LongLabelFusionProcessor, self).process_subject(subject, time_scale=time_scale, g_std=g_std, **kwargs)
