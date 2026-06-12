@@ -1,3 +1,4 @@
+from typing import Optional
 import time
 import copy
 
@@ -8,7 +9,8 @@ from scipy.ndimage import  gaussian_filter
 
 eps = np.finfo(float).eps
 
-def one_hot_encoding_with_gaussian(target, num_classes, categories=None, sigma=0.0):
+def one_hot_encoding_with_gaussian(target: np.ndarray, num_classes: int, categories: Optional[list[int]] = None,
+                                    sigma: float = 0.0) -> np.ndarray:
     """Convert an integer label map to a (optionally Gaussian-smoothed) one-hot array.
 
     Parameters
@@ -46,7 +48,7 @@ def one_hot_encoding_with_gaussian(target, num_classes, categories=None, sigma=0
     else:
         return gaussian_filter(labels, sigma)# size of gaussian kernel is 4*sigma + 0.5 at each side and center=2.
 
-def get_dct_basis_functions(image_shape, smoothing_kernel_size):
+def get_dct_basis_functions(image_shape: tuple[int, ...], smoothing_kernel_size: list[float]) -> list[np.ndarray]:
     """Build DCT-II basis functions for bias-field modelling.
 
     Computes the lowest-frequency DCT-II basis functions for each image
@@ -85,7 +87,8 @@ def get_dct_basis_functions(image_shape, smoothing_kernel_size):
 
     return biasFieldBasisFunctions
 
-def backprojectKroneckerProductBasisFunctions(kroneckerProductBasisFunctions, coefficients):
+def backprojectKroneckerProductBasisFunctions(kroneckerProductBasisFunctions: list[np.ndarray],
+                                               coefficients: np.ndarray) -> np.ndarray:
     """Reconstruct a field from Kronecker-product basis coefficients.
 
     Computes ``W * c`` where ``W`` is the full Kronecker product of the
@@ -116,7 +119,7 @@ def backprojectKroneckerProductBasisFunctions(kroneckerProductBasisFunctions, co
     Y = y.reshape(Ns, order='F')
     return Y
 
-def projectKroneckerProductBasisFunctions(kroneckerProductBasisFunctions, T):
+def projectKroneckerProductBasisFunctions(kroneckerProductBasisFunctions: list[np.ndarray], T: np.ndarray) -> np.ndarray:
     """Project a field onto Kronecker-product basis functions.
 
     Computes ``c = W' * t`` where ``W`` is the full Kronecker product of the
@@ -156,7 +159,8 @@ def projectKroneckerProductBasisFunctions(kroneckerProductBasisFunctions, T):
     coefficients = T.flatten(order='F')
     return coefficients
 
-def computePrecisionOfKroneckerProductBasisFunctions(kroneckerProductBasisFunctions, B):
+def computePrecisionOfKroneckerProductBasisFunctions(kroneckerProductBasisFunctions: list[np.ndarray],
+                                                       B: np.ndarray) -> np.ndarray:
     """Compute the precision matrix ``H = W' diag(B) W`` for Kronecker basis functions.
 
     Parameters
@@ -197,7 +201,8 @@ def computePrecisionOfKroneckerProductBasisFunctions(kroneckerProductBasisFuncti
     precisionMatrix = result.reshape( ( np.prod( Ms ), np.prod( Ms ) ) )
     return precisionMatrix
 
-def fitBiasFieldParameters(image, soft_seg, means, variances, bias_field_functions, mask, penalty=1):
+def fitBiasFieldParameters(image: np.ndarray, soft_seg: np.ndarray, means: np.ndarray, variances: np.ndarray,
+                            bias_field_functions: list[np.ndarray], mask: np.ndarray, penalty: float = 1) -> np.ndarray:
     """Estimate bias-field DCT coefficients via weighted least squares.
 
     Implements Eq. 8 from Van Leemput, *Automated Model-based Bias Field
@@ -283,7 +288,8 @@ def fitBiasFieldParameters(image, soft_seg, means, variances, bias_field_functio
     biasFieldCoefficients = solution.reshape((numberOfContrasts, numberOf3DBasisFunctions)).transpose()
     return biasFieldCoefficients
 
-def getBiasFields(biasFieldCoefficients, biasFieldBasisFunctions, mask=None):
+def getBiasFields(biasFieldCoefficients: np.ndarray, biasFieldBasisFunctions: list[np.ndarray],
+                   mask: Optional[np.ndarray] = None) -> np.ndarray:
     """Reconstruct bias fields from DCT coefficients and basis functions.
 
     Parameters
@@ -316,7 +322,8 @@ def getBiasFields(biasFieldCoefficients, biasFieldBasisFunctions, mask=None):
 
     return biasFields
 
-def undoLogTransformAndBiasField(imageBuffers, biasFields, mask):
+def undoLogTransformAndBiasField(imageBuffers: np.ndarray, biasFields: np.ndarray,
+                                  mask: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """Undo the log transform and divide out the estimated bias field.
 
     Clamps bias-field values outside the mask to the in-mask range (with a
@@ -359,7 +366,7 @@ def undoLogTransformAndBiasField(imageBuffers, biasFields, mask):
     #
     return expImageBuffers, expBiasFields
 
-def getGaussianLikelihoods(data, mean, variance):
+def getGaussianLikelihoods(data: np.ndarray, mean: np.ndarray, variance: np.ndarray) -> np.ndarray:
     """Compute univariate Gaussian likelihoods for each voxel and class.
 
     Parameters
@@ -381,7 +388,8 @@ def getGaussianLikelihoods(data, mean, variance):
     gaussianLikelihoods = np.exp(-0.5 * squared_mahalanobis_dist) * scaling
     return gaussianLikelihoods.T
 
-def getGaussianPosteriors(data, classPriors, means, variances):
+def getGaussianPosteriors(data: np.ndarray, classPriors: np.ndarray, means: np.ndarray,
+                           variances: np.ndarray) -> tuple[np.ndarray, float]:
     """Compute normalised Gaussian posterior probabilities for each voxel and class.
 
     Parameters
@@ -422,7 +430,9 @@ def getGaussianPosteriors(data, classPriors, means, variances):
 
     return gaussianPosteriors, minLogLikelihood
 
-def bias_field_corr(init_image, init_seg, penalty=0, patience=3, VERBOSE=True, filter_exceptions=True):
+def bias_field_corr(init_image: np.ndarray, init_seg: np.ndarray, penalty: float = 0, patience: int = 3,
+                     VERBOSE: bool = True,
+                     filter_exceptions: bool = True) -> tuple[Optional[np.ndarray], Optional[np.ndarray]]:
     """Perform iterative MRI bias-field correction using a Gaussian mixture model.
 
     Estimates and removes the multiplicative bias field from an MRI volume

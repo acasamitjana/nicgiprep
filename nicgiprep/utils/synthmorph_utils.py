@@ -1,5 +1,5 @@
 import pdb
-from typing import Union, Literal
+from typing import Union, Literal, Any
 import os
 from os.path import join, exists
 from pathlib import Path
@@ -121,7 +121,7 @@ def integrate_svf(svf: np.ndarray, orig_shape: tuple[int], scaling_factor: int=2
     """
     num_dim = len(svf.shape) - 1
 
-    def scale(fact):
+    def scale(fact: float) -> Any:
         """Return a constant isotropic scaling affine layer with factor ``fact``."""
         mat = np.diag((*[fact] * num_dim, 1))
         return ne.layers.Constant(mat)([])
@@ -137,9 +137,9 @@ def integrate_svf(svf: np.ndarray, orig_shape: tuple[int], scaling_factor: int=2
     return np.squeeze(np.array(fw_def))
 
 
-def synthmorph_register(imref_file: Union[str|nib.Nifti1Image|BIDSFile],
-                        imflo_file: Union[str|nib.Nifti1Image|BIDSFile],
-                        reg_param: Union[float|int]=0.5) -> np.ndarray|None:
+def synthmorph_register(imref_file: Union[str, nib.Nifti1Image, BIDSFile],
+                        imflo_file: Union[str, nib.Nifti1Image, BIDSFile],
+                        reg_param: Union[float, int] = 0.5) -> Union[np.ndarray, None]:
     """Register a floating image to a reference using SynthMorph deformable registration.
 
     Loads the SynthMorph model from
@@ -163,7 +163,8 @@ def synthmorph_register(imref_file: Union[str|nib.Nifti1Image|BIDSFile],
         Forward SVF in the reference image voxel space, shape ``(X, Y, Z, 3)``.
     """
     # subprocess.call(
-    #     ['mri_synthmorph', 'register', '-m', 'deform', '-t', 'prova_sm_def.nii.gz', '-o', 'prova_sm_mov.nii.gz', imageflo_file.path,
+    #     ['mri_synthmorph', 'register', '-m', 'deform', '-t', 'prova_sm_def.nii.gz', '-o', 'prova_sm_mov.nii.gz',
+    #      imageflo_file.path,
     #      imageref_file.path], stdout=subprocess.DEVNULL)
     #
     # pdb.set_trace()

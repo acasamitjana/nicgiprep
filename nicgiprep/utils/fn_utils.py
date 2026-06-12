@@ -1,3 +1,4 @@
+from typing import Optional, Union, Sequence, Any
 import csv
 import pdb
 from os.path import join
@@ -10,7 +11,7 @@ from scipy.interpolate import RegularGridInterpolator as rgi
 from munkres import Munkres
 
 
-def align_with_identity_vox2ras0(V, vox2ras0):
+def align_with_identity_vox2ras0(V: np.ndarray, vox2ras0: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """Permute and flip a volume so its voxel-to-RAS matrix is close to identity.
 
     Uses the Hungarian algorithm to find the axis permutation that best
@@ -61,7 +62,8 @@ def align_with_identity_vox2ras0(V, vox2ras0):
 
     return V, v2r
 
-def rescale_volume(volume, new_min=0, new_max=255, min_percentile=2, max_percentile=98, use_positive_only=True):
+def rescale_volume(volume: np.ndarray, new_min: float = 0, new_max: float = 255, min_percentile: float = 2,
+                    max_percentile: float = 98, use_positive_only: bool = True) -> np.ndarray:
     """Linearly rescale a volume to a new intensity range.
 
     Parameters
@@ -106,7 +108,7 @@ def rescale_volume(volume, new_min=0, new_max=255, min_percentile=2, max_percent
     else:  # avoid dividing by zero
         return np.zeros_like(new_volume)
 
-def rescale_flow(flow_vol, aff, new_vox_size):
+def rescale_flow(flow_vol: np.ndarray, aff: np.ndarray, new_vox_size: Sequence[float]) -> tuple[np.ndarray, np.ndarray]:
     """Rescale a displacement field to a new voxel size.
 
     Adjusts displacement vector magnitudes to account for the change in voxel
@@ -139,7 +141,7 @@ def rescale_flow(flow_vol, aff, new_vox_size):
 
     return flow_vol, flow_aff
 
-def gaussian_smoothing_voxel_size(proxy, new_vox_size):
+def gaussian_smoothing_voxel_size(proxy: nib.Nifti1Image, new_vox_size: Sequence[float]) -> np.ndarray:
     """Apply Gaussian anti-aliasing smoothing before resampling to a new voxel size.
 
     Computes per-axis sigma values from the ratio of current to target
@@ -169,7 +171,8 @@ def gaussian_smoothing_voxel_size(proxy, new_vox_size):
 
     return gaussian_filter(volume, sigmas)
 
-def rescale_voxel_size(volume, aff, new_vox_size, not_aliasing=False):
+def rescale_voxel_size(volume: np.ndarray, aff: np.ndarray, new_vox_size: Sequence[float],
+                        not_aliasing: bool = False) -> tuple[np.ndarray, np.ndarray]:
     """Resample a volume to a new voxel size using trilinear interpolation.
 
     Optionally applies Gaussian anti-aliasing before downsampling.
@@ -241,7 +244,7 @@ def rescale_voxel_size(volume, aff, new_vox_size, not_aliasing=False):
 
     return volume2, aff2
 
-def gaussian_antialiasing(volume, aff, new_voxel_size):
+def gaussian_antialiasing(volume: np.ndarray, aff: np.ndarray, new_voxel_size: Sequence[float]) -> np.ndarray:
     """Apply a Gaussian anti-aliasing filter before downsampling a volume.
 
     Axes being upsampled (factor > 1) receive zero smoothing.
@@ -268,7 +271,8 @@ def gaussian_antialiasing(volume, aff, new_voxel_size):
 
     return gaussian_filter(volume, sigmas)
 
-def get_rigid_params(matrix, proxyref, cog=None):
+def get_rigid_params(matrix: Any, proxyref: nib.Nifti1Image,
+                      cog: Optional[Sequence[float]] = None) -> tuple[np.ndarray, np.ndarray]:
     """Decompose a rigid affine matrix into Euler angles and translation.
 
     Parameters
@@ -321,7 +325,8 @@ def get_rigid_params(matrix, proxyref, cog=None):
 
     return angles, translation
 
-def one_hot_encoding(target, num_classes=None, categories=None):
+def one_hot_encoding(target: np.ndarray, num_classes: Optional[int] = None,
+                      categories: Optional[Union[dict, list, np.ndarray]] = None) -> np.ndarray:
     """Convert an integer label map to a one-hot encoded array.
 
     Parameters
@@ -366,7 +371,8 @@ def one_hot_encoding(target, num_classes=None, categories=None):
 
     return np.transpose(labels, axes=(1, 2, 3, 0))
 
-def label_log_odds(target, num_classes=None, categories=None):
+def label_log_odds(target: np.ndarray, num_classes: Optional[int] = None,
+                    categories: Optional[Union[list, np.ndarray]] = None) -> np.ndarray:
     """Compute per-label signed distance maps as log-odds representations.
 
     For each label, the signed Euclidean distance transform is computed:
@@ -415,7 +421,8 @@ def label_log_odds(target, num_classes=None, categories=None):
 
     return labels
 
-def crop_label(mask, margin=10, threshold=0):
+def crop_label(mask: np.ndarray, margin: Union[int, list[int]] = 10,
+                threshold: float = 0) -> tuple[np.ndarray, list[list[int]]]:
     """Crop a binary mask to its bounding box with an optional margin.
 
     Parameters
@@ -455,7 +462,7 @@ def crop_label(mask, margin=10, threshold=0):
 
     return mask_cropped, crop_coord
 
-def apply_crop(image, crop_coord):
+def apply_crop(image: np.ndarray, crop_coord: list[list[int]]) -> np.ndarray:
     """Extract a sub-volume defined by crop coordinates.
 
     Parameters
@@ -475,7 +482,7 @@ def apply_crop(image, crop_coord):
                  crop_coord[2][0]: crop_coord[2][1]
            ]
 
-def compute_centroids_ras(seg_file, labelfile):
+def compute_centroids_ras(seg_file: str, labelfile: str) -> tuple[np.ndarray, np.ndarray]:
     """Compute RAS-space centroids for each label in a segmentation.
 
     Labels with fewer than 50 voxels are flagged as missing.
@@ -490,7 +497,7 @@ def compute_centroids_ras(seg_file, labelfile):
     Returns
     -------
     refCOG : np.ndarray
-        RAS centroids, shape ``(3, n_labels)``.
+        Image centroids in RAS coordinates (mm) , shape ``(3, n_labels)``
     ok : np.ndarray
         Binary flag array of length ``n_labels``; 1 if the label had ≥ 50
         voxels, 0 otherwise.
@@ -500,24 +507,25 @@ def compute_centroids_ras(seg_file, labelfile):
     labels = np.load(labelfile)
 
     nlab = len(labels)
-    refCOG = np.zeros([4, nlab])
+    ref_cog = np.zeros([4, nlab])
 
     ok = np.ones(nlab)
     for l in range(nlab):
         aux = np.where(seg_buffer == labels[l])
         if len(aux[0]) > 50:
-            refCOG[0, l] = np.median(aux[0])
-            refCOG[1, l] = np.median(aux[1])
-            refCOG[2, l] = np.median(aux[2])
-            refCOG[3, l] = 1
+            ref_cog[0, l] = np.median(aux[0])
+            ref_cog[1, l] = np.median(aux[1])
+            ref_cog[2, l] = np.median(aux[2])
+            ref_cog[3, l] = 1
         else:
             ok[l] = 0
 
-    refCOG = np.matmul(seg_proxy.affine, refCOG)[:-1, :]
+    ref_cog = np.matmul(seg_proxy.affine, ref_cog)[:-1, :]
 
-    return refCOG, ok
+    return ref_cog, ok
 
-def compute_distance_map_nongrid(labelmap, sampling_grid, labels_lut=None):
+def compute_distance_map_nongrid(labelmap: np.ndarray, sampling_grid: np.ndarray,
+                                  labels_lut: Optional[dict] = None) -> np.ndarray:
     """Compute signed distance maps evaluated on an arbitrary sampling grid.
 
     For each label, the signed Euclidean distance is computed: positive
@@ -582,7 +590,7 @@ def compute_distance_map_nongrid(labelmap, sampling_grid, labels_lut=None):
 
     return distancemap
 
-def compute_distance_map(labelmap, soft_seg=True, labels_lut=None):
+def compute_distance_map(labelmap: np.ndarray, soft_seg: bool = True, labels_lut: Optional[dict] = None) -> np.ndarray:
     """Compute signed distance maps on the native label grid.
 
     For each label the computation is cropped to a tight bounding box with
@@ -635,7 +643,8 @@ def compute_distance_map(labelmap, soft_seg=True, labels_lut=None):
 
     return distancemap
 
-def compute_distance_map_crop(labelmap, soft_seg=True, labels_lut=None):
+def compute_distance_map_crop(labelmap: np.ndarray, soft_seg: bool = True,
+                               labels_lut: Optional[dict] = None) -> np.ndarray:
     """Compute signed distance maps using per-label bounding-box crops.
 
     Equivalent to :func:`compute_distance_map` but operates on cropped

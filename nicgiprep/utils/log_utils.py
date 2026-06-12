@@ -1,4 +1,5 @@
 
+from typing import Optional
 
 
 class LogBIDSLoader(object):
@@ -10,7 +11,7 @@ class LogBIDSLoader(object):
         Default expected number of files per query.
     """
 
-    def __init__(self, num_files):
+    def __init__(self, num_files: int) -> None:
         """
         Parameters
         ----------
@@ -20,7 +21,7 @@ class LogBIDSLoader(object):
         self.num_files = num_files
 
 
-    def check_length(self, file_list, curr_len=None):
+    def check_length(self, file_list: list[str], curr_len: Optional[int] = None) -> dict:
         """Check that the number of found files matches the expected count.
 
         Parameters
