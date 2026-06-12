@@ -18,7 +18,8 @@ import csv
 class ProcessResult(TypedDict, total=False):
     exit_code: int
     message: str
-    data: Optional[dict] # optional payload
+    data: Optional[dict]  # optional payload
+
 
 def get_bids_entities(fname: str) -> dict:
     """Parse BIDS entities from a filename into a dictionary.
@@ -38,24 +39,25 @@ def get_bids_entities(fname: str) -> dict:
         key are also set for the final filename component.
     """
     edict = {}
-    fparts = basename(fname).split('_')
+    fparts = basename(fname).split("_")
     for f in fparts:
 
-        if '.' in f:
-            edict['suffix'] = f.split('.')[0]
-            edict['extension'] = '.'.join(f.split('.')[1:])
+        if "." in f:
+            edict["suffix"] = f.split(".")[0]
+            edict["extension"] = ".".join(f.split(".")[1:])
 
         else:
-            e, v = f.split('-')
-            if e == 'sub':
-                e = 'subject'
-            elif e == 'ses':
-                e = 'session'
+            e, v = f.split("-")
+            if e == "sub":
+                e = "subject"
+            elif e == "ses":
+                e = "session"
 
-            edict['suffix'] = e
+            edict["suffix"] = e
             edict[e] = v
 
     return edict
+
 
 def save_nii(im: np.ndarray, v2r: np.ndarray, filepath: str) -> None:
     """Save a NumPy array as a NIfTI file, creating parent directories as needed.
@@ -73,13 +75,14 @@ def save_nii(im: np.ndarray, v2r: np.ndarray, filepath: str) -> None:
         Output file path (e.g. ``path/to/image.nii.gz``).
     """
     if im.dtype in [np.bool_]:
-        im = im.astype('uint8')
+        im = im.astype("uint8")
     elif im.dtype in [np.int64]:
-        im = im.astype('float')
+        im = im.astype("float")
 
     create_dir(dirname(filepath))
     img = nib.Nifti1Image(im, v2r)
     nib.save(img, filepath)
+
 
 def check_nan(v: Union[str, float]) -> bool:
     """Return whether a value represents a missing / NaN observation.
@@ -95,10 +98,11 @@ def check_nan(v: Union[str, float]) -> bool:
         ``True`` if ``v`` is ``''``, ``'nan'``, ``'NaN'``, or
         ``float('nan')``.
     """
-    if v in ['', 'nan', 'NaN'] or np.isnan(v):
+    if v in ["", "nan", "NaN"] or np.isnan(v):
         return True
     else:
         return False
+
 
 def create_dir(path: str, subdirs: Optional[Union[str, list[str]]] = None) -> None:
     """Create a directory (and optional sub-directories) if they do not exist.
@@ -122,6 +126,7 @@ def create_dir(path: str, subdirs: Optional[Union[str, list[str]]] = None) -> No
             if not exists(join(path, subdir)):
                 makedirs(join(path, subdir))
 
+
 def remove_dir(path: str) -> None:
     """Recursively remove a directory and all its contents.
 
@@ -130,7 +135,8 @@ def remove_dir(path: str) -> None:
     path : str
         Path to the directory to remove.
     """
-    subprocess.call(['rm', '-rf', path])
+    subprocess.call(["rm", "-rf", path])
+
 
 def create_derivative_dir(path: str, description: str) -> None:
     """Create a BIDS derivative directory with a ``dataset_description.json``.
@@ -145,21 +151,27 @@ def create_derivative_dir(path: str, description: str) -> None:
         Human-readable description written to the ``'Description'`` field
         of ``dataset_description.json``.
     """
-    if not os.path.exists(path): os.makedirs(path)
-    data_descr_path = os.path.join(path, 'dataset_description.json')
+    if not os.path.exists(path):
+        os.makedirs(path)
+    data_descr_path = os.path.join(path, "dataset_description.json")
 
     if not os.path.exists(data_descr_path):
         data_descr = {}
-        data_descr['Name'] = os.path.basename(path)
-        data_descr['BIDSVersion'] = '1.0.2'
-        data_descr['GeneratedBy'] = [{'Name': os.path.basename(path)}]
-        data_descr['Description'] = description
+        data_descr["Name"] = os.path.basename(path)
+        data_descr["BIDSVersion"] = "1.0.2"
+        data_descr["GeneratedBy"] = [{"Name": os.path.basename(path)}]
+        data_descr["Description"] = description
         json_object = json.dumps(data_descr, indent=4)
-        with open(data_descr_path, 'w') as outfile:
+        with open(data_descr_path, "w") as outfile:
             outfile.write(json_object)
 
-def write_json_derivatives(pixdim: Sequence[float], volshape: Sequence[int], filename: str,
-                            extra_kwargs: dict = {}) -> None:
+
+def write_json_derivatives(
+    pixdim: Sequence[float],
+    volshape: Sequence[int],
+    filename: str,
+    extra_kwargs: dict = {},
+) -> None:
     """Write a BIDS-style JSON sidecar with image resolution and shape.
 
     Parameters
@@ -174,22 +186,20 @@ def write_json_derivatives(pixdim: Sequence[float], volshape: Sequence[int], fil
         Additional key-value pairs to merge into the JSON object.
     """
     im_json = {
-        "Resolution": {
-            "R": str(pixdim[0]),
-            "A": str(pixdim[1]),
-            "S": str(pixdim[2])
-        },
+        "Resolution": {"R": str(pixdim[0]), "A": str(pixdim[1]), "S": str(pixdim[2])},
         "ImageShape": {
             "X": str(volshape[0]),
             "Y": str(volshape[1]),
-            "Z": str(volshape[2])
-        }}
+            "Z": str(volshape[2]),
+        },
+    }
 
     im_json = {**im_json, **extra_kwargs}
 
     json_object = json.dumps(im_json, indent=4)
-    with open(filename, 'w') as outfile:
+    with open(filename, "w") as outfile:
         outfile.write(json_object)
+
 
 def create_results_dir(results_dir: str, subdirs: Optional[list[str]] = None) -> None:
     """Create a results directory with standard sub-directories.
@@ -203,7 +213,7 @@ def create_results_dir(results_dir: str, subdirs: Optional[list[str]] = None) ->
         ``['checkpoints', 'results']``.
     """
     if subdirs is None:
-        subdirs = ['checkpoints', 'results']
+        subdirs = ["checkpoints", "results"]
     if not exists(results_dir):
         for sd in subdirs:
             makedirs(join(results_dir, sd))
@@ -212,7 +222,8 @@ def create_results_dir(results_dir: str, subdirs: Optional[list[str]] = None) ->
             if not exists(join(results_dir, sd)):
                 makedirs(join(results_dir, sd))
 
-def mri_convert_nifti_directory(directory: str, extension: str = '.nii.gz') -> None:
+
+def mri_convert_nifti_directory(directory: str, extension: str = ".nii.gz") -> None:
     """Convert all NIfTI / MGZ files in a directory to a target format via ``mri_convert``.
 
     Files already in the target ``extension`` are skipped.
@@ -228,19 +239,20 @@ def mri_convert_nifti_directory(directory: str, extension: str = '.nii.gz') -> N
     for f in files:
         if extension in f:
             continue
-        elif '.nii.gz' in f:
+        elif ".nii.gz" in f:
             new_f = f[:-6] + extension
 
-        elif '.nii' in f:
+        elif ".nii" in f:
             new_f = f[:-4] + extension
 
-        elif '.mgz' in f:
+        elif ".mgz" in f:
             new_f = f[:-4] + extension
 
         else:
             continue
 
-        subprocess.call(['mri_convert', join(directory, f), join(directory, new_f)])
+        subprocess.call(["mri_convert", join(directory, f), join(directory, new_f)])
+
 
 def read_lta(file: str) -> np.ndarray:
     """Read a FreeSurfer LTA (linear transform array) file into a 4×4 matrix.
@@ -255,17 +267,22 @@ def read_lta(file: str) -> np.ndarray:
     np.ndarray
         Affine transformation matrix, shape ``(4, 4)``.
     """
-    lta = np.zeros((4,4))
-    with open(file, 'r') as txtfile:
+    lta = np.zeros((4, 4))
+    with open(file, "r") as txtfile:
         lines = txtfile.readlines()
         for it_row, l in enumerate(lines[5:9]):
-            aff_row = l.split(' ')[:-1]
+            aff_row = l.split(" ")[:-1]
             lta[it_row] = [float(ar) for ar in aff_row]
 
     return lta
 
-def read_tsv(path: str, k: Optional[Union[str, list[str]]] = None, delimiter: str = '\t',
-              codec_read: bool = False) -> dict:
+
+def read_tsv(
+    path: str,
+    k: Optional[Union[str, list[str]]] = None,
+    delimiter: str = "\t",
+    codec_read: bool = False,
+) -> dict:
     """Read a delimited file into a dictionary keyed by one or more columns.
 
     Parameters
@@ -286,15 +303,18 @@ def read_tsv(path: str, k: Optional[Union[str, list[str]]] = None, delimiter: st
         Mapping from key string to the full row dictionary.
     """
     t = {}
-    with open(path, 'r') as csvfile:
+    with open(path, "r") as csvfile:
         csvreader = csv.DictReader(csvfile, delimiter=delimiter)
-        if k is None: k = csvreader.fieldnames[0]
-        if not isinstance(k, list): k = [k]
+        if k is None:
+            k = csvreader.fieldnames[0]
+        if not isinstance(k, list):
+            k = [k]
 
         for it_row, row in enumerate(csvreader):
-            t['_'.join([row[i] for i in k])] = row
+            t["_".join([row[i] for i in k])] = row
 
     return t
+
 
 def write_affine_matrix(path: str, affine_matrix: np.ndarray) -> None:
     """Write a 4×4 affine matrix to a space-delimited text file.
@@ -306,12 +326,15 @@ def write_affine_matrix(path: str, affine_matrix: np.ndarray) -> None:
     affine_matrix : np.ndarray
         Affine matrix, shape ``(4, 4)``.
     """
-    with open(path, 'w', newline='') as csvfile:
-        csvwriter = csv.writer(csvfile, delimiter=' ')
+    with open(path, "w", newline="") as csvfile:
+        csvwriter = csv.writer(csvfile, delimiter=" ")
         for it_row in range(4):
             csvwriter.writerow(affine_matrix[it_row])
 
-def read_affine_matrix(path: str, full: bool = False) -> Union[np.ndarray, tuple[np.ndarray, np.ndarray]]:
+
+def read_affine_matrix(
+    path: str, full: bool = False
+) -> Union[np.ndarray, tuple[np.ndarray, np.ndarray]]:
     """Read an affine matrix from a space-delimited text file.
 
     Parameters
@@ -332,10 +355,10 @@ def read_affine_matrix(path: str, full: bool = False) -> Union[np.ndarray, tuple
     translation_vector : np.ndarray
         Shape ``(3,)`` when ``full=False``.
     """
-    with open(path, 'r') as csvfile:
+    with open(path, "r") as csvfile:
         rotation_matrix = np.zeros((3, 3))
         translation_vector = np.zeros((3,))
-        csvreader = csv.reader(csvfile, delimiter=' ')
+        csvreader = csv.reader(csvfile, delimiter=" ")
         for it_row, row in enumerate(csvreader):
             rotation_matrix[it_row, 0] = float(row[0])
             rotation_matrix[it_row, 1] = float(row[1])
@@ -345,7 +368,7 @@ def read_affine_matrix(path: str, full: bool = False) -> Union[np.ndarray, tuple
                 break
 
     if full:
-        affine_matrix = np.zeros((4,4))
+        affine_matrix = np.zeros((4, 4))
         affine_matrix[:3, :3] = rotation_matrix
         affine_matrix[:3, 3] = translation_vector
         affine_matrix[3, 3] = 1
@@ -353,6 +376,7 @@ def read_affine_matrix(path: str, full: bool = False) -> Union[np.ndarray, tuple
 
     else:
         return rotation_matrix, translation_vector
+
 
 def load_array_if_path(var: Any, load_as_numpy: bool = True) -> Any:
     """Load a NumPy array from a file path, or pass through the value unchanged.
@@ -371,9 +395,10 @@ def load_array_if_path(var: Any, load_as_numpy: bool = True) -> Any:
         Loaded array, or the original ``var`` if no loading was performed.
     """
     if (isinstance(var, str)) & load_as_numpy:
-        assert os.path.isfile(var), 'No such path: %s' % var
+        assert os.path.isfile(var), "No such path: %s" % var
         var = np.load(var)
     return var
+
 
 def get_dims(shape: Sequence[int], max_channels: int = 10) -> tuple[int, int]:
     """Infer the number of spatial dimensions and channels from an array shape.
@@ -413,6 +438,7 @@ def get_dims(shape: Sequence[int], max_channels: int = 10) -> tuple[int, int]:
         n_channels = 1
     return n_dims, n_channels
 
+
 def get_ras_axes(aff: np.ndarray, n_dims: int = 3) -> np.ndarray:
     """Find which voxel axis corresponds to each RAS axis from an affine matrix.
 
@@ -440,9 +466,15 @@ def get_ras_axes(aff: np.ndarray, n_dims: int = 3) -> np.ndarray:
 
     return img_ras_axes
 
-def align_volume_to_ref(volume: np.ndarray, aff: np.ndarray, aff_ref: Optional[np.ndarray] = None,
-                         return_aff: bool = False, n_dims: Optional[int] = None,
-                         return_copy: bool = True) -> Union[np.ndarray, tuple[np.ndarray, np.ndarray]]:
+
+def align_volume_to_ref(
+    volume: np.ndarray,
+    aff: np.ndarray,
+    aff_ref: Optional[np.ndarray] = None,
+    return_aff: bool = False,
+    n_dims: Optional[int] = None,
+    return_copy: bool = True,
+) -> Union[np.ndarray, tuple[np.ndarray, np.ndarray]]:
     """Align a volume to the axis orientation and flip direction of a reference affine.
 
     Swaps and flips axes of ``volume`` so that its orientation matches
@@ -495,14 +527,17 @@ def align_volume_to_ref(volume: np.ndarray, aff: np.ndarray, aff_ref: Optional[n
         if ras_axes_flo[i] != ras_axes_ref[i]:
             new_volume = np.swapaxes(new_volume, ras_axes_flo[i], ras_axes_ref[i])
             swapped_axis_idx = np.where(ras_axes_flo == ras_axes_ref[i])
-            ras_axes_flo[swapped_axis_idx], ras_axes_flo[i] = ras_axes_flo[i], ras_axes_flo[swapped_axis_idx]
+            ras_axes_flo[swapped_axis_idx], ras_axes_flo[i] = (
+                ras_axes_flo[i],
+                ras_axes_flo[swapped_axis_idx],
+            )
 
     # align directions
     dot_products = np.sum(aff_flo[:3, :3] * aff_ref[:3, :3], axis=0)
     for i in range(n_dims):
         if dot_products[i] < 0:
             new_volume = np.flip(new_volume, axis=i)
-            aff_flo[:, i] = - aff_flo[:, i]
+            aff_flo[:, i] = -aff_flo[:, i]
             aff_flo[:3, 3] = aff_flo[:3, 3] - aff_flo[:3, i] * (new_volume.shape[i] - 1)
 
     if return_aff:
@@ -510,9 +545,13 @@ def align_volume_to_ref(volume: np.ndarray, aff: np.ndarray, aff_ref: Optional[n
     else:
         return new_volume
 
-def reformat_to_list(var: Union[str, int, float, bool, list, tuple, np.ndarray, None],
-                      length: Optional[int] = None, load_as_numpy: bool = False,
-                      dtype: Optional[str] = None) -> Optional[list]:
+
+def reformat_to_list(
+    var: Union[str, int, float, bool, list, tuple, np.ndarray, None],
+    length: Optional[int] = None,
+    load_as_numpy: bool = False,
+    dtype: Optional[str] = None,
+) -> Optional[list]:
     """Reformat a scalar, tuple, array, or string into a typed list of given length.
 
     Parameters
@@ -545,7 +584,9 @@ def reformat_to_list(var: Union[str, int, float, bool, list, tuple, np.ndarray, 
     if var is None:
         return None
     var = load_array_if_path(var, load_as_numpy=load_as_numpy)
-    if isinstance(var, (int, float, np.int, np.int32, np.int64, np.float, np.float32, np.float64)):
+    if isinstance(
+        var, (int, float, np.int, np.int32, np.int64, np.float, np.float32, np.float64)
+    ):
         var = [var]
     elif isinstance(var, tuple):
         var = list(var)
@@ -563,27 +604,39 @@ def reformat_to_list(var: Union[str, int, float, bool, list, tuple, np.ndarray, 
             if len(var) == 1:
                 var = var * length
             elif len(var) != length:
-                raise ValueError('if var is a list/tuple/numpy array, it should be of length 1 or {0}, '
-                                 'had {1}'.format(length, var))
+                raise ValueError(
+                    "if var is a list/tuple/numpy array, it should be of length 1 or {0}, "
+                    "had {1}".format(length, var)
+                )
     else:
-        raise TypeError('var should be an int, float, tuple, list, numpy array, or path to numpy array')
+        raise TypeError(
+            "var should be an int, float, tuple, list, numpy array, or path to numpy array"
+        )
 
     # convert items type
     if dtype is not None:
-        if dtype == 'int':
+        if dtype == "int":
             var = [int(v) for v in var]
-        elif dtype == 'float':
+        elif dtype == "float":
             var = [float(v) for v in var]
-        elif dtype == 'bool':
+        elif dtype == "bool":
             var = [bool(v) for v in var]
-        elif dtype == 'str':
+        elif dtype == "str":
             var = [str(v) for v in var]
         else:
-            raise ValueError("dtype should be 'str', 'float', 'int', or 'bool'; had {}".format(dtype))
+            raise ValueError(
+                "dtype should be 'str', 'float', 'int', or 'bool'; had {}".format(dtype)
+            )
     return var
 
-def load_volume(path_volume: str, im_only: bool = True, squeeze: bool = True, dtype: Optional[str] = None,
-                 aff_ref: Optional[np.ndarray] = None) -> Union[np.ndarray, tuple[np.ndarray, np.ndarray, Any]]:
+
+def load_volume(
+    path_volume: str,
+    im_only: bool = True,
+    squeeze: bool = True,
+    dtype: Optional[str] = None,
+    aff_ref: Optional[np.ndarray] = None,
+) -> Union[np.ndarray, tuple[np.ndarray, np.ndarray, Any]]:
     """Load a medical image volume from disk.
 
     Supported formats: ``.nii``, ``.nii.gz``, ``.mgz``, ``.npz``.
@@ -616,9 +669,11 @@ def load_volume(path_volume: str, im_only: bool = True, squeeze: bool = True, dt
     header : nibabel header
         Image header. Only returned when ``im_only=False``.
     """
-    assert path_volume.endswith(('.nii', '.nii.gz', '.mgz', '.npz')), 'Unknown data file: %s' % path_volume
+    assert path_volume.endswith((".nii", ".nii.gz", ".mgz", ".npz")), (
+        "Unknown data file: %s" % path_volume
+    )
 
-    if path_volume.endswith(('.nii', '.nii.gz', '.mgz')):
+    if path_volume.endswith((".nii", ".nii.gz", ".mgz")):
         x = nib.load(path_volume)
         if squeeze:
             volume = np.squeeze(x.get_fdata())
@@ -627,33 +682,38 @@ def load_volume(path_volume: str, im_only: bool = True, squeeze: bool = True, dt
         aff = x.affine
         header = x.header
     else:  # npz
-        volume = np.load(path_volume)['vol_data']
+        volume = np.load(path_volume)["vol_data"]
         if squeeze:
             volume = np.squeeze(volume)
         aff = np.eye(4)
         header = nib.Nifti1Header()
     if dtype is not None:
-        if 'int' in dtype:
+        if "int" in dtype:
             volume = np.round(volume)
         volume = volume.astype(dtype=dtype)
 
     # align image to reference affine matrix
     if aff_ref is not None:
         n_dims, _ = get_dims(list(volume.shape), max_channels=10)
-        volume, aff = align_volume_to_ref(volume, aff, aff_ref=aff_ref, return_aff=True, n_dims=n_dims)
+        volume, aff = align_volume_to_ref(
+            volume, aff, aff_ref=aff_ref, return_aff=True, n_dims=n_dims
+        )
 
     if im_only:
         return volume
     else:
         return volume, aff, header
 
-def save_volume(volume: np.ndarray,
-                aff: np.ndarray | str | None,
-                path: str,
-                header: Optional[nib.Nifti1Header]=None,
-                res: Optional[float | int]=None,
-                dtype: Optional[str]=None,
-                n_dims: int=3):
+
+def save_volume(
+    volume: np.ndarray,
+    aff: np.ndarray | str | None,
+    path: str,
+    header: Optional[nib.Nifti1Header] = None,
+    res: Optional[float | int] = None,
+    dtype: Optional[str] = None,
+    n_dims: int = 3,
+):
     """Save a volume array to disk as a NIfTI or NPZ file.
 
     Parameters
@@ -675,20 +735,23 @@ def save_volume(volume: np.ndarray,
         Number of spatial dimensions, used to interpret ``res``. Default is 3.
     """
 
-    if not exists(os.path.dirname(path)): makedirs(os.path.dirname(path))
-    if '.npz' in path:
+    if not exists(os.path.dirname(path)):
+        makedirs(os.path.dirname(path))
+    if ".npz" in path:
         np.savez_compressed(path, vol_data=volume)
     else:
         if header is None:
             header = nib.Nifti1Header()
         if isinstance(aff, str):
-            if aff == 'FS':
-                aff = np.array([[-1, 0, 0, 0], [0, 0, 1, 0], [0, -1, 0, 0], [0, 0, 0, 1]])
+            if aff == "FS":
+                aff = np.array(
+                    [[-1, 0, 0, 0], [0, 0, 1, 0], [0, -1, 0, 0], [0, 0, 0, 1]]
+                )
         elif aff is None:
             aff = np.eye(4)
         nifty = nib.Nifti1Image(volume, aff, header)
         if dtype is not None:
-            if 'int' in dtype:
+            if "int" in dtype:
                 volume = np.round(volume)
             volume = volume.astype(dtype=dtype)
             nifty.set_data_dtype(dtype)
@@ -699,8 +762,13 @@ def save_volume(volume: np.ndarray,
             nifty.header.set_zooms(res)
         nib.save(nifty, path)
 
-def get_volume_info(path_volume: str, return_volume: bool = False, aff_ref: Optional[np.ndarray] = None,
-                     max_channels: int = 10) -> tuple:
+
+def get_volume_info(
+    path_volume: str,
+    return_volume: bool = False,
+    aff_ref: Optional[np.ndarray] = None,
+    max_channels: int = 10,
+) -> tuple:
     """Gather metadata about a volume without necessarily returning the data.
 
     Parameters
@@ -743,10 +811,10 @@ def get_volume_info(path_volume: str, return_volume: bool = False, aff_ref: Opti
     im_shape = im_shape[:n_dims]
 
     # get labels res
-    if '.nii' in path_volume:
-        data_res = np.array(header['pixdim'][1:n_dims + 1])
-    elif '.mgz' in path_volume:
-        data_res = np.array(header['delta'])  # mgz image
+    if ".nii" in path_volume:
+        data_res = np.array(header["pixdim"][1: n_dims + 1])
+    elif ".mgz" in path_volume:
+        data_res = np.array(header["delta"])  # mgz image
     else:
         data_res = np.array([1.0] * n_dims)
 
@@ -767,6 +835,7 @@ def get_volume_info(path_volume: str, return_volume: bool = False, aff_ref: Opti
     else:
         return im_shape, aff, n_dims, n_channels, header, data_res
 
+
 def get_run(file: str) -> str:
     """Extract the BIDS ``run`` index from a filename.
 
@@ -781,11 +850,15 @@ def get_run(file: str) -> str:
         The run index string (e.g. ``'02'``), or ``''`` if no run entity is
         present.
     """
-    for f in file.split('_'):
-        if 'run' in f: return f.split('-')[1]
-    return ''
+    for f in file.split("_"):
+        if "run" in f:
+            return f.split("-")[1]
+    return ""
 
-def load_chunk(ps: nib.Nifti1Image, chunk: list[list[int]], ps_id: Any) -> tuple[np.ndarray, Any]:
+
+def load_chunk(
+    ps: nib.Nifti1Image, chunk: list[list[int]], ps_id: Any
+) -> tuple[np.ndarray, Any]:
     """Load a spatial sub-volume (chunk) from a NIfTI proxy and add a batch axis.
 
     Parameters
@@ -804,10 +877,21 @@ def load_chunk(ps: nib.Nifti1Image, chunk: list[list[int]], ps_id: Any) -> tuple
     ps_id : any
         The ``ps_id`` argument, unchanged.
     """
-    return np.asarray(ps.dataobj[chunk[0][0]:chunk[0][1], chunk[1][0]:chunk[1][1], chunk[2][0]:chunk[2][1]])[np.newaxis], ps_id
+    return (
+        np.asarray(
+            ps.dataobj[
+                chunk[0][0]: chunk[0][1],
+                chunk[1][0]: chunk[1][1],
+                chunk[2][0]: chunk[2][1],
+            ]
+        )[np.newaxis],
+        ps_id,
+    )
 
-def load_chunk_rescale(ps: nib.Nifti1Image, chunk: list[list[int]], ps_id: Any,
-                        factor: float) -> tuple[np.ndarray, Any]:
+
+def load_chunk_rescale(
+    ps: nib.Nifti1Image, chunk: list[list[int]], ps_id: Any, factor: float
+) -> tuple[np.ndarray, Any]:
     """Load and spatially rescale a NIfTI volume, then return a chunk.
 
     Parameters
@@ -831,8 +915,16 @@ def load_chunk_rescale(ps: nib.Nifti1Image, chunk: list[list[int]], ps_id: Any,
         The ``ps_id`` argument, unchanged.
     """
     svf = np.asarray(ps.dataobj)
-    svf = rescale(svf, [factor]*3  + [1])
-    return svf[chunk[0][0]:chunk[0][1], chunk[1][0]:chunk[1][1], chunk[2][0]:chunk[2][1]][np.newaxis], ps_id
+    svf = rescale(svf, [factor] * 3 + [1])
+    return (
+        svf[
+            chunk[0][0]: chunk[0][1],
+            chunk[1][0]: chunk[1][1],
+            chunk[2][0]: chunk[2][1],
+        ][np.newaxis],
+        ps_id,
+    )
+
 
 def get_age(age: Union[str, float]) -> Optional[float]:
     """Parse an age value to float, returning ``None`` for missing values.
@@ -847,13 +939,15 @@ def get_age(age: Union[str, float]) -> Optional[float]:
     float or None
         Parsed age, or ``None`` if parsing fails or the value is ``'nan'``.
     """
-    if age == 'nan': age = None
+    if age == "nan":
+        age = None
     try:
         age = float(age)
-    except:
+    except Exception:
         age = None
 
     return age
+
 
 def get_dx_bl(subject: Any) -> int:
     """Extract the baseline diagnosis code from a subject object.
@@ -872,14 +966,22 @@ def get_dx_bl(subject: Any) -> int:
     int
         Diagnosis code as defined in :data:`DX_DICT`.
     """
-    if 'dx' in subject.sbj_dict.keys():
-        dx = subject.sbj_dict['dx']
-    elif 'diagnosis' in subject.sbj_dict.keys():
-        dx = subject.sbj_dict['diagnosis']
+    if "dx" in subject.sbj_dict.keys():
+        dx = subject.sbj_dict["dx"]
+    elif "diagnosis" in subject.sbj_dict.keys():
+        dx = subject.sbj_dict["diagnosis"]
     else:
-        dx = DX_DICT[get_dx_long([tp.sess_metadata['dx'] if 'dx' in tp.sess_metadata.keys() else '' for tp in subject.sessions])]
+        dx = DX_DICT[
+            get_dx_long(
+                [
+                    tp.sess_metadata["dx"] if "dx" in tp.sess_metadata.keys() else ""
+                    for tp in subject.sessions
+                ]
+            )
+        ]
 
     return dx
+
 
 def get_dx(dx: str) -> int:
     """Map a diagnosis string to an integer code.
@@ -897,22 +999,23 @@ def get_dx(dx: str) -> int:
         Integer code: ``-1`` unknown, ``0`` CN, ``1`` MCI, ``2`` AD/Dementia,
         ``3`` FTD, ``4`` GENFI carrier.
     """
-    if dx == '':
+    if dx == "":
         dx = -1
-    elif dx == '-1':
+    elif dx == "-1":
         dx = -1
-    elif dx in ['CN', 'Control', 'CTR']:
+    elif dx in ["CN", "Control", "CTR"]:
         dx = 0
-    elif dx == 'MCI':
+    elif dx == "MCI":
         dx = 1
-    elif dx in ['Dementia', 'AD']:
+    elif dx in ["Dementia", "AD"]:
         dx = 2
-    elif dx in ['FTD', 'DFT']:
+    elif dx in ["FTD", "DFT"]:
         dx = 3
-    elif dx in ['PortadorGENFI']:
+    elif dx in ["PortadorGENFI"]:
         dx = 4
 
     return dx
+
 
 def get_dx_long(dx_list: list[str]) -> int:
     """Derive a longitudinal diagnosis code from a list of cross-sectional diagnoses.
@@ -937,7 +1040,6 @@ def get_dx_long(dx_list: list[str]) -> int:
     dx_bl = get_dx(dx_list[0])
     dx_last = get_dx(dx_list[-1])
 
-
     if dx_bl == -1 or dx_last == -1:
         dx_flag = [get_dx(d) != -1 for d in dx_list]
 
@@ -945,11 +1047,11 @@ def get_dx_long(dx_list: list[str]) -> int:
             return -1
 
         elif sum(dx_flag) == 1:
-            idx = int(np.where(np.array(dx_flag)==1)[0])
+            idx = int(np.where(np.array(dx_flag) == 1)[0])
             return get_dx(dx_list[idx])
 
         else:
-            idx = np.where(np.array(dx_flag)==1)[0]
+            idx = np.where(np.array(dx_flag) == 1)[0]
             idx_min = int(np.min(idx))
             idx_max = int(np.min(idx))
             dx_bl = get_dx(dx_list[idx_min])
@@ -957,30 +1059,30 @@ def get_dx_long(dx_list: list[str]) -> int:
 
     if dx_bl == 0:
         if dx_last == 0:
-            dx = 3# CN stable
+            dx = 3  # CN stable
         elif dx_last == 1:
-            dx = 4# CN-MCI converter
+            dx = 4  # CN-MCI converter
         elif dx_last == 2:
-            dx = 5# CN-AD converter
+            dx = 5  # CN-AD converter
         elif dx_last == 3:
             dx = 11
         else:
             dx = 9
     elif dx_bl == 1:
         if dx_last == 1:
-            dx = 6# MCI_stable
+            dx = 6  # MCI_stable
         elif dx_last == 2:
-            dx = 7# MCI-AD converter
+            dx = 7  # MCI-AD converter
         else:
             dx = 9
     elif dx_bl == 2:
         if dx_last == 2:
-            dx = 8# AD stable
+            dx = 8  # AD stable
         else:
             dx = 9
     elif dx_bl == 3:
         if dx_last == 3:
-            dx = 10# AD stable
+            dx = 10  # AD stable
         else:
             dx = 9
     elif dx_bl == 4:
@@ -989,27 +1091,28 @@ def get_dx_long(dx_list: list[str]) -> int:
         else:
             dx = 9
     else:
-        dx = 9# Reversed diagnosis
+        dx = 9  # Reversed diagnosis
 
     return dx
 
-DX_DICT = {
-    -1: 'Unknown',
-    0: 'CN_cross',
-    1: 'MCI_cross',
-    2: 'Dementia_cross',
-    3: 'CN_stable',
-    4: 'CN_MCI_converter',
-    5: 'CN_AD_converter',
-    6: 'MCI_stable',
-    7: 'MCI_AD_converter',
-    8: 'AD_stable',
-    9: 'Reversed_diagnosis/Unknown',
-    10: 'FTD_stable',
-    11: 'FTD_converter',
-    12: 'GENFI',
 
+DX_DICT = {
+    -1: "Unknown",
+    0: "CN_cross",
+    1: "MCI_cross",
+    2: "Dementia_cross",
+    3: "CN_stable",
+    4: "CN_MCI_converter",
+    5: "CN_AD_converter",
+    6: "MCI_stable",
+    7: "MCI_AD_converter",
+    8: "AD_stable",
+    9: "Reversed_diagnosis/Unknown",
+    10: "FTD_stable",
+    11: "FTD_converter",
+    12: "GENFI",
 }
+
 
 def read_FS_volumes(file: str, labs: Optional[dict] = None) -> tuple[dict, float]:
     """Parse regional volumes and eTIV from a FreeSurfer stats file.
@@ -1031,22 +1134,23 @@ def read_FS_volumes(file: str, labs: Optional[dict] = None) -> tuple[dict, float
     etiv = 0
     fs_vols = {}
     start = False
-    with open(file, 'r') as csvfile:
-        csvreader = csv.reader(csvfile, delimiter=' ')
+    with open(file, "r") as csvfile:
+        csvreader = csv.reader(csvfile, delimiter=" ")
         for row in csvreader:
-            row_cool = list(filter(lambda x: x != '', row))
+            row_cool = list(filter(lambda x: x != "", row))
             if start is True:
                 fs_vols[row_cool[1]] = float(row_cool[3])
 
-            if 'ColHeaders' in row_cool and start is False:
+            if "ColHeaders" in row_cool and start is False:
                 start = True
-            elif 'EstimatedTotalIntraCranialVol,' in row_cool:
-                etiv = float(row_cool[-2].split(',')[0])
+            elif "EstimatedTotalIntraCranialVol," in row_cool:
+                etiv = float(row_cool[-2].split(",")[0])
 
     # vols = {**{lab: float(fs_vols[lab_str]) for lab, lab_str in labs.items() if 'Thalamus' not in lab_str},
     #         **{lab: float(fs_vols[lab_str + '-Proper']) for lab, lab_str in labs.items() if 'Thalamus' in lab_str}}
 
     return fs_vols, etiv
+
 
 def get_float_vol(v: Any) -> float:
     """Safely cast a value to float, returning ``-4`` on failure.
@@ -1063,6 +1167,5 @@ def get_float_vol(v: Any) -> float:
     """
     try:
         return float(v)
-    except:
+    except Exception:
         return -4
-

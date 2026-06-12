@@ -18,7 +18,8 @@ SpatialTransformer = vxm_layers.SpatialTransformer
 compose_transforms = vxm_utils.compose
 constant_layer = ne.layers.Constant
 
-def load_weights(model: tf.keras.Model, weights: str|Path) -> None:
+
+def load_weights(model: tf.keras.Model, weights: str | Path) -> None:
     """Load weights into model or submodel.
 
     Attempts to load (all) weights into a model or one of its submodels. If
@@ -55,13 +56,13 @@ def load_weights(model: tf.keras.Model, weights: str|Path) -> None:
         try:
             mod.load_weights(weights)
             return
-        except ValueError as e:
+        except Exception:
             pass
 
     # Assume `model` is a submodel of what we got weights for.
-    with h5py.File(weights, mode='r') as h5:
-        layers = h5.attrs['layer_names']
-        weights = [list(h5[lay].attrs['weight_names']) for lay in layers]
+    with h5py.File(weights, mode="r") as h5:
+        layers = h5.attrs["layer_names"]
+        weights = [list(h5[lay].attrs["weight_names"]) for lay in layers]
 
         # Layers with weights. Attempt loading.
         layers, weights = zip(*filter(lambda f: f[1], zip(layers, weights)))
@@ -72,6 +73,7 @@ def load_weights(model: tf.keras.Model, weights: str|Path) -> None:
             except ValueError as e:
                 if lay is layers[-1]:
                     raise e
+
 
 def warp(flo_arr: np.ndarray, def_arr: np.ndarray) -> np.ndarray:
     """Apply a dense displacement field to a 3D volume using TensorFlow.
@@ -90,7 +92,7 @@ def warp(flo_arr: np.ndarray, def_arr: np.ndarray) -> np.ndarray:
     """
     if len(flo_arr.shape) == 3:
         flo_arr = flo_arr[..., np.newaxis]
-        
+
     tf_flo_arr = tf.cast(flo_arr[np.newaxis], tf.float32)
     tf_def_arr = tf.cast(def_arr[np.newaxis], tf.float32)
 
@@ -99,7 +101,10 @@ def warp(flo_arr: np.ndarray, def_arr: np.ndarray) -> np.ndarray:
 
     return np.squeeze(np.array(mov_1))
 
-def integrate_svf(svf: np.ndarray, orig_shape: tuple[int], scaling_factor: int=2, int_steps: int=7) -> np.ndarray:
+
+def integrate_svf(
+    svf: np.ndarray, orig_shape: tuple[int], scaling_factor: int = 2, int_steps: int = 7
+) -> np.ndarray:
     """Integrate a stationary velocity field (SVF) via scaling and squaring.
 
     Parameters
@@ -127,19 +132,23 @@ def integrate_svf(svf: np.ndarray, orig_shape: tuple[int], scaling_factor: int=2
         return ne.layers.Constant(mat)([])
 
     aff_1 = scale(scaling_factor)
-    fw_def = vxm_layers.VecInt(method='ss', int_steps=int_steps)(svf[np.newaxis])
+    fw_def = vxm_layers.VecInt(method="ss", int_steps=int_steps)(svf[np.newaxis])
     fw_def = (aff_1, fw_def, scale(1 / scaling_factor), aff_1)
     fw_def = vxm_layers.ComposeTransform(shift_center=False)(fw_def)
 
-    down = vxm_layers.AffineToDenseShift(orig_shape, shift_center=False)(scale(1 / scaling_factor))
+    down = vxm_layers.AffineToDenseShift(orig_shape, shift_center=False)(
+        scale(1 / scaling_factor)
+    )
     fw_def = vxm_layers.ComposeTransform()((fw_def, down))
 
     return np.squeeze(np.array(fw_def))
 
 
-def synthmorph_register(imref_file: Union[str, nib.Nifti1Image, BIDSFile],
-                        imflo_file: Union[str, nib.Nifti1Image, BIDSFile],
-                        reg_param: Union[float, int] = 0.5) -> Union[np.ndarray, None]:
+def synthmorph_register(
+    imref_file: Union[str, nib.Nifti1Image, BIDSFile],
+    imflo_file: Union[str, nib.Nifti1Image, BIDSFile],
+    reg_param: Union[float, int] = 0.5,
+) -> Union[np.ndarray, None]:
     """Register a floating image to a reference using SynthMorph deformable registration.
 
     Loads the SynthMorph model from
@@ -169,9 +178,10 @@ def synthmorph_register(imref_file: Union[str, nib.Nifti1Image, BIDSFile],
     #
     # pdb.set_trace()
 
-    if not exists(join(str(os.environ.get('FREESURFER_HOME')), 'models', 'synthmorph.deform.3.h5')):
+    if not exists(
+        join(str(os.environ.get("FREESURFER_HOME")), "models", "synthmorph.deform.3.h5")
+    ):
         return None
-
 
     if isinstance(imref_file, nib.Nifti1Image):
         ref_proxy = imref_file
@@ -190,7 +200,13 @@ def synthmorph_register(imref_file: Union[str, nib.Nifti1Image, BIDSFile],
     ref_arr = np.array(ref_proxy.dataobj)
     flo_arr = np.array(flo_proxy.dataobj)
 
-    prop = dict(in_shape=ref_arr.shape, bidir=True, int_steps=7, skip_affine=True, return_svf=True)
+    prop = dict(
+        in_shape=ref_arr.shape,
+        bidir=True,
+        int_steps=7,
+        skip_affine=True,
+        return_svf=True,
+    )
     model = vxm.networks.HyperVxmJoint(**prop)
 
     ref_arr -= np.min(ref_arr)
@@ -201,8 +217,17 @@ def synthmorph_register(imref_file: Union[str, nib.Nifti1Image, BIDSFile],
     flo_arr /= np.max(flo_arr)
     flo_arr = flo_arr[np.newaxis, ..., np.newaxis]
 
-    inputs = (tf.constant([reg_param]), tf.cast(flo_arr, tf.float32), tf.cast(ref_arr, tf.float32))
-    load_weights(model, weights=join(str(os.environ.get('FREESURFER_HOME')), 'models', 'synthmorph.deform.3.h5'))
+    inputs = (
+        tf.constant([reg_param]),
+        tf.cast(flo_arr, tf.float32),
+        tf.cast(ref_arr, tf.float32),
+    )
+    load_weights(
+        model,
+        weights=join(
+            str(os.environ.get("FREESURFER_HOME")), "models", "synthmorph.deform.3.h5"
+        ),
+    )
 
     _, _, fw_svf, _ = tuple(map(tf.squeeze, model(inputs)))
 
