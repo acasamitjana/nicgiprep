@@ -582,9 +582,7 @@ def reformat_to_list(
     if var is None:
         return None
     var = load_array_if_path(var, load_as_numpy=load_as_numpy)
-    if isinstance(
-        var, (int, float, np.int, np.int32, np.int64, np.float, np.float32, np.float64)
-    ):
+    if isinstance(var, (int, float, np.integer, np.floating)):
         var = [var]
     elif isinstance(var, tuple):
         var = list(var)

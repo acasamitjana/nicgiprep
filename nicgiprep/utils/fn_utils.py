@@ -348,7 +348,7 @@ def get_rigid_params(
     else:
         T_center[:3, 3] = -cog
 
-    T_center_inv = np.zeros((4, 4)).to(matrix.device)
+    T_center_inv = np.zeros((4, 4))
     T_center_inv[0, 0] = 1
     T_center_inv[1, 1] = 1
     T_center_inv[2, 2] = 1
