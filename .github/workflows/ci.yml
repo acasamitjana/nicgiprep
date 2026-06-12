@@ -113,21 +113,21 @@ jobs:
               print(f"All functions/classes have docstrings.")
           EOF
 
-tests:
-    name: Unit tests (pytest)
-    if: ${{ hashFiles('tests/**/*.py') != '' }}
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
+  tests:
+      name: Unit tests (pytest)
+      if: ${{ hashFiles('tests/**/*.py') != '' }}
+      runs-on: ubuntu-latest
+      permissions:
+        contents: read
+      steps:
+        - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.10"
+        - uses: actions/setup-python@v5
+          with:
+            python-version: "3.10"
 
-      - name: Install test dependencies
-        run: pip install pytest numpy nibabel scikit-image
+        - name: Install test dependencies
+          run: pip install pytest numpy nibabel scikit-image
 
-      - name: Run tests
-        run: pytest -q tests/
+        - name: Run tests
+          run: pytest -q tests/
