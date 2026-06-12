@@ -3,6 +3,7 @@ Base Processing pipeline schematic for neuroimage preprocessing.
 
 Provides base classe that implements basic and necessary functions
 """
+
 import traceback
 from typing import Optional, Union
 
@@ -14,7 +15,6 @@ from setup import *
 from nicgiprep.utils.log_utils import LogBIDSLoader
 from nicgiprep.utils.label_utils import SUPERSYNTH_LUT
 from nicgiprep.utils.io_utils import create_dir
-
 
 
 class Processor(object):
@@ -52,7 +52,9 @@ class Processor(object):
         Mapping from integer label IDs to human-readable label names.
     """
 
-    def __init__(self, bids_loader: BIDSLayout, subject_list: Optional[list]=None, **kwargs):
+    def __init__(
+        self, bids_loader: BIDSLayout, subject_list: Optional[list] = None, **kwargs
+    ):
         """
         Parameters
         ----------
@@ -65,7 +67,9 @@ class Processor(object):
             Forwarded to :meth:`_build_processor`.
         """
         self.bids_loader = bids_loader
-        self.subject_list = bids_loader.get_subjects() if subject_list is None else subject_list
+        self.subject_list = (
+            bids_loader.get_subjects() if subject_list is None else subject_list
+        )
 
         self.bids_logger = LogBIDSLoader(num_files=1)
         self._build_processor()
@@ -74,28 +78,38 @@ class Processor(object):
         """Initialise pipeline-specific state and BIDS entity filters.
 
         Sets common parameters between different pre-processing pipelines:
-        * ``tmp_dir``: used to store temporal, intermediate results, 
-        * ``seg_entities``: entities used to save/retrieve base-segmented T1w  of a given subject/session, 
-        * ``bf_entities``: entities used to save/retrieve base-preprocessed T1w  of a given subject/session, 
+        * ``tmp_dir``: used to store temporal, intermediate results,
+        * ``seg_entities``: entities used to save/retrieve base-segmented T1w  of a given subject/session,
+        * ``bf_entities``: entities used to save/retrieve base-preprocessed T1w  of a given subject/session,
         * ``labels_lut``: used for computing segmentation posteriors,
-        * ``labels_dict``: used to save/retrieve sepecific volumes relating label number and label name. 
-        
+        * ``labels_dict``: used to save/retrieve sepecific volumes relating label number and label name.
+
         Subclasses should call ``super()._build_processor()``
         and then extend or override these attributes.
         """
-        self.tmp_dir = kwargs.get('tmp_dir', TMP_DIR)
+        self.tmp_dir = kwargs.get("tmp_dir", TMP_DIR)
         if not isinstance(self.tmp_dir, str):
             raise ValueError("Please, specify a valid temporary directory.")
 
         create_dir(self.tmp_dir)
 
-        self.seg_entities = {'scope': 'nicgiprep-base', 'extension': 'nii.gz', 'suffix': ['T1wdseg', 'dseg']}
+        self.seg_entities = {
+            "scope": "nicgiprep-base",
+            "extension": "nii.gz",
+            "suffix": ["T1wdseg", "dseg"],
+        }
         self.labels_lut = SUPERSYNTH_LUT
 
         self.pipeline_is_initialized = False
 
-    def build_path(self, entities: dict, absolute_paths: bool=False, validate: bool=False, strict: bool=True) -> str:
-        """Construct a relative valid BIDS file path from an entity dictionary. It follows the convention 
+    def build_path(
+        self,
+        entities: dict,
+        absolute_paths: bool = False,
+        validate: bool = False,
+        strict: bool = True,
+    ) -> str:
+        """Construct a relative valid BIDS file path from an entity dictionary. It follows the convention
         specified in this NicGi-Prep
 
         Filters ``entities`` to the keys recognised by the project's BIDS path
@@ -121,13 +135,15 @@ class Processor(object):
             and ``strict`` is ``False``.
         """
         entities = {k: v for k, v in entities.items() if k in filename_entities}
-        scope = entities['scope'] if 'scope' in entities.keys() else 'all'
-        return self.bids_loader.build_path(entities,
-                                           scope=scope,
-                                           absolute_paths=absolute_paths,
-                                           path_patterns=BIDS_PATH_PATTERN,
-                                           strict=strict,
-                                           validate=validate)
+        scope = entities["scope"] if "scope" in entities.keys() else "all"
+        return self.bids_loader.build_path(
+            entities,
+            scope=scope,
+            absolute_paths=absolute_paths,
+            path_patterns=BIDS_PATH_PATTERN,
+            strict=strict,
+            validate=validate,
+        )
 
     def _name(self):
         """Return the human-readable pipeline name used in console banners.
@@ -137,9 +153,9 @@ class Processor(object):
         str
             Empty string in the base class; subclasses should override.
         """
-        return 'Base'
+        return "Base"
 
-    def get_subjects(self, scope: Union[list[str]|str]='all') -> list:
+    def get_subjects(self, scope: Union[list[str] | str] = "all") -> list:
         """Return the list of subjects in the dataset available for processing.
 
         Parameters
@@ -157,7 +173,7 @@ class Processor(object):
 
         return subjects
 
-    def _get_sessions(self, subject, scope: Union[list[str]|str]='all') -> list:
+    def _get_sessions(self, subject, scope: Union[list[str] | str] = "all") -> list:
         """Return the session IDs available for a given subject.
 
         Parameters
@@ -177,7 +193,13 @@ class Processor(object):
 
         return session_list
 
-    def _get_data(self, ignore_check: bool=False, curr_len: Optional[int]=None, verbose: bool=True, **kwargs) -> list[BIDSFile]:
+    def _get_data(
+        self,
+        ignore_check: bool = False,
+        curr_len: Optional[int] = None,
+        verbose: bool = True,
+        **kwargs
+    ) -> list[BIDSFile]:
         """Query the BIDS layout for a single file matching the given entities.
 
         Parameters
@@ -206,14 +228,19 @@ class Processor(object):
             return file_list
 
         file_flag = self.bids_logger.check_length(file_list, curr_len=curr_len)
-        if file_flag['exit_code'] == -1:
+        if file_flag["exit_code"] == -1:
             if verbose:
-                print('[warning]', end=' ', flush=True)
-                print(file_flag['log'], end=' ', flush=True)
-                print(' --> Entities: ' + ','.join(['<' + str(k) + ':' + str(v) + '>' for k, v in kwargs.items()]))
+                print("[warning]", end=" ", flush=True)
+                print(file_flag["log"], end=" ", flush=True)
+                print(
+                    " --> Entities: "
+                    + ",".join(
+                        ["<" + str(k) + ":" + str(v) + ">" for k, v in kwargs.items()]
+                    )
+                )
             raw_file = None
         else:
-            raw_file = file_flag['file']
+            raw_file = file_flag["file"]
 
         return raw_file
 
@@ -241,13 +268,13 @@ class Processor(object):
         self.pipeline_is_initialized = True
         name = self._name()
         if len(name) > 0 and self.pipeline_is_initialized is False:
-            print('\n\n\n\n\n')
-            print('# ' + '-'.join([''] * (len(name) + 7)) + ' #')
-            print('#    ' + name + '    #')
-            print('# ' + '-'.join([''] * (len(name) + 7)) + ' #')
-            print('\n\n')
+            print("\n\n\n\n\n")
+            print("# " + "-".join([""] * (len(name) + 7)) + " #")
+            print("#    " + name + "    #")
+            print("# " + "-".join([""] * (len(name) + 7)) + " #")
+            print("\n\n")
 
-    def _update_subject_layout(self, subject:str) -> None:
+    def _update_subject_layout(self, subject: str) -> None:
         """Rebuild the BIDS layout restricted to a single subject.
 
         Replaces ``self.bids_loader`` with a new layout whose indexer ignores
@@ -261,11 +288,15 @@ class Processor(object):
         rawdir = self.bids_loader.root
         derivatives = self.bids_loader.derivatives.keys()
 
-        indexer = BIDSLayoutIndexer(validate=False, ignore='sub-(?!' + subject + ')(.*)$', index_metadata=False)
-        bids_kwargs = {'validate': False, 'indexer': indexer}
+        indexer = BIDSLayoutIndexer(
+            validate=False, ignore="sub-(?!" + subject + ")(.*)$", index_metadata=False
+        )
+        bids_kwargs = {"validate": False, "indexer": indexer}
 
         bids_loader = BIDSLayout(root=rawdir, **bids_kwargs)
-        bids_loader.add_derivatives([DIR_PIPELINES[d] for d in derivatives], **bids_kwargs)
+        bids_loader.add_derivatives(
+            [DIR_PIPELINES[d] for d in derivatives], **bids_kwargs
+        )
 
         self.bids_loader = bids_loader
 
@@ -279,14 +310,16 @@ class Processor(object):
         derivatives = self.bids_loader.derivatives.keys()
 
         indexer = BIDSLayoutIndexer(validate=False, index_metadata=False)
-        bids_kwargs = {'validate': False, 'indexer': indexer}
+        bids_kwargs = {"validate": False, "indexer": indexer}
 
         bids_loader = BIDSLayout(root=rawdir, **bids_kwargs)
-        bids_loader.add_derivatives([DIR_PIPELINES[d] for d in derivatives], **bids_kwargs)
+        bids_loader.add_derivatives(
+            [DIR_PIPELINES[d] for d in derivatives], **bids_kwargs
+        )
 
         self.bids_loader = bids_loader
 
-    def _get_subject_info(self, subject: str) -> pd.DataFrame|None:
+    def _get_subject_info(self, subject: str) -> pd.DataFrame | None:
         """Load the sessions TSV for a subject as a DataFrame indexed by session ID.
 
         Parameters
@@ -300,15 +333,17 @@ class Processor(object):
             Session-level metadata, or ``None`` if no sessions TSV is found.
         """
         sess_df = None
-        sess_tsv = self._get_data(suffix='sessions', extension='tsv', subject=subject, scope='bids')
+        sess_tsv = self._get_data(
+            suffix="sessions", extension="tsv", subject=subject, scope="bids"
+        )
         if sess_tsv:
-            sess_df = pd.read_csv(sess_tsv[0].path, sep='\t')
-            sess_df = sess_df.set_index('session_id')
-            sess_df = sess_df[~sess_df.index.duplicated(keep='last')]
+            sess_df = pd.read_csv(sess_tsv[0].path, sep="\t")
+            sess_df = sess_df.set_index("session_id")
+            sess_df = sess_df[~sess_df.index.duplicated(keep="last")]
 
         return sess_df
 
-    def _get_participant_info(self) -> pd.DataFrame|None:
+    def _get_participant_info(self) -> pd.DataFrame | None:
         """Load the participants TSV as a DataFrame indexed by participant ID.
 
         Returns
@@ -318,15 +353,15 @@ class Processor(object):
             is found.
         """
         part_df = None
-        part_tsv = self._get_data(suffix='participants', extension='tsv')
+        part_tsv = self._get_data(suffix="participants", extension="tsv")
         if part_tsv:
-            part_df = pd.read_csv(part_tsv[0].path, sep='\t')
-            part_df = part_df.set_index('participant_id')
-            part_df = part_df[~part_df.index.duplicated(keep='last')]
+            part_df = pd.read_csv(part_tsv[0].path, sep="\t")
+            part_df = part_df.set_index("participant_id")
+            part_df = part_df[~part_df.index.duplicated(keep="last")]
 
         return part_df
 
-    def _undo_one_hot(self, y, dtype='float32'):
+    def _undo_one_hot(self, y, dtype="float32"):
         """Convert a one-hot channel index array back to integer label values.
 
         Parameters
@@ -348,7 +383,14 @@ class Processor(object):
 
         return y_true.astype(dtype)
 
-    def process_scan(self, subject: str, session: str, modality: str, force_flag: bool=False, **kwargs):
+    def process_scan(
+        self,
+        subject: str,
+        session: str,
+        modality: str,
+        force_flag: bool = False,
+        **kwargs
+    ):
         """Run the pipeline for a single session.
 
         Parameters
@@ -372,7 +414,9 @@ class Processor(object):
         """
         raise NotImplementedError
 
-    def process_session(self, subject: str, session: str, force_flag: bool=False, **kwargs):
+    def process_session(
+        self, subject: str, session: str, force_flag: bool = False, **kwargs
+    ):
         """Run the pipeline for a single session.
 
         Parameters
@@ -394,7 +438,7 @@ class Processor(object):
         """
         raise NotImplementedError
 
-    def process_subject(self, subject: str, force_flag: bool=False, **kwargs):
+    def process_subject(self, subject: str, force_flag: bool = False, **kwargs):
         """Run the pipeline for a single subject.
 
         Parameters
@@ -432,16 +476,14 @@ class Processor(object):
             self._update_subject_layout(subject)
             try:
                 retcode = self.process_subject(subject, **kwargs)
-                if retcode is None or retcode['exit_code'] != 1:
+                if retcode is None or retcode["exit_code"] != 1:
                     subjects_failed.append(subject)
 
-            except Exception as e:
+            except Exception:
                 if kwargs.get("verbose", False):
                     print(traceback.format_exc())
                 subjects_failed += [subject]
 
         self._update_full_layout()
-        print('Subjects that failed: ')
-        print('\n'.join(subjects_failed))
-
-
+        print("Subjects that failed: ")
+        print("\n".join(subjects_failed))
