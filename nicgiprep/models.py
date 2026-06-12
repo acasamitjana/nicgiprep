@@ -7,8 +7,6 @@ import numpy as np
 import torch
 from torch import nn
 
-from nicgiprep.utils import def_utils
-
 #########################################
 ##   Linear Registration/Deformation   ##
 #########################################

@@ -3,17 +3,17 @@ Base Processing pipeline schematic for neuroimage preprocessing.
 
 Provides base classe that implements basic and necessary functions
 """
+import traceback
+from typing import Optional, Union
 
-import copy
-from joblib import delayed, Parallel
-
-from bids.layout import BIDSLayout, BIDSLayoutIndexer
 import numpy as np
+import pandas as pd
+from bids.layout import BIDSLayout, BIDSLayoutIndexer, BIDSFile
 
 from setup import *
 from nicgiprep.utils.log_utils import LogBIDSLoader
-from nicgiprep.utils.label_utils import SYNTHSEG_APARC_LUT, SYNTHSEG_APARC_DICT, SYNTHSEG_LUT, CLUSTER_DICT
-from nicgiprep.utils.io_utils import create_dir, remove_dir
+from nicgiprep.utils.label_utils import SUPERSYNTH_LUT
+from nicgiprep.utils.io_utils import create_dir
 
 
 
@@ -52,7 +52,7 @@ class Processor(object):
         Mapping from integer label IDs to human-readable label names.
     """
 
-    def __init__(self, bids_loader, subject_list=None, **kwargs):
+    def __init__(self, bids_loader: BIDSLayout, subject_list: Optional[list]=None, **kwargs):
         """
         Parameters
         ----------
@@ -84,13 +84,13 @@ class Processor(object):
         and then extend or override these attributes.
         """
         self.tmp_dir = kwargs.get('tmp_dir', TMP_DIR)
+        if not isinstance(self.tmp_dir, str):
+            raise ValueError("Please, specify a valid temporary directory.")
+
         create_dir(self.tmp_dir)
 
         self.seg_entities = {'scope': 'nicgiprep-base', 'extension': 'nii.gz', 'suffix': ['T1wdseg', 'dseg']}
-        self.bf_entities = {'scope': 'nicgiprep-base', 'extension': 'nii.gz', 'suffix': 'T1w', 'acquisition': [None, 'orig']}
-
-        self.labels_lut = SYNTHSEG_APARC_LUT
-        self.labels_dict = SYNTHSEG_APARC_DICT
+        self.labels_lut = SUPERSYNTH_LUT
 
         self.pipeline_is_initialized = False
 
@@ -137,9 +137,9 @@ class Processor(object):
         str
             Empty string in the base class; subclasses should override.
         """
-        return 'base'
+        return 'Base'
 
-    def get_subjects(self, uslr=True):
+    def get_subjects(self, scope: Union[list[str]|str]='all') -> list:
         """Return the list of subjects in the dataset available for processing.
 
         Parameters
@@ -153,14 +153,11 @@ class Processor(object):
         list of str
             Subject IDs.
         """
-        subjects = self.bids_loader.get_subjects()
-        if uslr:
-            subjects = list(filter(lambda s: len(self._get_data(**{'subject': s, **self.seg_entities},
-                                                                ignore_check=True)) > 0 is not None, subjects))
+        subjects = self.bids_loader.get_subjects(scope)
 
         return subjects
 
-    def _get_sessions(self, subject, uslr=True):
+    def _get_sessions(self, subject, scope: Union[list[str]|str]='all') -> list:
         """Return the session IDs available for a given subject.
 
         Parameters
@@ -176,14 +173,11 @@ class Processor(object):
         list of str
             Session IDs as returned by ``BIDSLayout.get_session``.
         """
-        timepoints = self.bids_loader.get_session(subject=subject)
-        if uslr:
-            timepoints = list(filter(lambda tp: self._get_data(**{
-                'session': tp, 'subject': subject, **self.seg_entities}, verbose=False) is not None, timepoints))
+        session_list = self.bids_loader.get_session(subject=subject, scope=scope)
 
-        return timepoints
+        return session_list
 
-    def _get_data(self, ignore_check=False, curr_len=None, verbose=True, **kwargs):
+    def _get_data(self, ignore_check: bool=False, curr_len: Optional[int]=None, verbose: bool=True, **kwargs) -> list[BIDSFile]:
         """Query the BIDS layout for a single file matching the given entities.
 
         Parameters
@@ -223,7 +217,7 @@ class Processor(object):
 
         return raw_file
 
-    def _get_entities(self, file):
+    def _get_entities(self, file: BIDSFile) -> dict:
         """Extract the subset of BIDS entities relevant to filename construction.
 
         Parameters
@@ -238,7 +232,7 @@ class Processor(object):
         """
         return {k: v for k, v in file.entities.items() if k in filename_entities}
 
-    def _on_pipeline_init(self):
+    def _on_pipeline_init(self) -> None:
         """Mark the pipeline as initialised and print a console banner.
 
         Sets ``pipeline_is_initialized`` to ``True`` and prints a decorated
@@ -253,7 +247,7 @@ class Processor(object):
             print('# ' + '-'.join([''] * (len(name) + 7)) + ' #')
             print('\n\n')
 
-    def _update_subject_layout(self, subject):
+    def _update_subject_layout(self, subject:str) -> None:
         """Rebuild the BIDS layout restricted to a single subject.
 
         Replaces ``self.bids_loader`` with a new layout whose indexer ignores
@@ -275,7 +269,7 @@ class Processor(object):
 
         self.bids_loader = bids_loader
 
-    def _update_full_layout(self):
+    def _update_full_layout(self) -> None:
         """Rebuild the BIDS layout without subject restriction.
 
         Replaces ``self.bids_loader`` with a full dataset layout after
@@ -292,7 +286,7 @@ class Processor(object):
 
         self.bids_loader = bids_loader
 
-    def _get_subject_info(self, subject):
+    def _get_subject_info(self, subject: str) -> pd.DataFrame|None:
         """Load the sessions TSV for a subject as a DataFrame indexed by session ID.
 
         Parameters
@@ -306,15 +300,15 @@ class Processor(object):
             Session-level metadata, or ``None`` if no sessions TSV is found.
         """
         sess_df = None
-        sess_tsv = self._get_data(suffix='sessions', extension='tsv', subject=subject)
+        sess_tsv = self._get_data(suffix='sessions', extension='tsv', subject=subject, scope='bids')
         if sess_tsv:
-            sess_df = sess_tsv.get_df()
+            sess_df = pd.read_csv(sess_tsv[0].path, sep='\t')
             sess_df = sess_df.set_index('session_id')
             sess_df = sess_df[~sess_df.index.duplicated(keep='last')]
 
         return sess_df
 
-    def _get_participant_info(self):
+    def _get_participant_info(self) -> pd.DataFrame|None:
         """Load the participants TSV as a DataFrame indexed by participant ID.
 
         Returns
@@ -326,7 +320,7 @@ class Processor(object):
         part_df = None
         part_tsv = self._get_data(suffix='participants', extension='tsv')
         if part_tsv:
-            part_df = part_tsv.get_df()
+            part_df = pd.read_csv(part_tsv[0].path, sep='\t')
             part_df = part_df.set_index('participant_id')
             part_df = part_df[~part_df.index.duplicated(keep='last')]
 
@@ -354,7 +348,7 @@ class Processor(object):
 
         return y_true.astype(dtype)
 
-    def process_scan(self, subject, session, modality, force_flag=False, **kwargs):
+    def process_scan(self, subject: str, session: str, modality: str, force_flag: bool=False, **kwargs):
         """Run the pipeline for a single session.
 
         Parameters
@@ -378,7 +372,7 @@ class Processor(object):
         """
         raise NotImplementedError
 
-    def process_session(self, subject, session, force_flag=False, **kwargs):
+    def process_session(self, subject: str, session: str, force_flag: bool=False, **kwargs):
         """Run the pipeline for a single session.
 
         Parameters
@@ -400,7 +394,7 @@ class Processor(object):
         """
         raise NotImplementedError
 
-    def process_subject(self, subject, force_flag=False, **kwargs):
+    def process_subject(self, subject: str, force_flag: bool=False, **kwargs):
         """Run the pipeline for a single subject.
 
         Parameters
@@ -420,39 +414,6 @@ class Processor(object):
         """
         raise NotImplementedError
 
-    def process_parallel(self, num_cores, **kwargs):
-        """Run ``process_subject`` for all subjects in parallel using threads.
-
-        Parameters
-        ----------
-        num_cores : int
-            Number of parallel worker threads.
-        **kwargs
-            Forwarded to ``process_subject`` for each subject.
-
-        Returns
-        -------
-        list
-            One entry per subject: ``None`` on success, or the subject ID
-            string when processing raised an exception.
-        """
-        self._on_pipeline_init()
-
-        def _run(processing, subject, **kwargs):
-            """Run one subject in a thread; return the subject ID on failure."""
-            processing._update_subject_layout(subject)
-            try:
-                processing.process_subject(subject, **kwargs)
-            except:
-                return subject
-
-        results = Parallel(n_jobs=num_cores, backend='threading')(delayed(_run)(
-            copy.copy(self), subject, **kwargs) for subject in self.subject_list)
-
-        print('Subjects that failed: ')
-        print('\n'.join([r for r in results if r is not None]))
-        return results
-
     def process(self, **kwargs):
         """Run ``process_subject`` sequentially for all subjects.
 
@@ -471,9 +432,12 @@ class Processor(object):
             self._update_subject_layout(subject)
             try:
                 retcode = self.process_subject(subject, **kwargs)
-                if retcode is None or retcode['exit'] != 1:
+                if retcode is None or retcode['exit_code'] != 1:
                     subjects_failed.append(subject)
-            except:
+
+            except Exception as e:
+                if kwargs.get("verbose", False):
+                    print(traceback.format_exc())
                 subjects_failed += [subject]
 
         self._update_full_layout()
