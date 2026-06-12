@@ -19,7 +19,6 @@ from typing import Dict, List, Optional, Sequence, Tuple
 import numpy as np
 import nibabel as nib
 import pandas as pd
-import surfa as sf
 from bids.layout import BIDSFile
 from scipy.ndimage import gaussian_filter
 from skimage.morphology import ball, binary_dilation
@@ -27,7 +26,7 @@ from skimage.morphology import ball, binary_dilation
 from setup import *
 from nicgiprep.pipelines.base import Processor
 from nicgiprep.pipelines.cross_sectional import SynthSegProcessor
-from nicgiprep.pipelines.longitudinal import USLR_Linear
+from nicgiprep.pipelines.longitudinal import USLRLinear
 from nicgiprep.utils.io_utils import create_dir, save_volume, remove_dir
 from nicgiprep.utils.def_utils import (
     vol_resample_fast,
@@ -41,7 +40,7 @@ from nicgiprep.utils.fn_utils import (
     one_hot_encoding,
 )
 from nicgiprep.utils.preprocessing_utils import bias_field_corr
-from nicgiprep.utils.label_utils import SYNTHSEG_LUT, CLUSTER_DICT
+from nicgiprep.utils.label_utils import SYNTHSEG_LUT, SYNTHSEG_GMM_ONTOLOGY
 
 
 class MMProcessor(Processor):
@@ -703,8 +702,8 @@ class MultiModalBiasCorrectionProcessor(MMProcessor):
         np.ndarray
             Normalised posteriors ``(*spatial, n_unified_classes)``.
         """
-        out_seg = np.zeros(seg.shape[:-1] + (len(CLUSTER_DICT),))
-        for it_lab, (_, lab_list) in enumerate(CLUSTER_DICT.items()):
+        out_seg = np.zeros(seg.shape[:-1] + (len(SYNTHSEG_GMM_ONTOLOGY),))
+        for it_lab, (_, lab_list) in enumerate(SYNTHSEG_GMM_ONTOLOGY.items()):
             for lab in lab_list:
                 out_seg[..., it_lab] += seg[..., lut[lab]]
         out_seg = out_seg / (np.sum(out_seg, axis=-1, keepdims=True) + 1e-10)
@@ -1307,8 +1306,8 @@ class MultiMRIProcessor(MMProcessor):
         dict
             ``{'exit_code': int, 'message': str}`` checkpoint dict.
         """
-        R_log = USLR_Linear.init_st2_lineal(modalities, def_dir)
-        Tres = USLR_Linear.st2_lineal_pytorch(
+        R_log = USLRLinear.init_st2_lineal(modalities, def_dir)
+        Tres = USLRLinear.st2_lineal_pytorch(
             R_log, modalities, verbose=False, **kwargs
         )
 
@@ -1416,24 +1415,24 @@ class MultiMRIProcessor(MMProcessor):
             }
 
         # Define the common (network) space centred on the union bounding box.
-        rasMosaic, template_vox2ras0, template_size = create_empty_template(
+        _, template_v2r, template_size = create_empty_template(
             list(mask_dilated_proxy_dict.values())
         )
-        tmp_template = join(
-            self.tmp_dir, subject + "_" + str(session) + "_template.nii.gz"
-        )
-        save_volume(np.zeros(template_size), template_vox2ras0, None, tmp_template)
-
-        ref_geom = sf.load_volume(tmp_template)
-        net2vox, vox2net, net_v2r = network_space(
-            ref_geom, shape=self.net_shape, center=ref_geom
-        )
-        ref_proxy = nib.Nifti1Image(np.zeros(self.net_shape), net_v2r)
+        # tmp_template = join(
+        #     self.tmp_dir, subject + "_" + str(session) + "_template.nii.gz"
+        # )
+        # save_volume(np.zeros(template_size), template_vox2ras0, None, tmp_template)
+        #
+        # ref_geom = sf.load_volume(tmp_template)
+        # net2vox, vox2net, net_v2r = network_space(
+        #     ref_geom, shape=self.net_shape, center=ref_geom
+        # )
+        ref_proxy = nib.Nifti1Image(np.zeros(template_size), template_v2r)
 
         filename_t_v2r = self.build_path({**extra, **self.net_v2r_entities})
         create_dir(dirname(join(DIR_PIPELINES[self.pipeline_dir], filename_t_v2r)))
-        np.save(join(DIR_PIPELINES[self.pipeline_dir], filename_t_v2r), net_v2r)
-        os.remove(tmp_template)
+        np.save(join(DIR_PIPELINES[self.pipeline_dir], filename_t_v2r), template_v2r)
+        # os.remove(tmp_template)
 
         # Resample every modality into the session space.
         for modality in modalities:
