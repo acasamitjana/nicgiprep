@@ -9,7 +9,6 @@ import nibabel as nib
 from skimage.morphology import ball, binary_dilation
 
 from setup import *
-from nicgiprep.callbacks import *
 from nicgiprep.pipelines import Processor
 from nicgiprep.utils.preprocessing_utils import *
 from nicgiprep.utils.fn_utils import one_hot_encoding, rescale_voxel_size
