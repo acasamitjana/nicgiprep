@@ -1,0 +1,7 @@
+nonlinear\_registration module
+==============================
+
+.. automodule:: nonlinear_registration
+   :members:
+   :show-inheritance:
+   :undoc-members:

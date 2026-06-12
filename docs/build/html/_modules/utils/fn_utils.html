@@ -1,0 +1,841 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>utils.fn_utils &mdash; nicgiprep  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../index.html" class="icon icon-home">
+            nicgiprep
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting Started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../getting_started/installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../getting_started/quickstart.html">Quickstart</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">API Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../api/pipelines.html">Pipelines</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../api/callbacks.html">Callbacks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../api/models.html">Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../api/utils.html">Utils</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">nicgiprep</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">utils.fn_utils</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for utils.fn_utils</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span><span class="w"> </span><span class="nn">csv</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pdb</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">os.path</span><span class="w"> </span><span class="kn">import</span> <span class="n">join</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">nibabel</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">nib</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">scipy.special</span><span class="w"> </span><span class="kn">import</span> <span class="n">softmax</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">scipy.ndimage</span><span class="w"> </span><span class="kn">import</span> <span class="n">distance_transform_edt</span><span class="p">,</span> <span class="n">gaussian_filter</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">scipy.interpolate</span><span class="w"> </span><span class="kn">import</span> <span class="n">RegularGridInterpolator</span> <span class="k">as</span> <span class="n">rgi</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">munkres</span><span class="w"> </span><span class="kn">import</span> <span class="n">Munkres</span>
+
+
+<div class="viewcode-block" id="align_with_identity_vox2ras0">
+<a class="viewcode-back" href="../../api/utils.html#utils.fn_utils.align_with_identity_vox2ras0">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">align_with_identity_vox2ras0</span><span class="p">(</span><span class="n">V</span><span class="p">,</span> <span class="n">vox2ras0</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Permute and flip a volume so its voxel-to-RAS matrix is close to identity.</span>
+
+<span class="sd">    Uses the Hungarian algorithm to find the axis permutation that best</span>
+<span class="sd">    aligns each voxel axis with the nearest RAS axis, then flips any axis</span>
+<span class="sd">    whose diagonal entry in the resulting matrix is negative.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    V : np.ndarray</span>
+<span class="sd">        Input 3D volume, shape ``(X, Y, Z)``.</span>
+<span class="sd">    vox2ras0 : np.ndarray</span>
+<span class="sd">        Voxel-to-RAS affine matrix, shape ``(4, 4)``.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    V : np.ndarray</span>
+<span class="sd">        Re-oriented volume.</span>
+<span class="sd">    v2r : np.ndarray</span>
+<span class="sd">        Updated voxel-to-RAS affine matrix, shape ``(4, 4)``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">COST</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span><span class="mi">3</span><span class="p">))</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">):</span>
+
+            <span class="c1"># worker is the vector</span>
+            <span class="n">b</span> <span class="o">=</span> <span class="n">vox2ras0</span><span class="p">[:</span><span class="mi">3</span><span class="p">,</span><span class="n">i</span><span class="p">]</span>
+
+            <span class="c1"># task is j:th axis</span>
+            <span class="n">a</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span><span class="mi">1</span><span class="p">))</span>
+            <span class="n">a</span><span class="p">[</span><span class="n">j</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
+
+            <span class="n">COST</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="n">j</span><span class="p">]</span> <span class="o">=</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">a</span><span class="o">.</span><span class="n">T</span><span class="p">,</span> <span class="n">b</span><span class="p">))</span><span class="o">/</span><span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span><span class="o">/</span><span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">b</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+
+    <span class="n">m</span> <span class="o">=</span> <span class="n">Munkres</span><span class="p">()</span>
+    <span class="n">indexes</span> <span class="o">=</span> <span class="n">m</span><span class="o">.</span><span class="n">compute</span><span class="p">(</span><span class="n">COST</span><span class="p">)</span>
+
+    <span class="n">v2r</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">vox2ras0</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="n">indexes</span><span class="p">:</span>
+        <span class="n">v2r</span><span class="p">[:,</span> <span class="n">idx</span><span class="p">[</span><span class="mi">1</span><span class="p">]]</span> <span class="o">=</span> <span class="n">vox2ras0</span><span class="p">[:,</span> <span class="n">idx</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span>
+    <span class="n">v2r</span><span class="p">[:,</span> <span class="mi">3</span><span class="p">]</span> <span class="o">=</span> <span class="n">vox2ras0</span><span class="p">[:,</span> <span class="mi">3</span><span class="p">]</span>
+    <span class="n">V</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="n">V</span><span class="p">,</span> <span class="n">axes</span><span class="o">=</span><span class="p">[</span><span class="n">idx</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="n">indexes</span><span class="p">])</span>
+
+    <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">v2r</span><span class="p">[</span><span class="n">d</span><span class="p">,</span><span class="n">d</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">v2r</span><span class="p">[:</span><span class="mi">3</span><span class="p">,</span> <span class="n">d</span><span class="p">]</span> <span class="o">=</span> <span class="o">-</span><span class="n">v2r</span><span class="p">[:</span><span class="mi">3</span><span class="p">,</span> <span class="n">d</span><span class="p">]</span>
+            <span class="n">v2r</span><span class="p">[:</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">]</span> <span class="o">=</span> <span class="n">v2r</span><span class="p">[:</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">]</span> <span class="o">-</span> <span class="n">v2r</span><span class="p">[:</span><span class="mi">3</span><span class="p">,</span> <span class="n">d</span><span class="p">]</span> <span class="o">*</span> <span class="p">(</span><span class="n">V</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="n">d</span><span class="p">]</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+            <span class="n">V</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">flip</span><span class="p">(</span><span class="n">V</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="n">d</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">V</span><span class="p">,</span> <span class="n">v2r</span></div>
+
+
+<div class="viewcode-block" id="rescale_volume">
+<a class="viewcode-back" href="../../api/utils.html#utils.fn_utils.rescale_volume">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">rescale_volume</span><span class="p">(</span><span class="n">volume</span><span class="p">,</span> <span class="n">new_min</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">new_max</span><span class="o">=</span><span class="mi">255</span><span class="p">,</span> <span class="n">min_percentile</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">max_percentile</span><span class="o">=</span><span class="mi">98</span><span class="p">,</span> <span class="n">use_positive_only</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Linearly rescale a volume to a new intensity range.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    volume : np.ndarray</span>
+<span class="sd">        Input volume.</span>
+<span class="sd">    new_min : float, optional</span>
+<span class="sd">        Minimum value of the output range. Default is 0.</span>
+<span class="sd">    new_max : float, optional</span>
+<span class="sd">        Maximum value of the output range. Default is 255.</span>
+<span class="sd">    min_percentile : float, optional</span>
+<span class="sd">        Percentile used to estimate the robust minimum (0 = ``np.min``).</span>
+<span class="sd">        Default is 2.</span>
+<span class="sd">    max_percentile : float, optional</span>
+<span class="sd">        Percentile used to estimate the robust maximum (100 = ``np.max``).</span>
+<span class="sd">        Default is 98.</span>
+<span class="sd">    use_positive_only : bool, optional</span>
+<span class="sd">        If ``True``, percentiles are computed from positive voxels only.</span>
+<span class="sd">        Default is ``True``.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    np.ndarray</span>
+<span class="sd">        Rescaled volume clipped to ``[robust_min, robust_max]`` and linearly</span>
+<span class="sd">        mapped to ``[new_min, new_max]``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="c1"># select only positive intensities</span>
+    <span class="n">new_volume</span> <span class="o">=</span> <span class="n">volume</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+    <span class="n">intensities</span> <span class="o">=</span> <span class="n">new_volume</span><span class="p">[</span><span class="n">new_volume</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">]</span> <span class="k">if</span> <span class="n">use_positive_only</span> <span class="k">else</span> <span class="n">new_volume</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span>
+
+    <span class="c1"># define min and max intensities in original image for normalisation</span>
+    <span class="n">robust_min</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">intensities</span><span class="p">)</span> <span class="k">if</span> <span class="n">min_percentile</span> <span class="o">==</span> <span class="mi">0</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">percentile</span><span class="p">(</span><span class="n">intensities</span><span class="p">,</span> <span class="n">min_percentile</span><span class="p">)</span>
+    <span class="n">robust_max</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">intensities</span><span class="p">)</span> <span class="k">if</span> <span class="n">max_percentile</span> <span class="o">==</span> <span class="mi">0</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">percentile</span><span class="p">(</span><span class="n">intensities</span><span class="p">,</span> <span class="n">max_percentile</span><span class="p">)</span>
+
+    <span class="c1"># trim values outside range</span>
+    <span class="n">new_volume</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="n">new_volume</span><span class="p">,</span> <span class="n">robust_min</span><span class="p">,</span> <span class="n">robust_max</span><span class="p">)</span>
+
+    <span class="c1"># rescale image</span>
+    <span class="k">if</span> <span class="n">robust_min</span> <span class="o">!=</span> <span class="n">robust_max</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">new_min</span> <span class="o">+</span> <span class="p">(</span><span class="n">new_volume</span> <span class="o">-</span> <span class="n">robust_min</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="n">robust_max</span> <span class="o">-</span> <span class="n">robust_min</span><span class="p">)</span> <span class="o">*</span> <span class="n">new_max</span>
+    <span class="k">else</span><span class="p">:</span>  <span class="c1"># avoid dividing by zero</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">new_volume</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="rescale_flow">
+<a class="viewcode-back" href="../../api/utils.html#utils.fn_utils.rescale_flow">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">rescale_flow</span><span class="p">(</span><span class="n">flow_vol</span><span class="p">,</span> <span class="n">aff</span><span class="p">,</span> <span class="n">new_vox_size</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Rescale a displacement field to a new voxel size.</span>
+
+<span class="sd">    Adjusts displacement vector magnitudes to account for the change in voxel</span>
+<span class="sd">    spacing, then resamples the field to the target voxel size.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    flow_vol : np.ndarray</span>
+<span class="sd">        Displacement field, shape ``(X, Y, Z, 3)``, in voxel units.</span>
+<span class="sd">    aff : np.ndarray</span>
+<span class="sd">        Affine matrix of the input field, shape ``(4, 4)``.</span>
+<span class="sd">    new_vox_size : array-like of float</span>
+<span class="sd">        Target voxel size in mm, length 3.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    flow_vol : np.ndarray</span>
+<span class="sd">        Resampled displacement field in the new voxel space.</span>
+<span class="sd">    flow_aff : np.ndarray</span>
+<span class="sd">        Updated affine matrix, shape ``(4, 4)``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">pixdim</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">aff</span> <span class="o">*</span> <span class="n">aff</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">))[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+    <span class="n">f_factor</span> <span class="o">=</span> <span class="n">pixdim</span> <span class="o">/</span> <span class="n">new_vox_size</span>
+
+    <span class="n">flow_vol</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">*=</span> <span class="n">f_factor</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">flow_vol</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span> <span class="o">*=</span> <span class="n">f_factor</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+    <span class="n">flow_vol</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">2</span><span class="p">]</span> <span class="o">*=</span> <span class="n">f_factor</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>
+
+    <span class="n">flow_vol</span><span class="p">,</span> <span class="n">flow_aff</span> <span class="o">=</span> <span class="n">rescale_voxel_size</span><span class="p">(</span><span class="n">flow_vol</span><span class="p">,</span> <span class="n">aff</span><span class="p">,</span> <span class="n">new_vox_size</span><span class="p">,</span> <span class="n">not_aliasing</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">flow_vol</span><span class="p">,</span> <span class="n">flow_aff</span></div>
+
+
+<div class="viewcode-block" id="gaussian_smoothing_voxel_size">
+<a class="viewcode-back" href="../../api/utils.html#utils.fn_utils.gaussian_smoothing_voxel_size">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">gaussian_smoothing_voxel_size</span><span class="p">(</span><span class="n">proxy</span><span class="p">,</span> <span class="n">new_vox_size</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Apply Gaussian anti-aliasing smoothing before resampling to a new voxel size.</span>
+
+<span class="sd">    Computes per-axis sigma values from the ratio of current to target</span>
+<span class="sd">    voxel sizes. Axes being upsampled (factor &gt; 1) receive zero smoothing.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    proxy : nibabel.Nifti1Image</span>
+<span class="sd">        Input image proxy providing the affine and data.</span>
+<span class="sd">    new_vox_size : array-like of float</span>
+<span class="sd">        Target voxel size in mm, length 3.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    np.ndarray</span>
+<span class="sd">        Smoothed image array.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">pixdim</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">proxy</span><span class="o">.</span><span class="n">affine</span> <span class="o">*</span> <span class="n">proxy</span><span class="o">.</span><span class="n">affine</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">))[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+    <span class="n">new_vox_size</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">new_vox_size</span><span class="p">)</span>
+    <span class="n">factor</span> <span class="o">=</span> <span class="n">pixdim</span> <span class="o">/</span> <span class="n">new_vox_size</span>
+    <span class="n">sigmas</span> <span class="o">=</span> <span class="mf">0.25</span> <span class="o">/</span> <span class="n">factor</span>
+    <span class="n">sigmas</span><span class="p">[</span><span class="n">factor</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>  <span class="c1"># don&#39;t blur if upsampling</span>
+
+    <span class="n">volume</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">proxy</span><span class="o">.</span><span class="n">dataobj</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">volume</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">3</span><span class="p">:</span>
+        <span class="n">sigmas</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">((</span><span class="n">sigmas</span><span class="p">,</span> <span class="p">[</span><span class="mi">0</span><span class="p">]))</span>
+
+    <span class="k">return</span> <span class="n">gaussian_filter</span><span class="p">(</span><span class="n">volume</span><span class="p">,</span> <span class="n">sigmas</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="rescale_voxel_size">
+<a class="viewcode-back" href="../../api/utils.html#utils.fn_utils.rescale_voxel_size">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">rescale_voxel_size</span><span class="p">(</span><span class="n">volume</span><span class="p">,</span> <span class="n">aff</span><span class="p">,</span> <span class="n">new_vox_size</span><span class="p">,</span> <span class="n">not_aliasing</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Resample a volume to a new voxel size using trilinear interpolation.</span>
+
+<span class="sd">    Optionally applies Gaussian anti-aliasing before downsampling.</span>
+<span class="sd">    The returned affine matrix is updated so that the RAS coordinates of</span>
+<span class="sd">    the volume are preserved.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    volume : np.ndarray</span>
+<span class="sd">        Input volume array.</span>
+<span class="sd">    aff : np.ndarray</span>
+<span class="sd">        Affine (voxel-to-RAS) matrix of the input volume, shape ``(4, 4)``.</span>
+<span class="sd">    new_vox_size : array-like of float</span>
+<span class="sd">        Target voxel size in mm, length 3.</span>
+<span class="sd">    not_aliasing : bool, optional</span>
+<span class="sd">        If ``True``, skip the Gaussian anti-aliasing step even when</span>
+<span class="sd">        downsampling. Default is ``False``.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    volume2 : np.ndarray</span>
+<span class="sd">        Resampled volume at the new voxel size.</span>
+<span class="sd">    aff2 : np.ndarray</span>
+<span class="sd">        Updated affine matrix, shape ``(4, 4)``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">pixdim</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">aff</span> <span class="o">*</span> <span class="n">aff</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">))[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+    <span class="n">new_vox_size</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">new_vox_size</span><span class="p">)</span>
+    <span class="n">factor</span> <span class="o">=</span> <span class="n">pixdim</span> <span class="o">/</span> <span class="n">new_vox_size</span>
+    <span class="n">sigmas</span> <span class="o">=</span> <span class="mf">0.25</span> <span class="o">/</span> <span class="n">factor</span>
+    <span class="n">sigmas</span><span class="p">[</span><span class="n">factor</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>  <span class="c1"># don&#39;t blur if upsampling</span>
+
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">volume</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">3</span><span class="p">:</span>
+        <span class="n">sigmas</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">((</span><span class="n">sigmas</span><span class="p">,</span> <span class="p">[</span><span class="mi">0</span><span class="p">]))</span>
+
+    <span class="k">if</span> <span class="nb">all</span><span class="p">(</span><span class="n">sigmas</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="ow">or</span> <span class="n">not_aliasing</span><span class="p">:</span>
+        <span class="n">volume_filt</span> <span class="o">=</span> <span class="n">volume</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">volume_filt</span> <span class="o">=</span> <span class="n">gaussian_filter</span><span class="p">(</span><span class="n">volume</span><span class="p">,</span> <span class="n">sigmas</span><span class="p">)</span>
+
+    <span class="c1"># volume2 = zoom(volume_filt, factor, order=1, mode=&#39;reflect&#39;, prefilter=False)</span>
+    <span class="n">x</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">volume_filt</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+    <span class="n">y</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">volume_filt</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+    <span class="n">z</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">volume_filt</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
+
+    <span class="n">my_interpolating_function</span> <span class="o">=</span> <span class="n">rgi</span><span class="p">((</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">z</span><span class="p">),</span> <span class="n">volume_filt</span><span class="p">)</span>
+
+    <span class="n">start</span> <span class="o">=</span> <span class="o">-</span> <span class="p">(</span><span class="n">factor</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">factor</span><span class="p">)</span>
+    <span class="n">step</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="n">factor</span>
+    <span class="n">stop</span> <span class="o">=</span> <span class="n">start</span> <span class="o">+</span> <span class="n">step</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">volume_filt</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="mi">3</span><span class="p">]</span> <span class="o">*</span> <span class="n">factor</span><span class="p">)</span>
+
+    <span class="n">xi</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">start</span><span class="o">=</span><span class="n">start</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">stop</span><span class="o">=</span><span class="n">stop</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">step</span><span class="o">=</span><span class="n">step</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+    <span class="n">yi</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">start</span><span class="o">=</span><span class="n">start</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">stop</span><span class="o">=</span><span class="n">stop</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">step</span><span class="o">=</span><span class="n">step</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+    <span class="n">zi</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">start</span><span class="o">=</span><span class="n">start</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="n">stop</span><span class="o">=</span><span class="n">stop</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="n">step</span><span class="o">=</span><span class="n">step</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
+    <span class="n">xi</span><span class="p">[</span><span class="n">xi</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">yi</span><span class="p">[</span><span class="n">yi</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">zi</span><span class="p">[</span><span class="n">zi</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">xi</span><span class="p">[</span><span class="n">xi</span> <span class="o">&gt;</span> <span class="p">(</span><span class="n">volume_filt</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)]</span> <span class="o">=</span> <span class="n">volume_filt</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">-</span> <span class="mi">1</span>
+    <span class="n">yi</span><span class="p">[</span><span class="n">yi</span> <span class="o">&gt;</span> <span class="p">(</span><span class="n">volume_filt</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)]</span> <span class="o">=</span> <span class="n">volume_filt</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="mi">1</span>
+    <span class="n">zi</span><span class="p">[</span><span class="n">zi</span> <span class="o">&gt;</span> <span class="p">(</span><span class="n">volume_filt</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)]</span> <span class="o">=</span> <span class="n">volume_filt</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">-</span> <span class="mi">1</span>
+
+    <span class="n">xig</span><span class="p">,</span> <span class="n">yig</span><span class="p">,</span> <span class="n">zig</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">meshgrid</span><span class="p">(</span><span class="n">xi</span><span class="p">,</span> <span class="n">yi</span><span class="p">,</span> <span class="n">zi</span><span class="p">,</span> <span class="n">indexing</span><span class="o">=</span><span class="s1">&#39;ij&#39;</span><span class="p">,</span> <span class="n">sparse</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">volume2</span> <span class="o">=</span> <span class="n">my_interpolating_function</span><span class="p">((</span><span class="n">xig</span><span class="p">,</span> <span class="n">yig</span><span class="p">,</span> <span class="n">zig</span><span class="p">))</span>
+
+    <span class="n">aff2</span> <span class="o">=</span> <span class="n">aff</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">):</span>
+        <span class="n">aff2</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">c</span><span class="p">]</span> <span class="o">=</span> <span class="n">aff2</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">c</span><span class="p">]</span> <span class="o">/</span> <span class="n">factor</span><span class="p">[</span><span class="n">c</span><span class="p">]</span>
+    <span class="n">aff2</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">aff2</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">matmul</span><span class="p">(</span><span class="n">aff2</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="p">:</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="p">(</span><span class="n">factor</span> <span class="o">-</span> <span class="mi">1</span><span class="p">))</span>
+
+    <span class="k">return</span> <span class="n">volume2</span><span class="p">,</span> <span class="n">aff2</span></div>
+
+
+<div class="viewcode-block" id="gaussian_antialiasing">
+<a class="viewcode-back" href="../../api/utils.html#utils.fn_utils.gaussian_antialiasing">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">gaussian_antialiasing</span><span class="p">(</span><span class="n">volume</span><span class="p">,</span> <span class="n">aff</span><span class="p">,</span> <span class="n">new_voxel_size</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Apply a Gaussian anti-aliasing filter before downsampling a volume.</span>
+
+<span class="sd">    Axes being upsampled (factor &gt; 1) receive zero smoothing.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    volume : np.ndarray</span>
+<span class="sd">        Input volume array.</span>
+<span class="sd">    aff : np.ndarray</span>
+<span class="sd">        Affine matrix of the input volume, shape ``(4, 4)``.</span>
+<span class="sd">    new_voxel_size : array-like of float</span>
+<span class="sd">        Target voxel size in mm, length 3.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    np.ndarray</span>
+<span class="sd">        Gaussian-smoothed volume, same shape as ``volume``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">pixdim</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">aff</span> <span class="o">*</span> <span class="n">aff</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">))[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+    <span class="n">new_vox_size</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">new_voxel_size</span><span class="p">)</span>
+    <span class="n">factor</span> <span class="o">=</span> <span class="n">pixdim</span> <span class="o">/</span> <span class="n">new_vox_size</span>
+    <span class="n">sigmas</span> <span class="o">=</span> <span class="mf">0.25</span> <span class="o">/</span> <span class="n">factor</span>
+    <span class="n">sigmas</span><span class="p">[</span><span class="n">factor</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>  <span class="c1"># don&#39;t blur if upsampling</span>
+
+    <span class="k">return</span> <span class="n">gaussian_filter</span><span class="p">(</span><span class="n">volume</span><span class="p">,</span> <span class="n">sigmas</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="get_rigid_params">
+<a class="viewcode-back" href="../../api/utils.html#utils.fn_utils.get_rigid_params">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">get_rigid_params</span><span class="p">(</span><span class="n">matrix</span><span class="p">,</span> <span class="n">proxyref</span><span class="p">,</span> <span class="n">cog</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Decompose a rigid affine matrix into Euler angles and translation.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    matrix : torch.Tensor</span>
+<span class="sd">        4×4 rigid transformation matrix (rotation + translation block).</span>
+<span class="sd">    proxyref : nibabel.Nifti1Image</span>
+<span class="sd">        Reference image used to compute the center of rotation when ``cog``</span>
+<span class="sd">        is ``None``.</span>
+<span class="sd">    cog : array-like of float, optional</span>
+<span class="sd">        Center of gravity in RAS mm. If ``None``, the image center is used.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    angles : np.ndarray</span>
+<span class="sd">        Euler angles ``[rx, ry, rz]`` in radians.</span>
+<span class="sd">    translation : np.ndarray</span>
+<span class="sd">        Translation vector ``[tx, ty, tz]`` in mm.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">ry</span> <span class="o">=</span> <span class="o">-</span><span class="n">np</span><span class="o">.</span><span class="n">asin</span><span class="p">(</span><span class="n">matrix</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">])</span>
+    <span class="n">rx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">atan2</span><span class="p">(</span><span class="n">matrix</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">ry</span><span class="p">),</span> <span class="n">matrix</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">]</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">ry</span><span class="p">))</span>
+    <span class="n">rz</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">atan2</span><span class="p">(</span><span class="n">matrix</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">ry</span><span class="p">),</span> <span class="n">matrix</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">ry</span><span class="p">))</span>
+    <span class="n">angles</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">rx</span><span class="p">,</span> <span class="n">ry</span><span class="p">,</span> <span class="n">rz</span><span class="p">])</span>
+
+    <span class="n">T_center</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">4</span><span class="p">,</span> <span class="mi">4</span><span class="p">))</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">matrix</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+    <span class="n">T_center</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
+    <span class="n">T_center</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
+    <span class="n">T_center</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
+    <span class="n">T_center</span><span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
+    <span class="k">if</span> <span class="n">cog</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">T_center</span><span class="p">[:</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="o">-</span><span class="n">proxyref</span><span class="o">.</span><span class="n">affine</span> <span class="o">@</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">([</span><span class="n">i</span> <span class="o">/</span> <span class="mi">2</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">proxyref</span><span class="o">.</span><span class="n">shape</span><span class="p">]</span> <span class="o">+</span> <span class="p">[</span><span class="mi">1</span><span class="p">]))[:</span><span class="mi">3</span><span class="p">]</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">T_center</span><span class="p">[:</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">]</span> <span class="o">=</span> <span class="o">-</span><span class="n">cog</span>
+
+
+    <span class="n">T_center_inv</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">4</span><span class="p">,</span> <span class="mi">4</span><span class="p">))</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">matrix</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+    <span class="n">T_center_inv</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
+    <span class="n">T_center_inv</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
+    <span class="n">T_center_inv</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
+    <span class="n">T_center_inv</span><span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
+    <span class="k">if</span> <span class="n">cog</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">T_center_inv</span><span class="p">[:</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">proxyref</span><span class="o">.</span><span class="n">affine</span> <span class="o">@</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">([</span><span class="n">i</span> <span class="o">/</span> <span class="mi">2</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">proxyref</span><span class="o">.</span><span class="n">shape</span><span class="p">]</span> <span class="o">+</span> <span class="p">[</span><span class="mi">1</span><span class="p">]))[:</span><span class="mi">3</span><span class="p">]</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">T_center_inv</span><span class="p">[:</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">]</span> <span class="o">=</span> <span class="n">cog</span>
+
+    <span class="n">T_rot</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">4</span><span class="p">)</span>
+    <span class="n">T_rot</span><span class="p">[:</span><span class="mi">3</span><span class="p">,</span> <span class="p">:</span><span class="mi">3</span><span class="p">]</span> <span class="o">=</span> <span class="n">matrix</span><span class="p">[:</span><span class="mi">3</span><span class="p">,</span> <span class="p">:</span><span class="mi">3</span><span class="p">]</span>
+    <span class="n">T_trans</span> <span class="o">=</span> <span class="n">matrix</span> <span class="o">@</span> <span class="n">T_center_inv</span> <span class="o">@</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">inv</span><span class="p">(</span><span class="n">T_rot</span><span class="p">)</span> <span class="o">@</span> <span class="n">T_center</span>
+    <span class="n">translation</span> <span class="o">=</span> <span class="n">T_trans</span><span class="p">[:</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">]</span>
+
+    <span class="k">return</span> <span class="n">angles</span><span class="p">,</span> <span class="n">translation</span></div>
+
+
+<div class="viewcode-block" id="one_hot_encoding">
+<a class="viewcode-back" href="../../api/utils.html#utils.fn_utils.one_hot_encoding">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">one_hot_encoding</span><span class="p">(</span><span class="n">target</span><span class="p">,</span> <span class="n">num_classes</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">categories</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Convert an integer label map to a one-hot encoded array.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    target : np.ndarray</span>
+<span class="sd">        Integer label map of shape ``(d1, d2, ..., dN)``.</span>
+<span class="sd">    num_classes : int, optional</span>
+<span class="sd">        Number of classes. Required when ``categories`` is ``None``.</span>
+<span class="sd">    categories : dict, list, or np.ndarray, optional</span>
+<span class="sd">        Defines the mapping from label value to channel index.</span>
+
+<span class="sd">        - If a ``dict``, used directly as ``{label: channel_index}``.</span>
+<span class="sd">        - If a list or array, converted to ``{label: i}`` by enumeration.</span>
+<span class="sd">        - If ``None`` and ``num_classes`` is also ``None``, inferred from</span>
+<span class="sd">          ``np.unique(target)``.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    np.ndarray</span>
+<span class="sd">        One-hot array of shape ``(d1, d2, ..., dN, num_classes)``,</span>
+<span class="sd">        dtype ``uint16``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">if</span> <span class="n">categories</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">num_classes</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">categories</span> <span class="o">=</span> <span class="p">{</span><span class="bp">cls</span><span class="p">:</span> <span class="n">it_cls</span> <span class="k">for</span> <span class="n">it_cls</span><span class="p">,</span> <span class="bp">cls</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sort</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">target</span><span class="p">)))}</span>
+        <span class="n">num_classes</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">categories</span><span class="p">)</span>
+
+    <span class="k">elif</span> <span class="n">categories</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">categories</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">categories</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
+            <span class="n">categories</span> <span class="o">=</span> <span class="p">{</span><span class="bp">cls</span><span class="p">:</span> <span class="n">it_cls</span> <span class="k">for</span> <span class="n">it_cls</span><span class="p">,</span> <span class="bp">cls</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">categories</span><span class="p">)}</span>
+
+        <span class="n">num_classes</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">categories</span><span class="o">.</span><span class="n">values</span><span class="p">())))</span>
+
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">categories</span> <span class="o">=</span> <span class="p">{</span><span class="bp">cls</span><span class="p">:</span> <span class="bp">cls</span> <span class="k">for</span> <span class="bp">cls</span> <span class="ow">in</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">num_classes</span><span class="p">)}</span>
+
+    <span class="n">labels</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">num_classes</span><span class="p">,)</span> <span class="o">+</span> <span class="n">target</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="s1">&#39;uint16&#39;</span><span class="p">)</span>
+    <span class="k">for</span> <span class="bp">cls</span><span class="p">,</span> <span class="n">it_cls</span> <span class="ow">in</span> <span class="n">categories</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="n">idx_class</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">target</span> <span class="o">==</span> <span class="bp">cls</span><span class="p">)</span>
+        <span class="n">idx</span> <span class="o">=</span> <span class="p">(</span><span class="n">it_cls</span><span class="p">,)</span> <span class="o">+</span> <span class="n">idx_class</span>
+        <span class="n">labels</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
+
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="n">labels</span><span class="p">,</span> <span class="n">axes</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span></div>
+
+
+<div class="viewcode-block" id="label_log_odds">
+<a class="viewcode-back" href="../../api/utils.html#utils.fn_utils.label_log_odds">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">label_log_odds</span><span class="p">(</span><span class="n">target</span><span class="p">,</span> <span class="n">num_classes</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">categories</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Compute per-label signed distance maps as log-odds representations.</span>
+
+<span class="sd">    For each label, the signed Euclidean distance transform is computed:</span>
+<span class="sd">    positive inside the label region, negative outside. A large negative</span>
+<span class="sd">    sentinel value (``-10000``) is used outside the bounding box.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    target : np.ndarray</span>
+<span class="sd">        Integer label map of shape ``(d1, d2, ..., dN)``.</span>
+<span class="sd">    num_classes : int, optional</span>
+<span class="sd">        Number of classes. Required when ``categories`` is ``None``.</span>
+<span class="sd">    categories : list or np.ndarray, optional</span>
+<span class="sd">        Ordered label values. If ``None`` and ``num_classes`` is also</span>
+<span class="sd">        ``None``, inferred from ``np.unique(target)``.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    np.ndarray</span>
+<span class="sd">        Signed distance map of shape ``(num_classes, d1, d2, ..., dN)``,</span>
+<span class="sd">        dtype ``int``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">if</span> <span class="n">categories</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">num_classes</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">categories</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sort</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">target</span><span class="p">))</span>
+        <span class="n">num_classes</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">categories</span><span class="p">)</span>
+
+    <span class="k">elif</span> <span class="n">categories</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">num_classes</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">categories</span><span class="p">)</span>
+
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">categories</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">num_classes</span><span class="p">)</span>
+
+    <span class="n">labels</span> <span class="o">=</span> <span class="o">-</span><span class="mi">10000</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">((</span><span class="n">num_classes</span><span class="p">,)</span> <span class="o">+</span> <span class="n">target</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="s1">&#39;int&#39;</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">it_cls</span><span class="p">,</span> <span class="bp">cls</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">categories</span><span class="p">):</span>
+        <span class="n">mask_label</span> <span class="o">=</span> <span class="n">target</span> <span class="o">==</span> <span class="bp">cls</span>
+        <span class="n">bbox_label</span><span class="p">,</span> <span class="n">crop_coord</span> <span class="o">=</span> <span class="n">crop_label</span><span class="p">(</span><span class="n">mask_label</span><span class="p">,</span> <span class="n">margin</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+
+        <span class="n">d_in</span> <span class="o">=</span> <span class="p">(</span><span class="n">distance_transform_edt</span><span class="p">(</span><span class="n">bbox_label</span><span class="p">))</span>
+        <span class="n">d_out</span> <span class="o">=</span> <span class="o">-</span><span class="n">distance_transform_edt</span><span class="p">(</span><span class="o">~</span><span class="n">bbox_label</span><span class="p">)</span>
+        <span class="n">d</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">d_in</span><span class="p">)</span>
+        <span class="n">d</span><span class="p">[</span><span class="n">bbox_label</span><span class="p">]</span> <span class="o">=</span> <span class="n">d_in</span><span class="p">[</span><span class="n">bbox_label</span><span class="p">]</span>
+        <span class="n">d</span><span class="p">[</span><span class="o">~</span><span class="n">bbox_label</span><span class="p">]</span> <span class="o">=</span> <span class="n">d_out</span><span class="p">[</span><span class="o">~</span><span class="n">bbox_label</span><span class="p">]</span>
+
+        <span class="n">labels</span><span class="p">[</span><span class="n">it_cls</span><span class="p">,</span> <span class="n">crop_coord</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">]:</span> <span class="n">crop_coord</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">1</span><span class="p">],</span> <span class="n">crop_coord</span><span class="p">[</span><span class="mi">1</span><span class="p">][</span><span class="mi">0</span><span class="p">]:</span> <span class="n">crop_coord</span><span class="p">[</span><span class="mi">1</span><span class="p">][</span><span class="mi">1</span><span class="p">],</span> <span class="n">crop_coord</span><span class="p">[</span><span class="mi">2</span><span class="p">][</span><span class="mi">0</span><span class="p">]:</span> <span class="n">crop_coord</span><span class="p">[</span><span class="mi">2</span><span class="p">][</span><span class="mi">1</span><span class="p">]]</span> <span class="o">=</span> <span class="n">d</span>
+
+    <span class="k">return</span> <span class="n">labels</span></div>
+
+
+<div class="viewcode-block" id="crop_label">
+<a class="viewcode-back" href="../../api/utils.html#utils.fn_utils.crop_label">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">crop_label</span><span class="p">(</span><span class="n">mask</span><span class="p">,</span> <span class="n">margin</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">threshold</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Crop a binary mask to its bounding box with an optional margin.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    mask : np.ndarray</span>
+<span class="sd">        3D array; voxels above ``threshold`` are treated as foreground.</span>
+<span class="sd">    margin : int or list of int, optional</span>
+<span class="sd">        Number of voxels to expand the bounding box in each dimension.</span>
+<span class="sd">        A single int applies the same margin to all dimensions. Default is 10.</span>
+<span class="sd">    threshold : float, optional</span>
+<span class="sd">        Voxels with values strictly above this are considered foreground.</span>
+<span class="sd">        Default is 0.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    mask_cropped : np.ndarray</span>
+<span class="sd">        Cropped sub-volume of the mask.</span>
+<span class="sd">    crop_coord : list of [int, int]</span>
+<span class="sd">        Crop coordinates ``[[x0, x1], [y0, y1], [z0, z1]]``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">ndim</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">mask</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">margin</span><span class="p">,</span> <span class="nb">int</span><span class="p">):</span>
+        <span class="n">margin</span><span class="o">=</span><span class="p">[</span><span class="n">margin</span><span class="p">]</span><span class="o">*</span><span class="n">ndim</span>
+
+    <span class="n">crop_coord</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">mask</span><span class="o">&gt;</span><span class="n">threshold</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">it_index</span><span class="p">,</span> <span class="n">index</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">idx</span><span class="p">):</span>
+        <span class="n">clow</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">idx</span><span class="p">[</span><span class="n">it_index</span><span class="p">])</span> <span class="o">-</span> <span class="n">margin</span><span class="p">[</span><span class="n">it_index</span><span class="p">])</span>
+        <span class="n">chigh</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">mask</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="n">it_index</span><span class="p">],</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">idx</span><span class="p">[</span><span class="n">it_index</span><span class="p">])</span> <span class="o">+</span> <span class="n">margin</span><span class="p">[</span><span class="n">it_index</span><span class="p">])</span>
+        <span class="n">crop_coord</span><span class="o">.</span><span class="n">append</span><span class="p">([</span><span class="n">clow</span><span class="p">,</span> <span class="n">chigh</span><span class="p">])</span>
+
+    <span class="n">mask_cropped</span> <span class="o">=</span> <span class="n">mask</span><span class="p">[</span>
+                   <span class="n">crop_coord</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">]:</span> <span class="n">crop_coord</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">1</span><span class="p">],</span>
+                   <span class="n">crop_coord</span><span class="p">[</span><span class="mi">1</span><span class="p">][</span><span class="mi">0</span><span class="p">]:</span> <span class="n">crop_coord</span><span class="p">[</span><span class="mi">1</span><span class="p">][</span><span class="mi">1</span><span class="p">],</span>
+                   <span class="n">crop_coord</span><span class="p">[</span><span class="mi">2</span><span class="p">][</span><span class="mi">0</span><span class="p">]:</span> <span class="n">crop_coord</span><span class="p">[</span><span class="mi">2</span><span class="p">][</span><span class="mi">1</span><span class="p">]</span>
+                   <span class="p">]</span>
+
+    <span class="k">return</span> <span class="n">mask_cropped</span><span class="p">,</span> <span class="n">crop_coord</span></div>
+
+
+<div class="viewcode-block" id="apply_crop">
+<a class="viewcode-back" href="../../api/utils.html#utils.fn_utils.apply_crop">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">apply_crop</span><span class="p">(</span><span class="n">image</span><span class="p">,</span> <span class="n">crop_coord</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Extract a sub-volume defined by crop coordinates.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    image : np.ndarray</span>
+<span class="sd">        3D input array.</span>
+<span class="sd">    crop_coord : list of [int, int]</span>
+<span class="sd">        Crop coordinates as returned by :func:`crop_label`.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    np.ndarray</span>
+<span class="sd">        Cropped sub-volume.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">image</span><span class="p">[</span><span class="n">crop_coord</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">]:</span> <span class="n">crop_coord</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">1</span><span class="p">],</span>
+                 <span class="n">crop_coord</span><span class="p">[</span><span class="mi">1</span><span class="p">][</span><span class="mi">0</span><span class="p">]:</span> <span class="n">crop_coord</span><span class="p">[</span><span class="mi">1</span><span class="p">][</span><span class="mi">1</span><span class="p">],</span>
+                 <span class="n">crop_coord</span><span class="p">[</span><span class="mi">2</span><span class="p">][</span><span class="mi">0</span><span class="p">]:</span> <span class="n">crop_coord</span><span class="p">[</span><span class="mi">2</span><span class="p">][</span><span class="mi">1</span><span class="p">]</span>
+           <span class="p">]</span></div>
+
+
+<div class="viewcode-block" id="compute_centroids_ras">
+<a class="viewcode-back" href="../../api/utils.html#utils.fn_utils.compute_centroids_ras">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">compute_centroids_ras</span><span class="p">(</span><span class="n">seg_file</span><span class="p">,</span> <span class="n">labelfile</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Compute RAS-space centroids for each label in a segmentation.</span>
+
+<span class="sd">    Labels with fewer than 50 voxels are flagged as missing.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    seg_file : str</span>
+<span class="sd">        Path to a NIfTI segmentation file.</span>
+<span class="sd">    labelfile : str</span>
+<span class="sd">        Path to a ``.npy`` file containing the integer label values of interest.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    refCOG : np.ndarray</span>
+<span class="sd">        RAS centroids, shape ``(3, n_labels)``.</span>
+<span class="sd">    ok : np.ndarray</span>
+<span class="sd">        Binary flag array of length ``n_labels``; 1 if the label had ≥ 50</span>
+<span class="sd">        voxels, 0 otherwise.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">seg_proxy</span> <span class="o">=</span> <span class="n">nib</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">seg_file</span><span class="p">)</span>
+    <span class="n">seg_buffer</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">seg_proxy</span><span class="o">.</span><span class="n">dataobj</span><span class="p">)</span>
+    <span class="n">labels</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">labelfile</span><span class="p">)</span>
+
+    <span class="n">nlab</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">labels</span><span class="p">)</span>
+    <span class="n">refCOG</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">([</span><span class="mi">4</span><span class="p">,</span> <span class="n">nlab</span><span class="p">])</span>
+
+    <span class="n">ok</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">nlab</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">l</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">nlab</span><span class="p">):</span>
+        <span class="n">aux</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">seg_buffer</span> <span class="o">==</span> <span class="n">labels</span><span class="p">[</span><span class="n">l</span><span class="p">])</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">aux</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="o">&gt;</span> <span class="mi">50</span><span class="p">:</span>
+            <span class="n">refCOG</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="n">l</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">median</span><span class="p">(</span><span class="n">aux</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+            <span class="n">refCOG</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="n">l</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">median</span><span class="p">(</span><span class="n">aux</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+            <span class="n">refCOG</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="n">l</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">median</span><span class="p">(</span><span class="n">aux</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
+            <span class="n">refCOG</span><span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="n">l</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">ok</span><span class="p">[</span><span class="n">l</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
+
+    <span class="n">refCOG</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">matmul</span><span class="p">(</span><span class="n">seg_proxy</span><span class="o">.</span><span class="n">affine</span><span class="p">,</span> <span class="n">refCOG</span><span class="p">)[:</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="p">:]</span>
+
+    <span class="k">return</span> <span class="n">refCOG</span><span class="p">,</span> <span class="n">ok</span></div>
+
+
+<div class="viewcode-block" id="compute_distance_map_nongrid">
+<a class="viewcode-back" href="../../api/utils.html#utils.fn_utils.compute_distance_map_nongrid">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">compute_distance_map_nongrid</span><span class="p">(</span><span class="n">labelmap</span><span class="p">,</span> <span class="n">sampling_grid</span><span class="p">,</span> <span class="n">labels_lut</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Compute signed distance maps evaluated on an arbitrary sampling grid.</span>
+
+<span class="sd">    For each label, the signed Euclidean distance is computed: positive</span>
+<span class="sd">    inside the label and negative outside.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    labelmap : np.ndarray</span>
+<span class="sd">        Integer label map, shape ``(X, Y, Z)``.</span>
+<span class="sd">    sampling_grid : np.ndarray</span>
+<span class="sd">        Sampling coordinates, shape ``(3, N1, N2, ...)``, in voxel units.</span>
+<span class="sd">    labels_lut : dict, optional</span>
+<span class="sd">        Mapping ``{label_value: channel_index}``. If ``None``, inferred</span>
+<span class="sd">        from ``np.unique(labelmap)``.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    np.ndarray</span>
+<span class="sd">        Signed distance map, shape ``(*sampling_grid.shape[1:], n_labels)``,</span>
+<span class="sd">        dtype ``float32``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">labels_lut</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">labels_lut</span> <span class="o">=</span> <span class="p">{</span><span class="n">ul</span><span class="p">:</span> <span class="n">it_ul</span> <span class="k">for</span> <span class="n">it_ul</span><span class="p">,</span> <span class="n">ul</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">labelmap</span><span class="p">))}</span>
+
+    <span class="n">sampling_grid_nn</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="n">sampling_grid</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="s1">&#39;int&#39;</span><span class="p">)</span>
+    <span class="n">sampling_grid_nn</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="n">sampling_grid_nn</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="mi">0</span><span class="p">,</span> <span class="n">labelmap</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="n">sampling_grid_nn</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="n">sampling_grid_nn</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="mi">0</span><span class="p">,</span> <span class="n">labelmap</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="n">sampling_grid_nn</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="n">sampling_grid_nn</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="mi">0</span><span class="p">,</span> <span class="n">labelmap</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="n">distancemap</span> <span class="o">=</span> <span class="o">-</span><span class="mi">200</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">sampling_grid_nn</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span> <span class="o">+</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">labels_lut</span><span class="o">.</span><span class="n">keys</span><span class="p">()),),</span> <span class="n">dtype</span><span class="o">=</span><span class="s1">&#39;float32&#39;</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">ul</span><span class="p">,</span> <span class="n">it_ul</span> <span class="ow">in</span> <span class="n">labels_lut</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+
+        <span class="n">mask_label</span> <span class="o">=</span> <span class="n">labelmap</span> <span class="o">==</span> <span class="n">ul</span>
+        <span class="n">mask_label_reg</span> <span class="o">=</span> <span class="n">mask_label</span><span class="p">[</span><span class="n">sampling_grid_nn</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">sampling_grid_nn</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">sampling_grid_nn</span><span class="p">[</span><span class="mi">2</span><span class="p">]]</span>
+        <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">mask_label</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">continue</span>
+        <span class="k">else</span><span class="p">:</span>
+
+            <span class="n">idx_in</span> <span class="o">=</span> <span class="n">distance_transform_edt</span><span class="p">(</span><span class="n">mask_label</span><span class="p">,</span> <span class="n">return_distances</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">return_indices</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="n">d_in</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">((</span><span class="n">idx_in</span><span class="p">[:,</span> <span class="n">sampling_grid_nn</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">sampling_grid_nn</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">sampling_grid_nn</span><span class="p">[</span><span class="mi">2</span><span class="p">]]</span> <span class="o">-</span> <span class="n">sampling_grid</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">))</span>
+            <span class="n">idx_out</span> <span class="o">=</span> <span class="n">distance_transform_edt</span><span class="p">(</span><span class="o">~</span><span class="n">mask_label</span><span class="p">,</span>  <span class="n">return_distances</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">return_indices</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="n">d_out</span> <span class="o">=</span> <span class="o">-</span><span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">((</span><span class="n">idx_out</span><span class="p">[:,</span> <span class="n">sampling_grid_nn</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">sampling_grid_nn</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">sampling_grid_nn</span><span class="p">[</span><span class="mi">2</span><span class="p">]]</span> <span class="o">-</span> <span class="n">sampling_grid</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">))</span>
+
+            <span class="c1"># With crop (it is approximate near the boundaries)</span>
+            <span class="c1"># bbox_label, crop_coord = crop_label(mask_label, margin=5)</span>
+            <span class="c1"># idx_in = distance_transform_edt(bbox_label, return_distances=False, return_indices=True)</span>
+            <span class="c1"># d_in = np.sqrt(np.sum((idx_in[:,</span>
+            <span class="c1">#                        np.clip(sampling_grid_nn[0]-crop_coord[0][0], 0, bbox_label.shape[0]-1),</span>
+            <span class="c1">#                        np.clip(sampling_grid_nn[1]-crop_coord[1][0], 0, bbox_label.shape[1]-1),</span>
+            <span class="c1">#                        np.clip(sampling_grid_nn[2]-crop_coord[2][0], 0, bbox_label.shape[2]-1)]</span>
+            <span class="c1">#                        - sampling_grid + np.array([crop_coord[0][0], crop_coord[1][0], crop_coord[2][0]]).reshape((3, 1, 1, 1))) ** 2, axis=0))</span>
+            <span class="c1"># idx_out = distance_transform_edt(~bbox_label,  return_distances=False, return_indices=True)</span>
+            <span class="c1"># d_out = - np.sqrt(np.sum((idx_out[:,</span>
+            <span class="c1">#                           np.clip(sampling_grid_nn[0]-crop_coord[0][0], 0, bbox_label.shape[0]-1),</span>
+            <span class="c1">#                           np.clip(sampling_grid_nn[1]-crop_coord[1][0], 0, bbox_label.shape[1]-1),</span>
+            <span class="c1">#                           np.clip(sampling_grid_nn[2]-crop_coord[2][0], 0, bbox_label.shape[2]-1)]</span>
+            <span class="c1">#                           - sampling_grid + np.array([crop_coord[0][0], crop_coord[1][0], crop_coord[2][0]]).reshape((3, 1, 1, 1))) ** 2, axis=0))</span>
+
+            <span class="n">d</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">d_in</span><span class="p">)</span>
+            <span class="n">d</span><span class="p">[</span><span class="n">mask_label_reg</span><span class="p">]</span> <span class="o">=</span> <span class="n">d_in</span><span class="p">[</span><span class="n">mask_label_reg</span><span class="p">]</span>
+            <span class="n">d</span><span class="p">[</span><span class="o">~</span><span class="n">mask_label_reg</span><span class="p">]</span> <span class="o">=</span> <span class="n">d_out</span><span class="p">[</span><span class="o">~</span><span class="n">mask_label_reg</span><span class="p">]</span>
+            <span class="n">distancemap</span><span class="p">[</span><span class="o">...</span> <span class="p">,</span> <span class="n">it_ul</span><span class="p">]</span> <span class="o">=</span> <span class="n">d</span>
+
+    <span class="k">return</span> <span class="n">distancemap</span></div>
+
+
+<div class="viewcode-block" id="compute_distance_map">
+<a class="viewcode-back" href="../../api/utils.html#utils.fn_utils.compute_distance_map">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">compute_distance_map</span><span class="p">(</span><span class="n">labelmap</span><span class="p">,</span> <span class="n">soft_seg</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">labels_lut</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Compute signed distance maps on the native label grid.</span>
+
+<span class="sd">    For each label the computation is cropped to a tight bounding box with</span>
+<span class="sd">    a 5-voxel margin to reduce memory usage.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    labelmap : np.ndarray</span>
+<span class="sd">        Integer label map, shape ``(X, Y, Z)``.</span>
+<span class="sd">    soft_seg : bool, optional</span>
+<span class="sd">        If ``True``, apply softmax along the label axis before returning.</span>
+<span class="sd">        Default is ``True``.</span>
+<span class="sd">    labels_lut : dict, optional</span>
+<span class="sd">        Mapping ``{label_value: channel_index}``. If ``None``, inferred</span>
+<span class="sd">        from ``np.unique(labelmap)``.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    np.ndarray</span>
+<span class="sd">        Distance map, shape ``(X, Y, Z, n_labels)``, dtype ``float32``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">labels_lut</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">labels_lut</span> <span class="o">=</span> <span class="p">{</span><span class="n">ul</span><span class="p">:</span> <span class="n">it_ul</span> <span class="k">for</span> <span class="n">it_ul</span><span class="p">,</span> <span class="n">ul</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">labelmap</span><span class="p">))}</span>
+
+    <span class="n">distancemap</span> <span class="o">=</span> <span class="o">-</span><span class="mi">200</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">labelmap</span><span class="o">.</span><span class="n">shape</span> <span class="o">+</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">labels_lut</span><span class="o">.</span><span class="n">keys</span><span class="p">()),),</span> <span class="n">dtype</span><span class="o">=</span><span class="s1">&#39;float32&#39;</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">ul</span><span class="p">,</span> <span class="n">it_ul</span> <span class="ow">in</span> <span class="n">labels_lut</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+
+        <span class="n">mask_label</span> <span class="o">=</span> <span class="n">labelmap</span> <span class="o">==</span> <span class="n">ul</span>
+        <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">mask_label</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">continue</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">mask_label</span><span class="p">,</span> <span class="n">crop_coord</span> <span class="o">=</span> <span class="n">crop_label</span><span class="p">(</span><span class="n">mask_label</span><span class="p">,</span> <span class="n">margin</span><span class="o">=</span><span class="mi">5</span><span class="p">)</span>
+
+            <span class="n">d_in</span> <span class="o">=</span> <span class="p">(</span><span class="n">distance_transform_edt</span><span class="p">(</span><span class="n">mask_label</span><span class="p">))</span>
+            <span class="n">d_out</span> <span class="o">=</span> <span class="o">-</span><span class="n">distance_transform_edt</span><span class="p">(</span><span class="o">~</span><span class="n">mask_label</span><span class="p">)</span>
+            <span class="n">d</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">d_in</span><span class="p">)</span>
+            <span class="n">d</span><span class="p">[</span><span class="n">mask_label</span><span class="p">]</span> <span class="o">=</span> <span class="n">d_in</span><span class="p">[</span><span class="n">mask_label</span><span class="p">]</span>
+            <span class="n">d</span><span class="p">[</span><span class="o">~</span><span class="n">mask_label</span><span class="p">]</span> <span class="o">=</span> <span class="n">d_out</span><span class="p">[</span><span class="o">~</span><span class="n">mask_label</span><span class="p">]</span>
+
+            <span class="n">distancemap</span><span class="p">[</span>
+                <span class="n">crop_coord</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">]:</span> <span class="n">crop_coord</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">1</span><span class="p">],</span>
+                <span class="n">crop_coord</span><span class="p">[</span><span class="mi">1</span><span class="p">][</span><span class="mi">0</span><span class="p">]:</span> <span class="n">crop_coord</span><span class="p">[</span><span class="mi">1</span><span class="p">][</span><span class="mi">1</span><span class="p">],</span>
+                <span class="n">crop_coord</span><span class="p">[</span><span class="mi">2</span><span class="p">][</span><span class="mi">0</span><span class="p">]:</span> <span class="n">crop_coord</span><span class="p">[</span><span class="mi">2</span><span class="p">][</span><span class="mi">1</span><span class="p">],</span> <span class="n">it_ul</span>
+            <span class="p">]</span> <span class="o">=</span> <span class="n">d</span>
+
+    <span class="c1"># distancemap = np.clip(distancemap, -3, np.max(distancemap))</span>
+
+    <span class="k">if</span> <span class="n">soft_seg</span><span class="p">:</span>
+        <span class="n">distancemap</span> <span class="o">=</span> <span class="n">softmax</span><span class="p">(</span><span class="n">distancemap</span><span class="p">,</span> <span class="n">axis</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">distancemap</span></div>
+
+
+<div class="viewcode-block" id="compute_distance_map_crop">
+<a class="viewcode-back" href="../../api/utils.html#utils.fn_utils.compute_distance_map_crop">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">compute_distance_map_crop</span><span class="p">(</span><span class="n">labelmap</span><span class="p">,</span> <span class="n">soft_seg</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">labels_lut</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Compute signed distance maps using per-label bounding-box crops.</span>
+
+<span class="sd">    Equivalent to :func:`compute_distance_map` but operates on cropped</span>
+<span class="sd">    sub-volumes named ``bbox_label`` rather than the full label mask,</span>
+<span class="sd">    which can be faster for sparse labels.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    labelmap : np.ndarray</span>
+<span class="sd">        Integer label map, shape ``(X, Y, Z)``.</span>
+<span class="sd">    soft_seg : bool, optional</span>
+<span class="sd">        If ``True``, apply softmax along the label axis. Default is ``True``.</span>
+<span class="sd">    labels_lut : dict, optional</span>
+<span class="sd">        Mapping ``{label_value: channel_index}``. If ``None``, inferred</span>
+<span class="sd">        from ``np.unique(labelmap)``.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    np.ndarray</span>
+<span class="sd">        Distance map, shape ``(X, Y, Z, n_labels)``, dtype ``float32``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">labels_lut</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">labels_lut</span> <span class="o">=</span> <span class="p">{</span><span class="n">ul</span><span class="p">:</span> <span class="n">it_ul</span> <span class="k">for</span> <span class="n">it_ul</span><span class="p">,</span> <span class="n">ul</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">labelmap</span><span class="p">))}</span>
+
+    <span class="n">distancemap</span> <span class="o">=</span> <span class="o">-</span><span class="mi">200</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">labelmap</span><span class="o">.</span><span class="n">shape</span> <span class="o">+</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">labels_lut</span><span class="o">.</span><span class="n">keys</span><span class="p">()),),</span> <span class="n">dtype</span><span class="o">=</span><span class="s1">&#39;float32&#39;</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">ul</span><span class="p">,</span> <span class="n">it_ul</span> <span class="ow">in</span> <span class="n">labels_lut</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+
+        <span class="n">mask_label</span> <span class="o">=</span> <span class="n">labelmap</span> <span class="o">==</span> <span class="n">ul</span>
+        <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">mask_label</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">continue</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">bbox_label</span><span class="p">,</span> <span class="n">crop_coord</span> <span class="o">=</span> <span class="n">crop_label</span><span class="p">(</span><span class="n">mask_label</span><span class="p">,</span> <span class="n">margin</span><span class="o">=</span><span class="mi">5</span><span class="p">)</span>
+
+            <span class="n">d_in</span> <span class="o">=</span> <span class="p">(</span><span class="n">distance_transform_edt</span><span class="p">(</span><span class="n">bbox_label</span><span class="p">))</span>
+            <span class="n">d_out</span> <span class="o">=</span> <span class="o">-</span><span class="n">distance_transform_edt</span><span class="p">(</span><span class="o">~</span><span class="n">bbox_label</span><span class="p">)</span>
+            <span class="n">d</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">d_in</span><span class="p">)</span>
+            <span class="n">d</span><span class="p">[</span><span class="n">bbox_label</span><span class="p">]</span> <span class="o">=</span> <span class="n">d_in</span><span class="p">[</span><span class="n">bbox_label</span><span class="p">]</span>
+            <span class="n">d</span><span class="p">[</span><span class="o">~</span><span class="n">bbox_label</span><span class="p">]</span> <span class="o">=</span> <span class="n">d_out</span><span class="p">[</span><span class="o">~</span><span class="n">bbox_label</span><span class="p">]</span>
+
+            <span class="n">distancemap</span><span class="p">[</span><span class="n">crop_coord</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">]:</span> <span class="n">crop_coord</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">1</span><span class="p">],</span>
+                        <span class="n">crop_coord</span><span class="p">[</span><span class="mi">1</span><span class="p">][</span><span class="mi">0</span><span class="p">]:</span> <span class="n">crop_coord</span><span class="p">[</span><span class="mi">1</span><span class="p">][</span><span class="mi">1</span><span class="p">],</span>
+                        <span class="n">crop_coord</span><span class="p">[</span><span class="mi">2</span><span class="p">][</span><span class="mi">0</span><span class="p">]:</span> <span class="n">crop_coord</span><span class="p">[</span><span class="mi">2</span><span class="p">][</span><span class="mi">1</span><span class="p">],</span> <span class="n">it_ul</span><span class="p">]</span> <span class="o">=</span> <span class="n">d</span>
+
+    <span class="k">if</span> <span class="n">soft_seg</span><span class="p">:</span>
+        <span class="n">distancemap</span> <span class="o">=</span> <span class="n">softmax</span><span class="p">(</span><span class="n">distancemap</span><span class="p">,</span> <span class="n">axis</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">distancemap</span></div>
+
+
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Adrià Casamitjana, Agustín Cartaya Lathulerie, Clara Lisazo, Rachika E. Hamadache.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

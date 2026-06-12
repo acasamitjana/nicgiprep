@@ -1,0 +1,611 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>pipelines.base &mdash; nicgiprep  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../index.html" class="icon icon-home">
+            nicgiprep
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting Started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../getting_started/installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../getting_started/quickstart.html">Quickstart</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">API Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../api/pipelines.html">Pipelines</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../api/callbacks.html">Callbacks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../api/models.html">Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../api/utils.html">Utils</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">nicgiprep</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">pipelines.base</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for pipelines.base</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Base Processing pipeline schematic for neuroimage preprocessing.</span>
+
+<span class="sd">Provides base classe that implements basic and necessary functions</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">copy</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">joblib</span><span class="w"> </span><span class="kn">import</span> <span class="n">delayed</span><span class="p">,</span> <span class="n">Parallel</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">bids.layout</span><span class="w"> </span><span class="kn">import</span> <span class="n">BIDSLayout</span><span class="p">,</span> <span class="n">BIDSLayoutIndexer</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">setup</span><span class="w"> </span><span class="kn">import</span> <span class="o">*</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nicgiprep.utils.log_utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">LogBIDSLoader</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nicgiprep.utils.label_utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">SYNTHSEG_APARC_LUT</span><span class="p">,</span> <span class="n">SYNTHSEG_APARC_DICT</span><span class="p">,</span> <span class="n">SYNTHSEG_LUT</span><span class="p">,</span> <span class="n">CLUSTER_DICT</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nicgiprep.utils.io_utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_dir</span><span class="p">,</span> <span class="n">remove_dir</span>
+
+
+
+<div class="viewcode-block" id="Processor">
+<a class="viewcode-back" href="../../api/pipelines.html#pipelines.Processor">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">Processor</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Base class for BIDS-aware neuroimaging pre-processing pipelines.</span>
+
+<span class="sd">    Provides common infrastructure for loading data via PyBIDS, iterating over</span>
+<span class="sd">    subjects and sessions, and dispatching work serially or in parallel.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    bids_loader : BIDSLayout</span>
+<span class="sd">        Initialised PyBIDS layout pointing to the root BIDS dataset and any</span>
+<span class="sd">        required derivatives.</span>
+<span class="sd">    subject_list : list of str, optional</span>
+<span class="sd">        Subset of subject IDs to process. If ``None``, all subjects found in</span>
+<span class="sd">        ``bids_loader`` are used.</span>
+<span class="sd">    **kwargs</span>
+<span class="sd">        Allow for other parameters when inheriting from this class. Forwarded to ``_build_processor``.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    bids_loader : BIDSLayout</span>
+<span class="sd">        Active PyBIDS layout (may be swapped per-subject during processing).</span>
+<span class="sd">    subject_list : list of str</span>
+<span class="sd">        Subject IDs that will be processed.</span>
+<span class="sd">    pipeline_is_initialized : bool</span>
+<span class="sd">        Flag set to ``True`` after ``_on_pipeline_init`` is called.</span>
+<span class="sd">    bids_logger : LogBIDSLoader</span>
+<span class="sd">        Helper for validating the cardinality of BIDS file queries.</span>
+<span class="sd">    tmp_dir : str</span>
+<span class="sd">        Path to a temporary working directory used during processing.</span>
+<span class="sd">    labels_lut : dict</span>
+<span class="sd">        Label lookup table mapping integer label IDs to channel indices.</span>
+<span class="sd">    labels_dict : dict</span>
+<span class="sd">        Mapping from integer label IDs to human-readable label names.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bids_loader</span><span class="p">,</span> <span class="n">subject_list</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        bids_loader : BIDSLayout</span>
+<span class="sd">            Initialised PyBIDS layout.</span>
+<span class="sd">        subject_list : list of str, optional</span>
+<span class="sd">            Subject IDs to process. If ``None``, all subjects in the layout</span>
+<span class="sd">            are used.</span>
+<span class="sd">        **kwargs</span>
+<span class="sd">            Forwarded to :meth:`_build_processor`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">bids_loader</span> <span class="o">=</span> <span class="n">bids_loader</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">subject_list</span> <span class="o">=</span> <span class="n">bids_loader</span><span class="o">.</span><span class="n">get_subjects</span><span class="p">()</span> <span class="k">if</span> <span class="n">subject_list</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">subject_list</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">bids_logger</span> <span class="o">=</span> <span class="n">LogBIDSLoader</span><span class="p">(</span><span class="n">num_files</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_build_processor</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_build_processor</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialise pipeline-specific state and BIDS entity filters.</span>
+
+<span class="sd">        Sets common parameters between different pre-processing pipelines:</span>
+<span class="sd">        * ``tmp_dir``: used to store temporal, intermediate results, </span>
+<span class="sd">        * ``seg_entities``: entities used to save/retrieve base-segmented T1w  of a given subject/session, </span>
+<span class="sd">        * ``bf_entities``: entities used to save/retrieve base-preprocessed T1w  of a given subject/session, </span>
+<span class="sd">        * ``labels_lut``: used for computing segmentation posteriors,</span>
+<span class="sd">        * ``labels_dict``: used to save/retrieve sepecific volumes relating label number and label name. </span>
+<span class="sd">        </span>
+<span class="sd">        Subclasses should call ``super()._build_processor()``</span>
+<span class="sd">        and then extend or override these attributes.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tmp_dir</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;tmp_dir&#39;</span><span class="p">,</span> <span class="n">TMP_DIR</span><span class="p">)</span>
+        <span class="n">create_dir</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tmp_dir</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">seg_entities</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;scope&#39;</span><span class="p">:</span> <span class="s1">&#39;preproc&#39;</span><span class="p">,</span> <span class="s1">&#39;extension&#39;</span><span class="p">:</span> <span class="s1">&#39;nii.gz&#39;</span><span class="p">,</span> <span class="s1">&#39;suffix&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;T1wdseg&#39;</span><span class="p">,</span> <span class="s1">&#39;dseg&#39;</span><span class="p">]}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">bf_entities</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;scope&#39;</span><span class="p">:</span> <span class="s1">&#39;preproc&#39;</span><span class="p">,</span> <span class="s1">&#39;extension&#39;</span><span class="p">:</span> <span class="s1">&#39;nii.gz&#39;</span><span class="p">,</span> <span class="s1">&#39;suffix&#39;</span><span class="p">:</span> <span class="s1">&#39;T1w&#39;</span><span class="p">,</span> <span class="s1">&#39;acquisition&#39;</span><span class="p">:</span> <span class="p">[</span><span class="kc">None</span><span class="p">,</span> <span class="s1">&#39;orig&#39;</span><span class="p">]}</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">labels_lut</span> <span class="o">=</span> <span class="n">SYNTHSEG_APARC_LUT</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">labels_dict</span> <span class="o">=</span> <span class="n">SYNTHSEG_APARC_DICT</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">pipeline_is_initialized</span> <span class="o">=</span> <span class="kc">False</span>
+
+<div class="viewcode-block" id="Processor.build_path">
+<a class="viewcode-back" href="../../api/pipelines.html#pipelines.Processor.build_path">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">build_path</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">entities</span><span class="p">,</span> <span class="n">absolute_paths</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">validate</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Construct a relative valid BIDS file path from an entity dictionary. It follows the convention </span>
+<span class="sd">        specified in this NicGi-Prep</span>
+
+<span class="sd">        Filters ``entities`` to the keys recognised by the project&#39;s BIDS path</span>
+<span class="sd">        patterns before delegating to ``BIDSLayout.build_path``.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        entities : dict</span>
+<span class="sd">            BIDS entity key/value pairs (e.g. ``{&#39;subject&#39;: &#39;001&#39;,</span>
+<span class="sd">            &#39;suffix&#39;: &#39;T1w&#39;, &#39;extension&#39;: &#39;.nii.gz&#39;}``).</span>
+<span class="sd">        absolute_paths : bool, optional</span>
+<span class="sd">            Return an absolute path. Default is ``False``.</span>
+<span class="sd">        validate : bool, optional</span>
+<span class="sd">            Validate the resulting path against BIDS rules. Default is</span>
+<span class="sd">            ``False``.</span>
+<span class="sd">        strict : bool, optional</span>
+<span class="sd">            Raise an error if no pattern matches. Default is ``True``.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        str or None</span>
+<span class="sd">            The constructed path string, or ``None`` if no pattern matched</span>
+<span class="sd">            and ``strict`` is ``False``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">entities</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">v</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">entities</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">filename_entities</span><span class="p">}</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">bids_loader</span><span class="o">.</span><span class="n">build_path</span><span class="p">(</span><span class="n">entities</span><span class="p">,</span> <span class="n">absolute_paths</span><span class="o">=</span><span class="n">absolute_paths</span><span class="p">,</span> <span class="n">path_patterns</span><span class="o">=</span><span class="n">BIDS_PATH_PATTERN</span><span class="p">,</span>
+                                           <span class="n">strict</span><span class="o">=</span><span class="n">strict</span><span class="p">,</span> <span class="n">validate</span><span class="o">=</span><span class="n">validate</span><span class="p">)</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_name</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the human-readable pipeline name used in console banners.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        str</span>
+<span class="sd">            Empty string in the base class; subclasses should override.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="s1">&#39;base&#39;</span>
+
+<div class="viewcode-block" id="Processor.get_subjects">
+<a class="viewcode-back" href="../../api/pipelines.html#pipelines.Processor.get_subjects">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_subjects</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">uslr</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the list of subjects in the dataset available for processing.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        uslr : bool, optional</span>
+<span class="sd">            If ``True`` (default), restrict to subjects that have been pre-processed cross-sectionally and</span>
+<span class="sd">            available for USLR processing. It checks that at least one session has been properly segmented</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        list of str</span>
+<span class="sd">            Subject IDs.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">subjects</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bids_loader</span><span class="o">.</span><span class="n">get_subjects</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">uslr</span><span class="p">:</span>
+            <span class="n">subjects</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">filter</span><span class="p">(</span><span class="k">lambda</span> <span class="n">s</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_get_data</span><span class="p">(</span><span class="o">**</span><span class="p">{</span><span class="s1">&#39;subject&#39;</span><span class="p">:</span> <span class="n">s</span><span class="p">,</span> <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">seg_entities</span><span class="p">},</span>
+                                                                <span class="n">ignore_check</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">,</span> <span class="n">subjects</span><span class="p">))</span>
+
+        <span class="k">return</span> <span class="n">subjects</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_timepoints</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">subject</span><span class="p">,</span> <span class="n">uslr</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the session IDs available for a given subject.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        subject : str</span>
+<span class="sd">            Subject ID.</span>
+<span class="sd">        uslr : bool, optional</span>
+<span class="sd">            If ``True`` (default), restrict to subjects that have been pre-processed cross-sectionally and</span>
+<span class="sd">            available for USLR processing. It checks that at least one session has been properly segmented</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        list of str</span>
+<span class="sd">            Session IDs as returned by ``BIDSLayout.get_session``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">timepoints</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bids_loader</span><span class="o">.</span><span class="n">get_session</span><span class="p">(</span><span class="n">subject</span><span class="o">=</span><span class="n">subject</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">uslr</span><span class="p">:</span>
+            <span class="n">timepoints</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">filter</span><span class="p">(</span><span class="k">lambda</span> <span class="n">tp</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_data</span><span class="p">(</span><span class="o">**</span><span class="p">{</span>
+                <span class="s1">&#39;session&#39;</span><span class="p">:</span> <span class="n">tp</span><span class="p">,</span> <span class="s1">&#39;subject&#39;</span><span class="p">:</span> <span class="n">subject</span><span class="p">,</span> <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">seg_entities</span><span class="p">},</span> <span class="n">verbose</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">,</span> <span class="n">timepoints</span><span class="p">))</span>
+
+        <span class="k">return</span> <span class="n">timepoints</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_data</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ignore_check</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">curr_len</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Query the BIDS layout for a single file matching the given entities.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        ignore_check : bool, optional</span>
+<span class="sd">            If ``True``, return the raw file list without cardinality checks.</span>
+<span class="sd">            Default is ``False``.</span>
+<span class="sd">        curr_len : int or None, optional</span>
+<span class="sd">            Expected number of matching files for the cardinality check.</span>
+<span class="sd">            ``None`` defaults to exactly one file.</span>
+<span class="sd">        verbose : bool, optional</span>
+<span class="sd">            Print a warning when the query returns an unexpected number of</span>
+<span class="sd">            files. Default is ``True``.</span>
+<span class="sd">        **kwargs</span>
+<span class="sd">            BIDS entity filters passed directly to ``BIDSLayout.get``.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        BIDSFile or list or None</span>
+<span class="sd">            A single ``BIDSFile`` when exactly one match is found, the raw list</span>
+<span class="sd">            when ``ignore_check=True``, or ``None`` if the cardinality check</span>
+<span class="sd">            fails.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">file_list</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bids_loader</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">ignore_check</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">file_list</span>
+
+        <span class="n">file_flag</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bids_logger</span><span class="o">.</span><span class="n">check_length</span><span class="p">(</span><span class="n">file_list</span><span class="p">,</span> <span class="n">curr_len</span><span class="o">=</span><span class="n">curr_len</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">file_flag</span><span class="p">[</span><span class="s1">&#39;exit_code&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>
+                <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;[warning]&#39;</span><span class="p">,</span> <span class="n">end</span><span class="o">=</span><span class="s1">&#39; &#39;</span><span class="p">,</span> <span class="n">flush</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+                <span class="nb">print</span><span class="p">(</span><span class="n">file_flag</span><span class="p">[</span><span class="s1">&#39;log&#39;</span><span class="p">],</span> <span class="n">end</span><span class="o">=</span><span class="s1">&#39; &#39;</span><span class="p">,</span> <span class="n">flush</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+                <span class="nb">print</span><span class="p">(</span><span class="s1">&#39; --&gt; Entities: &#39;</span> <span class="o">+</span> <span class="s1">&#39;,&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="s1">&#39;&lt;&#39;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">k</span><span class="p">)</span> <span class="o">+</span> <span class="s1">&#39;:&#39;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="o">+</span> <span class="s1">&#39;&gt;&#39;</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">items</span><span class="p">()]))</span>
+            <span class="n">raw_file</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">raw_file</span> <span class="o">=</span> <span class="n">file_flag</span><span class="p">[</span><span class="s1">&#39;file&#39;</span><span class="p">]</span>
+
+        <span class="k">return</span> <span class="n">raw_file</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_entities</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">file</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Extract the subset of BIDS entities relevant to filename construction.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        file : BIDSFile</span>
+<span class="sd">            A PyBIDS file object.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        dict</span>
+<span class="sd">            Entity key/value pairs filtered to those in ``filename_entities``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">v</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">file</span><span class="o">.</span><span class="n">entities</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">filename_entities</span><span class="p">}</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_on_pipeline_init</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Mark the pipeline as initialised and print a console banner.</span>
+
+<span class="sd">        Sets ``pipeline_is_initialized`` to ``True`` and prints a decorated</span>
+<span class="sd">        header with the pipeline name (if non-empty and not yet initialised).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">pipeline_is_initialized</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="n">name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_name</span><span class="p">()</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">name</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">pipeline_is_initialized</span> <span class="ow">is</span> <span class="kc">False</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;</span><span class="se">\n\n\n\n\n</span><span class="s1">&#39;</span><span class="p">)</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;# &#39;</span> <span class="o">+</span> <span class="s1">&#39;-&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="s1">&#39;&#39;</span><span class="p">]</span> <span class="o">*</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">name</span><span class="p">)</span> <span class="o">+</span> <span class="mi">7</span><span class="p">))</span> <span class="o">+</span> <span class="s1">&#39; #&#39;</span><span class="p">)</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;#    &#39;</span> <span class="o">+</span> <span class="n">name</span> <span class="o">+</span> <span class="s1">&#39;    #&#39;</span><span class="p">)</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;# &#39;</span> <span class="o">+</span> <span class="s1">&#39;-&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="s1">&#39;&#39;</span><span class="p">]</span> <span class="o">*</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">name</span><span class="p">)</span> <span class="o">+</span> <span class="mi">7</span><span class="p">))</span> <span class="o">+</span> <span class="s1">&#39; #&#39;</span><span class="p">)</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;</span><span class="se">\n\n</span><span class="s1">&#39;</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_update_subject_layout</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">subject</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Rebuild the BIDS layout restricted to a single subject.</span>
+
+<span class="sd">        Replaces ``self.bids_loader`` with a new layout whose indexer ignores</span>
+<span class="sd">        all subjects other than ``subject``, reducing query overhead.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        subject : str</span>
+<span class="sd">            Subject ID to keep in the layout index.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">rawdir</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bids_loader</span><span class="o">.</span><span class="n">root</span>
+        <span class="n">derivatives</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bids_loader</span><span class="o">.</span><span class="n">derivatives</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
+
+        <span class="n">indexer</span> <span class="o">=</span> <span class="n">BIDSLayoutIndexer</span><span class="p">(</span><span class="n">validate</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">ignore</span><span class="o">=</span><span class="s1">&#39;sub-(?!&#39;</span> <span class="o">+</span> <span class="n">subject</span> <span class="o">+</span> <span class="s1">&#39;)(.*)$&#39;</span><span class="p">,</span> <span class="n">index_metadata</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="n">bids_kwargs</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;validate&#39;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span> <span class="s1">&#39;indexer&#39;</span><span class="p">:</span> <span class="n">indexer</span><span class="p">}</span>
+
+        <span class="n">bids_loader</span> <span class="o">=</span> <span class="n">BIDSLayout</span><span class="p">(</span><span class="n">root</span><span class="o">=</span><span class="n">rawdir</span><span class="p">,</span> <span class="o">**</span><span class="n">bids_kwargs</span><span class="p">)</span>
+        <span class="n">bids_loader</span><span class="o">.</span><span class="n">add_derivatives</span><span class="p">([</span><span class="n">DIR_PIPELINES</span><span class="p">[</span><span class="n">d</span><span class="p">]</span> <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">derivatives</span><span class="p">],</span> <span class="o">**</span><span class="n">bids_kwargs</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">bids_loader</span> <span class="o">=</span> <span class="n">bids_loader</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_update_full_layout</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Rebuild the BIDS layout without subject restriction.</span>
+
+<span class="sd">        Replaces ``self.bids_loader`` with a full dataset layout after</span>
+<span class="sd">        per-subject processing is complete.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">rawdir</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bids_loader</span><span class="o">.</span><span class="n">root</span>
+        <span class="n">derivatives</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bids_loader</span><span class="o">.</span><span class="n">derivatives</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
+
+        <span class="n">indexer</span> <span class="o">=</span> <span class="n">BIDSLayoutIndexer</span><span class="p">(</span><span class="n">validate</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">index_metadata</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="n">bids_kwargs</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;validate&#39;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span> <span class="s1">&#39;indexer&#39;</span><span class="p">:</span> <span class="n">indexer</span><span class="p">}</span>
+
+        <span class="n">bids_loader</span> <span class="o">=</span> <span class="n">BIDSLayout</span><span class="p">(</span><span class="n">root</span><span class="o">=</span><span class="n">rawdir</span><span class="p">,</span> <span class="o">**</span><span class="n">bids_kwargs</span><span class="p">)</span>
+        <span class="n">bids_loader</span><span class="o">.</span><span class="n">add_derivatives</span><span class="p">([</span><span class="n">DIR_PIPELINES</span><span class="p">[</span><span class="n">d</span><span class="p">]</span> <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">derivatives</span><span class="p">],</span> <span class="o">**</span><span class="n">bids_kwargs</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">bids_loader</span> <span class="o">=</span> <span class="n">bids_loader</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_subject_info</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">subject</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Load the sessions TSV for a subject as a DataFrame indexed by session ID.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        subject : str</span>
+<span class="sd">            Subject ID.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        pandas.DataFrame or None</span>
+<span class="sd">            Session-level metadata, or ``None`` if no sessions TSV is found.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">sess_df</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">sess_tsv</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_data</span><span class="p">(</span><span class="n">suffix</span><span class="o">=</span><span class="s1">&#39;sessions&#39;</span><span class="p">,</span> <span class="n">extension</span><span class="o">=</span><span class="s1">&#39;tsv&#39;</span><span class="p">,</span> <span class="n">subject</span><span class="o">=</span><span class="n">subject</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">sess_tsv</span><span class="p">:</span>
+            <span class="n">sess_df</span> <span class="o">=</span> <span class="n">sess_tsv</span><span class="o">.</span><span class="n">get_df</span><span class="p">()</span>
+            <span class="n">sess_df</span> <span class="o">=</span> <span class="n">sess_df</span><span class="o">.</span><span class="n">set_index</span><span class="p">(</span><span class="s1">&#39;session_id&#39;</span><span class="p">)</span>
+            <span class="n">sess_df</span> <span class="o">=</span> <span class="n">sess_df</span><span class="p">[</span><span class="o">~</span><span class="n">sess_df</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">duplicated</span><span class="p">(</span><span class="n">keep</span><span class="o">=</span><span class="s1">&#39;last&#39;</span><span class="p">)]</span>
+
+        <span class="k">return</span> <span class="n">sess_df</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_participant_info</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Load the participants TSV as a DataFrame indexed by participant ID.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        pandas.DataFrame or None</span>
+<span class="sd">            Participant-level metadata, or ``None`` if no participants TSV</span>
+<span class="sd">            is found.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">part_df</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">part_tsv</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_data</span><span class="p">(</span><span class="n">suffix</span><span class="o">=</span><span class="s1">&#39;participants&#39;</span><span class="p">,</span> <span class="n">extension</span><span class="o">=</span><span class="s1">&#39;tsv&#39;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">part_tsv</span><span class="p">:</span>
+            <span class="n">part_df</span> <span class="o">=</span> <span class="n">part_tsv</span><span class="o">.</span><span class="n">get_df</span><span class="p">()</span>
+            <span class="n">part_df</span> <span class="o">=</span> <span class="n">part_df</span><span class="o">.</span><span class="n">set_index</span><span class="p">(</span><span class="s1">&#39;participant_id&#39;</span><span class="p">)</span>
+            <span class="n">part_df</span> <span class="o">=</span> <span class="n">part_df</span><span class="p">[</span><span class="o">~</span><span class="n">part_df</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">duplicated</span><span class="p">(</span><span class="n">keep</span><span class="o">=</span><span class="s1">&#39;last&#39;</span><span class="p">)]</span>
+
+        <span class="k">return</span> <span class="n">part_df</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_undo_one_hot</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="s1">&#39;float32&#39;</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Convert a one-hot channel index array back to integer label values.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        y : np.ndarray</span>
+<span class="sd">            Array of channel indices (output of ``np.argmax`` over the label</span>
+<span class="sd">            axis).</span>
+<span class="sd">        dtype : str, optional</span>
+<span class="sd">            NumPy dtype of the output. Default is ``&#39;float32&#39;``.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        np.ndarray</span>
+<span class="sd">            Integer label map with the same shape as ``y``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">y_true</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">y</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">ul</span><span class="p">,</span> <span class="n">it_ul</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">labels_lut</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">y_true</span><span class="p">[</span><span class="n">y</span> <span class="o">==</span> <span class="n">it_ul</span><span class="p">]</span> <span class="o">=</span> <span class="n">ul</span>
+
+        <span class="k">return</span> <span class="n">y_true</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">dtype</span><span class="p">)</span>
+
+<div class="viewcode-block" id="Processor.process_scan">
+<a class="viewcode-back" href="../../api/pipelines.html#pipelines.Processor.process_scan">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">process_scan</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">subject</span><span class="p">,</span> <span class="n">session</span><span class="p">,</span> <span class="n">modality</span><span class="p">,</span> <span class="n">force_flag</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Run the pipeline for a single session.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        subject : str</span>
+<span class="sd">            Subject ID.</span>
+<span class="sd">        session : str</span>
+<span class="sd">            Session ID.</span>
+<span class="sd">        modality : str</span>
+<span class="sd">            Modality ID.</span>
+<span class="sd">        force_flag : bool, optional</span>
+<span class="sd">            If ``True``, reprocess even when outputs already exist. Default</span>
+<span class="sd">            is ``False``.</span>
+<span class="sd">        **kwargs</span>
+<span class="sd">            Passed to the pipeline-specific implementation.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        NotImplementedError</span>
+<span class="sd">            Must be overridden by subclasses.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span></div>
+
+
+<div class="viewcode-block" id="Processor.process_session">
+<a class="viewcode-back" href="../../api/pipelines.html#pipelines.Processor.process_session">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">process_session</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">subject</span><span class="p">,</span> <span class="n">session</span><span class="p">,</span> <span class="n">force_flag</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Run the pipeline for a single session.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        subject : str</span>
+<span class="sd">            Subject ID.</span>
+<span class="sd">        session : str</span>
+<span class="sd">            Session ID.</span>
+<span class="sd">        force_flag : bool, optional</span>
+<span class="sd">            If ``True``, reprocess even when outputs already exist. Default</span>
+<span class="sd">            is ``False``.</span>
+<span class="sd">        **kwargs</span>
+<span class="sd">            Passed to the pipeline-specific implementation.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        NotImplementedError</span>
+<span class="sd">            Must be overridden by subclasses.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span></div>
+
+
+<div class="viewcode-block" id="Processor.process_subject">
+<a class="viewcode-back" href="../../api/pipelines.html#pipelines.Processor.process_subject">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">process_subject</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">subject</span><span class="p">,</span> <span class="n">force_flag</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Run the pipeline for a single subject.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        subject : str</span>
+<span class="sd">            Subject ID.</span>
+<span class="sd">        force_flag : bool, optional</span>
+<span class="sd">            If ``True``, reprocess even when outputs already exist. Default</span>
+<span class="sd">            is ``False``.</span>
+<span class="sd">        **kwargs</span>
+<span class="sd">            Passed to the pipeline-specific implementation.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        NotImplementedError</span>
+<span class="sd">            Must be overridden by subclasses.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span></div>
+
+
+<div class="viewcode-block" id="Processor.process_parallel">
+<a class="viewcode-back" href="../../api/pipelines.html#pipelines.Processor.process_parallel">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">process_parallel</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">num_cores</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Run ``process_subject`` for all subjects in parallel using threads.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        num_cores : int</span>
+<span class="sd">            Number of parallel worker threads.</span>
+<span class="sd">        **kwargs</span>
+<span class="sd">            Forwarded to ``process_subject`` for each subject.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        list</span>
+<span class="sd">            One entry per subject: ``None`` on success, or the subject ID</span>
+<span class="sd">            string when processing raised an exception.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_on_pipeline_init</span><span class="p">()</span>
+
+        <span class="k">def</span><span class="w"> </span><span class="nf">_run</span><span class="p">(</span><span class="n">processing</span><span class="p">,</span> <span class="n">subject</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">            </span><span class="sd">&quot;&quot;&quot;Run one subject in a thread; return the subject ID on failure.&quot;&quot;&quot;</span>
+            <span class="n">processing</span><span class="o">.</span><span class="n">_update_subject_layout</span><span class="p">(</span><span class="n">subject</span><span class="p">)</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">processing</span><span class="o">.</span><span class="n">process_subject</span><span class="p">(</span><span class="n">subject</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+            <span class="k">except</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">subject</span>
+
+        <span class="n">results</span> <span class="o">=</span> <span class="n">Parallel</span><span class="p">(</span><span class="n">n_jobs</span><span class="o">=</span><span class="n">num_cores</span><span class="p">,</span> <span class="n">backend</span><span class="o">=</span><span class="s1">&#39;threading&#39;</span><span class="p">)(</span><span class="n">delayed</span><span class="p">(</span><span class="n">_run</span><span class="p">)(</span>
+            <span class="n">copy</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="bp">self</span><span class="p">),</span> <span class="n">subject</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="k">for</span> <span class="n">subject</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">subject_list</span><span class="p">)</span>
+
+        <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;Subjects that failed: &#39;</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="n">r</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">results</span> <span class="k">if</span> <span class="n">r</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">]))</span>
+        <span class="k">return</span> <span class="n">results</span></div>
+
+
+<div class="viewcode-block" id="Processor.process">
+<a class="viewcode-back" href="../../api/pipelines.html#pipelines.Processor.process">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">process</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Run ``process_subject`` sequentially for all subjects.</span>
+
+<span class="sd">        Subjects that raise an exception are collected and printed at the</span>
+<span class="sd">        end rather than aborting the run.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        **kwargs</span>
+<span class="sd">            Forwarded to ``process_subject`` for each subject.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_on_pipeline_init</span><span class="p">()</span>
+
+        <span class="n">subjects_failed</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">subject</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">subject_list</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_update_subject_layout</span><span class="p">(</span><span class="n">subject</span><span class="p">)</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">retcode</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">process_subject</span><span class="p">(</span><span class="n">subject</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">retcode</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">retcode</span><span class="p">[</span><span class="s1">&#39;exit&#39;</span><span class="p">]</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
+                    <span class="n">subjects_failed</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">subject</span><span class="p">)</span>
+            <span class="k">except</span><span class="p">:</span>
+                <span class="n">subjects_failed</span> <span class="o">+=</span> <span class="p">[</span><span class="n">subject</span><span class="p">]</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_update_full_layout</span><span class="p">()</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;Subjects that failed: &#39;</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">subjects_failed</span><span class="p">))</span></div>
+</div>
+
+
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Adrià Casamitjana, Agustín Cartaya Lathulerie, Clara Lisazo, Rachika E. Hamadache.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
