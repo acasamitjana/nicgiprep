@@ -148,6 +148,7 @@ def fast_3D_interp_field_torch(
         IIr = torch.round(II).long()
         JJr = torch.round(JJ).long()
         KKr = torch.round(KK).long()
+
         IIr[IIr < 0] = 0
         JJr[JJr < 0] = 0
         KKr[KKr < 0] = 0
@@ -156,9 +157,8 @@ def fast_3D_interp_field_torch(
         KKr[KKr > (X.shape[2] - 1)] = X.shape[2] - 1
         Y = torch.zeros([*II.shape, num_channels], device=X.device)
         for channel in range(num_channels):
-            #
             Xc = X[..., channel]
-            Y = Xc[IIr, JJr, KKr]
+            Y[..., channel] = Xc[IIr, JJr, KKr]
 
     elif mode == "linear":
         #
