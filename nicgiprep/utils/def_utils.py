@@ -334,7 +334,6 @@ def vol_resample_fast(
         return nib.Nifti1Image(reg_image, ref_proxy.affine)
 
 
-
 def compute_gradient(flow: np.ndarray) -> np.ndarray:
     """Compute the spatial gradient of a 3D vector field using central differences.
 
@@ -367,7 +366,6 @@ def compute_gradient(flow: np.ndarray) -> np.ndarray:
     return gradient_map
 
 
-
 def compute_jacobian(flow: np.ndarray) -> np.ndarray:
     """Compute the Jacobian determinant of a displacement field.
 
@@ -387,7 +385,6 @@ def compute_jacobian(flow: np.ndarray) -> np.ndarray:
     gradient_map[..., 1, 1] += 1
     gradient_map[..., 2, 2] += 1
     return np.linalg.det(gradient_map)
-
 
 
 def lie_bracket(v: np.ndarray, w: np.ndarray) -> np.ndarray:
@@ -415,8 +412,7 @@ def lie_bracket(v: np.ndarray, w: np.ndarray) -> np.ndarray:
     # vw = Jw[..., 0, :]*v[..., 0:1] + Jw[..., 1, :]*v[..., 1:2] + Jw[..., 2, :]*v[..., 2:3] - Jv[..., 0, :]*w[..., 0:1] - Jv[..., 1, :]*w[..., 1:2] - Jv[..., 2, :]*w[..., 2:3]#
     # vw = Jv[..., 0, 0]*w[..., 0] + Jv[..., 1, 1]*w[..., 1] + Jv[..., 2,1]*w[..., 2] - Jw[..., 0,0]*v[..., 0] - Jw[..., 1,1]*v[..., 1] - Jw[..., 2,2]*v[..., 2]#
     # vw = Jw[..., 0]*v[..., 0:1] + Jw[..., 1]*v[..., 1:2] + Jw[..., 2]*v[..., 2:3] - Jv[..., 0]*w[..., 0:1] - Jv[..., 1]*w[..., 1:2] - Jv[..., 2]*w[..., 2:3]#
-    return vw   #
-
+    return vw  #
 
 
 def pole_ladder(
@@ -453,7 +449,6 @@ def pole_ladder(
         u = first_term + second_term + 0.5 * third_term
 
     return u
-
 
 
 def svf_to_vox(proxysvf: Nifti1Image) -> Nifti1Image:
@@ -603,17 +598,12 @@ def getM(ref: np.ndarray, mov: np.ndarray, use_L1: bool = False) -> np.ndarray:
     )
 
     b = np.concatenate(
-        
         [np.transpose(mov[0, :]), np.transpose(mov[1, :]), np.transpose(mov[2, :])],
-       
         axis=0,
-    ,
     )
 
     x = np.matmul(
-        
         np.linalg.inv(np.matmul(np.transpose(A), A)), np.matmul(np.transpose(A), b)
-    
     )
 
     # If L1 minimization: we use L2 solution as initialization and miminize L1
@@ -821,7 +811,6 @@ class VecInt(nn.Module):
         return output
 
 
-
 class RescaleTransform(nn.Module):
     """Resize a displacement field and rescale its vector magnitudes accordingly.
 
@@ -840,13 +829,11 @@ class RescaleTransform(nn.Module):
     """
 
     def __init__(
-        
         self,
         inshape: tuple[int, ...],
         factor: Optional[Union[float, list[float], tuple[float, ...]]] = None,
         target_size: Optional[tuple[int, ...]] = None,
-        gaussian_filter_flag: bool = False
-    ,
+        gaussian_filter_flag: bool = False,
     ) -> None:
         """
         Parameters
@@ -1008,11 +995,11 @@ class RescaleTransform(nn.Module):
         kernel = kernel / np.sum(kernel)
 
         # Reshape
-        kernel = kernel.reshape(1, 1, kernel_size[0], kernel_size[1],  kernel_size[2])
+        kernel = kernel.reshape(1, 1, kernel_size[0], kernel_size[1], kernel_size[2])
 
         # Total kernel
 
-        total_kernel = np.zeros((3,  3) + tuple(kernel_size))
+        total_kernel = np.zeros((3, 3) + tuple(kernel_size))
         total_kernel[0, 0] = kernel
         total_kernel[1, 1] = kernel
         total_kernel[2, 2] = kernel
@@ -1045,9 +1032,7 @@ class RescaleTransform(nn.Module):
 
             # resize first to save memory
             x = F.interpolate(
-                
                 x, align_corners=True, scale_factor=self.factor, mode=self.mode
-            
             )
             for i in range(self.ndims):
                 x[:, i] = x[:, i] * self.factor[i]
@@ -1057,9 +1042,7 @@ class RescaleTransform(nn.Module):
             for i in range(self.ndims):
                 x[:, i] = x[:, i] * self.factor[i]
             x = F.interpolate(
-                
                 x, align_corners=True, scale_factor=self.factor, mode=self.mode
-            
             )
 
         # don't do anything if resize is 1

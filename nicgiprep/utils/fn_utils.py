@@ -67,21 +67,13 @@ def align_with_identity_vox2ras0(
     return V, v2r
 
 
-
 def rescale_volume(
-    
     volume: np.ndarray,
-   
     new_min: float = 0,
-   
     new_max: float = 255,
-   
     min_percentile: float = 2,
-   
     max_percentile: float = 98,
-   
     use_positive_only: bool = True,
-,
 ) -> np.ndarray:
     """Linearly rescale a volume to a new intensity range.
 
@@ -138,7 +130,6 @@ def rescale_volume(
         return np.zeros_like(new_volume)
 
 
-
 def rescale_flow(
     flow_vol: np.ndarray, aff: np.ndarray, new_vox_size: Sequence[float]
 ) -> tuple[np.ndarray, np.ndarray]:
@@ -177,7 +168,6 @@ def rescale_flow(
     return flow_vol, flow_aff
 
 
-
 def gaussian_smoothing_voxel_size(
     proxy: nib.Nifti1Image, new_vox_size: Sequence[float]
 ) -> np.ndarray:
@@ -209,7 +199,6 @@ def gaussian_smoothing_voxel_size(
         sigmas = np.concatenate((sigmas, [0]))
 
     return gaussian_filter(volume, sigmas)
-
 
 
 def rescale_voxel_size(
@@ -290,7 +279,6 @@ def rescale_voxel_size(
     return volume2, aff2
 
 
-
 def gaussian_antialiasing(
     volume: np.ndarray, aff: np.ndarray, new_voxel_size: Sequence[float]
 ) -> np.ndarray:
@@ -319,7 +307,6 @@ def gaussian_antialiasing(
     sigmas[factor > 1] = 0  # don't blur if upsampling
 
     return gaussian_filter(volume, sigmas)
-
 
 
 def get_rigid_params(
@@ -381,7 +368,6 @@ def get_rigid_params(
     return angles, translation
 
 
-
 def one_hot_encoding(
     target: np.ndarray,
     num_classes: Optional[int] = None,
@@ -435,7 +421,6 @@ def one_hot_encoding(
     return np.moveaxis(labels, 0, -1)  # to allow for any number of dimensions
 
 
-
 def label_log_odds(
     target: np.ndarray,
     num_classes: Optional[int] = None,
@@ -486,19 +471,13 @@ def label_log_odds(
         d[~bbox_label] = d_out[~bbox_label]
 
         labels[
-            
             it_cls,
-           
             crop_coord[0][0] : crop_coord[0][1],
-           
             crop_coord[1][0] : crop_coord[1][1],
-           
             crop_coord[2][0] : crop_coord[2][1],
-        ,
         ] = d
 
     return labels
-
 
 
 def crop_label(
@@ -536,13 +515,12 @@ def crop_label(
         crop_coord.append([clow, chigh])
 
     mask_cropped = mask[
-        crop_coord[0][0]: crop_coord[0][1],
-        crop_coord[1][0]: crop_coord[1][1],
-        crop_coord[2][0]: crop_coord[2][1],
+        crop_coord[0][0] : crop_coord[0][1],
+        crop_coord[1][0] : crop_coord[1][1],
+        crop_coord[2][0] : crop_coord[2][1],
     ]
 
     return mask_cropped, crop_coord
-
 
 
 def apply_crop(image: np.ndarray, crop_coord: list[list[int]]) -> np.ndarray:
@@ -561,9 +539,9 @@ def apply_crop(image: np.ndarray, crop_coord: list[list[int]]) -> np.ndarray:
         Cropped sub-volume.
     """
     return image[
-        crop_coord[0][0]: crop_coord[0][1],
-        crop_coord[1][0]: crop_coord[1][1],
-        crop_coord[2][0]: crop_coord[2][1],
+        crop_coord[0][0] : crop_coord[0][1],
+        crop_coord[1][0] : crop_coord[1][1],
+        crop_coord[2][0] : crop_coord[2][1],
     ]
 
 
@@ -610,7 +588,6 @@ def compute_centroids_ras(
     ref_cog = np.matmul(seg_proxy.affine, ref_cog)[:-1, :]
 
     return ref_cog, ok
-
 
 
 def compute_distance_map_nongrid(
@@ -717,7 +694,6 @@ def compute_distance_map_nongrid(
     return distancemap
 
 
-
 def compute_distance_map(
     labelmap: np.ndarray, soft_seg: bool = True, labels_lut: Optional[dict] = None
 ) -> np.ndarray:
@@ -766,8 +742,7 @@ def compute_distance_map(
                 crop_coord[0][0] : crop_coord[0][1],
                 crop_coord[1][0] : crop_coord[1][1],
                 crop_coord[2][0] : crop_coord[2][1],
-               
-                it_ul,,
+                it_ul,
             ] = d
 
     # distancemap = np.clip(distancemap, -3, np.max(distancemap))
@@ -776,7 +751,6 @@ def compute_distance_map(
         distancemap = softmax(distancemap, axis=-1)
 
     return distancemap
-
 
 
 def compute_distance_map_crop(
@@ -824,9 +798,9 @@ def compute_distance_map_crop(
             d[~bbox_label] = d_out[~bbox_label]
 
             distancemap[
-                crop_coord[0][0]: crop_coord[0][1],
-                crop_coord[1][0]: crop_coord[1][1],
-                crop_coord[2][0]: crop_coord[2][1],
+                crop_coord[0][0] : crop_coord[0][1],
+                crop_coord[1][0] : crop_coord[1][1],
+                crop_coord[2][0] : crop_coord[2][1],
                 it_ul,
             ] = d
 
