@@ -1,0 +1,7 @@
+linear\_registration module
+===========================
+
+.. automodule:: linear_registration
+   :members:
+   :show-inheritance:
+   :undoc-members:

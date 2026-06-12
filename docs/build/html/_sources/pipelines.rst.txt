@@ -1,0 +1,45 @@
+pipelines package
+=================
+
+Submodules
+----------
+
+pipelines.base module
+---------------------
+
+.. automodule:: pipelines.base
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+pipelines.cross\_sectional module
+---------------------------------
+
+.. automodule:: pipelines.cross_sectional
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+pipelines.longitudinal module
+-----------------------------
+
+.. automodule:: pipelines.longitudinal
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+pipelines.multimodal module
+---------------------------
+
+.. automodule:: pipelines.multimodal
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+Module contents
+---------------
+
+.. automodule:: pipelines
+   :members:
+   :show-inheritance:
+   :undoc-members:

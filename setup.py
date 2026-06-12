@@ -27,6 +27,7 @@ BIDS_PATH_PATTERN = [
     "sub-{subject}[/ses-{session}]/{datatype<anat|utils>|anat}/sub-{subject}[_ses-{session}][_space-{space}][_task-{task}][_acq-{acquisition}][_ce-{ceagent}][_rec-{reconstruction}][_run-{run}][_part-{part}][_desc-{desc}]_{suffix<T1w|T2w|T2star|T2starw|FLAIR|FLASH|PD|PDw|PDT2|inplaneT[12]|angio|dseg|posteriors|svf|jac|def|T1wpost|T1wstats|T1wstd|T1wmask|T1wdseg|T2wmask|T2wdseg|FLAIRmask|FLAIRdseg|PDwmask|PDwdseg|PDmask|PDdseg|T1wsynthseg|T2wsynthseg|FLAIRsynthseg|PDwsynthseg|mask|space>}{extension<.nii|.nii.gz|.json|.txt|.npy>|.nii.gz}",
     "sub-{subject}[/ses-{session}]/{datatype<func>|func}/sub-{subject}[_ses-{session}][_space-{space}][_task-{task}][_acq-{acquisition}][_ce-{ceagent}][_rec-{reconstruction}][_run-{run}][_part-{part}][_desc-{desc}]_{suffix<bold|cbv|sbref>}{extension<.nii|.nii.gz|.json|.txt|.npy>|.nii.gz}",
     "sub-{subject}[/ses-{session}]/{datatype<pet>|pet}/sub-{subject}[_ses-{session}][_space-{space}][_task-{task}][_acq-{acquisition}][_trc-{tracer}][_rec-{reconstruction}][_run-{run}][_part-{part}][_desc-{desc}]_{suffix<pet>}{extension<.nii|.nii.gz|.json|.txt|.npy>|.nii.gz}",
+    "sub-{subject}[/ses-{session}]/{datatype<utils>|utils}/sub-{subject}[_ses-{session}][_space-{space}][_task-{task}][_acq-{acquisition}][_ce-{ceagent}][_rec-{reconstruction}][_run-{run}][_part-{part}][_desc-{desc}]_{suffix<svf|aff|empty|v2r|T1wsynthseg>}{extension<.nii|.nii.gz|.npy>|.nii.gz}",
 ]
 
 # MRI Templates
@@ -91,21 +92,19 @@ if not os.path.exists(TMP_DIR):
     os.makedirs(TMP_DIR)
 
 DIR_PIPELINES = {
-    "preproc": os.path.join(DERIVATIVES_DIR, "preproc"),
-    "uslr-lin": os.path.join(DERIVATIVES_DIR, "uslr-lin"),
-    "uslr": os.path.join(DERIVATIVES_DIR, "uslr"),
-    "uslr-mni": os.path.join(DERIVATIVES_DIR, "uslr-mni"),
+    'preproc': os.path.join(DERIVATIVES_DIR, 'preproc'),
+    'nicgiprep-long': os.path.join(DERIVATIVES_DIR, 'nicgiprep-long'),
+    'uslr-mni': os.path.join(DERIVATIVES_DIR, 'uslr-mni'),
     "nicgiprep-cross": os.path.join(DERIVATIVES_DIR, "nicgiprep-cross"),
     "nicgiprep-mm": os.path.join(DERIVATIVES_DIR, "nicgiprep-mm"),
 }
 
 DESC_PIPELINES = {
-    "preproc": "USLR preprocessing files in subject space",
-    "uslr-lin": "USLR preprocessing (linear) files in subject space",
-    "uslr": "USLR preprocessing (nonlinear) files in subject space",
-    "uslr-mni": "USRL preprocessing files in MNI",
-    "nicgiprep-cross": "Cross-sectional preprocessing files (nicgiprep-cross)",
-    "nicgiprep-mm": "Multimodal joint registration and MNI files (nicgiprep-mm)",
+    'preproc': 'USLR preprocessing files in subject space',
+    'nicgiprep-long': 'Longitudinal preprocessing pipeline outcomes',
+    'uslr-mni': 'USRL preprocessing files in MNI',
+    'nicgiprep-cross': 'Cross-sectional preprocessing pipeline outcomes',
+    'nicgiprep-mm': 'Multimodal preprocessing pipeline outcomes',
 }
 
 for d, d_str in DESC_PIPELINES.items():
