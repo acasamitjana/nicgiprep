@@ -95,8 +95,7 @@ def test_load_volume_dtype_cast():
     path = f"{TEST_OUTPUT_DIR}/load_dtype.npz"
     vol = load_volume(path, dtype="float32")
 
-    # assert vol.dtype == np.float32
-    assert vol.dtype == int
+    assert vol.dtype == np.float32
 
 
 def test_load_volume_squeeze():
