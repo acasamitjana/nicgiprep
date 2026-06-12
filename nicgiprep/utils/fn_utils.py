@@ -31,18 +31,20 @@ def align_with_identity_vox2ras0(V, vox2ras0):
     v2r : np.ndarray
         Updated voxel-to-RAS affine matrix, shape ``(4, 4)``.
     """
-    COST = np.zeros((3,3))
+    COST = np.zeros((3, 3))
     for i in range(3):
         for j in range(3):
 
             # worker is the vector
-            b = vox2ras0[:3,i]
+            b = vox2ras0[:3, i]
 
             # task is j:th axis
-            a = np.zeros((3,1))
+            a = np.zeros((3, 1))
             a[j] = 1
 
-            COST[i, j] = - np.abs(np.dot(a.T, b))/np.linalg.norm(a, 2)/np.linalg.norm(b, 2)
+            COST[i, j] = (
+                -np.abs(np.dot(a.T, b)) / np.linalg.norm(a, 2) / np.linalg.norm(b, 2)
+            )
 
     m = Munkres()
     indexes = m.compute(COST)
@@ -54,14 +56,22 @@ def align_with_identity_vox2ras0(V, vox2ras0):
     V = np.transpose(V, axes=[idx[1] for idx in indexes])
 
     for d in range(3):
-        if v2r[d,d] < 0:
+        if v2r[d, d] < 0:
             v2r[:3, d] = -v2r[:3, d]
-            v2r[:3, 3] = v2r[:3, 3] - v2r[:3, d] * (V.shape[d] -1)
+            v2r[:3, 3] = v2r[:3, 3] - v2r[:3, d] * (V.shape[d] - 1)
             V = np.flip(V, axis=d)
 
     return V, v2r
 
-def rescale_volume(volume, new_min=0, new_max=255, min_percentile=2, max_percentile=98, use_positive_only=True):
+
+def rescale_volume(
+    volume,
+    new_min=0,
+    new_max=255,
+    min_percentile=2,
+    max_percentile=98,
+    use_positive_only=True,
+):
     """Linearly rescale a volume to a new intensity range.
 
     Parameters
@@ -91,11 +101,21 @@ def rescale_volume(volume, new_min=0, new_max=255, min_percentile=2, max_percent
 
     # select only positive intensities
     new_volume = volume.copy()
-    intensities = new_volume[new_volume > 0] if use_positive_only else new_volume.flatten()
+    intensities = (
+        new_volume[new_volume > 0] if use_positive_only else new_volume.flatten()
+    )
 
     # define min and max intensities in original image for normalisation
-    robust_min = np.min(intensities) if min_percentile == 0 else np.percentile(intensities, min_percentile)
-    robust_max = np.max(intensities) if max_percentile == 0 else np.percentile(intensities, max_percentile)
+    robust_min = (
+        np.min(intensities)
+        if min_percentile == 0
+        else np.percentile(intensities, min_percentile)
+    )
+    robust_max = (
+        np.max(intensities)
+        if max_percentile == 0
+        else np.percentile(intensities, max_percentile)
+    )
 
     # trim values outside range
     new_volume = np.clip(new_volume, robust_min, robust_max)
@@ -105,6 +125,7 @@ def rescale_volume(volume, new_min=0, new_max=255, min_percentile=2, max_percent
         return new_min + (new_volume - robust_min) / (robust_max - robust_min) * new_max
     else:  # avoid dividing by zero
         return np.zeros_like(new_volume)
+
 
 def rescale_flow(flow_vol, aff, new_vox_size):
     """Rescale a displacement field to a new voxel size.
@@ -135,9 +156,12 @@ def rescale_flow(flow_vol, aff, new_vox_size):
     flow_vol[..., 1] *= f_factor[1]
     flow_vol[..., 2] *= f_factor[2]
 
-    flow_vol, flow_aff = rescale_voxel_size(flow_vol, aff, new_vox_size, not_aliasing=True)
+    flow_vol, flow_aff = rescale_voxel_size(
+        flow_vol, aff, new_vox_size, not_aliasing=True
+    )
 
     return flow_vol, flow_aff
+
 
 def gaussian_smoothing_voxel_size(proxy, new_vox_size):
     """Apply Gaussian anti-aliasing smoothing before resampling to a new voxel size.
@@ -168,6 +192,7 @@ def gaussian_smoothing_voxel_size(proxy, new_vox_size):
         sigmas = np.concatenate((sigmas, [0]))
 
     return gaussian_filter(volume, sigmas)
+
 
 def rescale_voxel_size(volume, aff, new_vox_size, not_aliasing=False):
     """Resample a volume to a new voxel size using trilinear interpolation.
@@ -217,7 +242,7 @@ def rescale_voxel_size(volume, aff, new_vox_size, not_aliasing=False):
 
     my_interpolating_function = rgi((x, y, z), volume_filt)
 
-    start = - (factor - 1) / (2 * factor)
+    start = -(factor - 1) / (2 * factor)
     step = 1.0 / factor
     stop = start + step * np.ceil(volume_filt.shape[:3] * factor)
 
@@ -231,7 +256,7 @@ def rescale_voxel_size(volume, aff, new_vox_size, not_aliasing=False):
     yi[yi > (volume_filt.shape[1] - 1)] = volume_filt.shape[1] - 1
     zi[zi > (volume_filt.shape[2] - 1)] = volume_filt.shape[2] - 1
 
-    xig, yig, zig = np.meshgrid(xi, yi, zi, indexing='ij', sparse=True)
+    xig, yig, zig = np.meshgrid(xi, yi, zi, indexing="ij", sparse=True)
     volume2 = my_interpolating_function((xig, yig, zig))
 
     aff2 = aff.copy()
@@ -240,6 +265,7 @@ def rescale_voxel_size(volume, aff, new_vox_size, not_aliasing=False):
     aff2[:-1, -1] = aff2[:-1, -1] - np.matmul(aff2[:-1, :-1], 0.5 * (factor - 1))
 
     return volume2, aff2
+
 
 def gaussian_antialiasing(volume, aff, new_voxel_size):
     """Apply a Gaussian anti-aliasing filter before downsampling a volume.
@@ -268,6 +294,7 @@ def gaussian_antialiasing(volume, aff, new_voxel_size):
 
     return gaussian_filter(volume, sigmas)
 
+
 def get_rigid_params(matrix, proxyref, cog=None):
     """Decompose a rigid affine matrix into Euler angles and translation.
 
@@ -288,29 +315,32 @@ def get_rigid_params(matrix, proxyref, cog=None):
     translation : np.ndarray
         Translation vector ``[tx, ty, tz]`` in mm.
     """
-    ry = -np.asin(matrix[2, 0])
-    rx = np.atan2(matrix[2, 1] / np.cos(ry), matrix[2, 2] / np.cos(ry))
-    rz = np.atan2(matrix[1, 0] / np.cos(ry), matrix[0, 0] / np.cos(ry))
+    ry = -np.arcsin(matrix[2, 0])
+    rx = np.arctan2(matrix[2, 1] / np.cos(ry), matrix[2, 2] / np.cos(ry))
+    rz = np.arctan2(matrix[1, 0] / np.cos(ry), matrix[0, 0] / np.cos(ry))
     angles = np.array([rx, ry, rz])
 
-    T_center = np.zeros((4, 4)).to(matrix.device)
+    T_center = np.zeros((4, 4))
     T_center[0, 0] = 1
     T_center[1, 1] = 1
     T_center[2, 2] = 1
     T_center[3, 3] = 1
     if cog is None:
-        T_center[:3, 3] = (-proxyref.affine @ np.asarray([i / 2 for i in proxyref.shape] + [1]))[:3]
+        T_center[:3, 3] = (
+            -proxyref.affine @ np.asarray([i / 2 for i in proxyref.shape] + [1])
+        )[:3]
     else:
         T_center[:3, 3] = -cog
 
-
-    T_center_inv = np.zeros((4, 4)).to(matrix.device)
+    T_center_inv = np.zeros((4, 4))
     T_center_inv[0, 0] = 1
     T_center_inv[1, 1] = 1
     T_center_inv[2, 2] = 1
     T_center_inv[3, 3] = 1
     if cog is None:
-        T_center_inv[:3, 3] = (proxyref.affine @ np.asarray([i / 2 for i in proxyref.shape] + [1]))[:3]
+        T_center_inv[:3, 3] = (
+            proxyref.affine @ np.asarray([i / 2 for i in proxyref.shape] + [1])
+        )[:3]
     else:
         T_center_inv[:3, 3] = cog
 
@@ -320,6 +350,7 @@ def get_rigid_params(matrix, proxyref, cog=None):
     translation = T_trans[:3, 3]
 
     return angles, translation
+
 
 def one_hot_encoding(target, num_classes=None, categories=None):
     """Convert an integer label map to a one-hot encoded array.
@@ -346,7 +377,9 @@ def one_hot_encoding(target, num_classes=None, categories=None):
     """
 
     if categories is None and num_classes is None:
-        categories = {cls: it_cls for it_cls, cls in enumerate(np.sort(np.unique(target)))}
+        categories = {
+            cls: it_cls for it_cls, cls in enumerate(np.sort(np.unique(target)))
+        }
         num_classes = len(categories)
 
     elif categories is not None:
@@ -358,13 +391,15 @@ def one_hot_encoding(target, num_classes=None, categories=None):
     else:
         categories = {cls: cls for cls in np.arange(num_classes)}
 
-    labels = np.zeros((num_classes,) + target.shape, dtype='uint16')
+    labels = np.zeros((num_classes,) + target.shape, dtype="uint16")
     for cls, it_cls in categories.items():
         idx_class = np.where(target == cls)
         idx = (it_cls,) + idx_class
         labels[idx] = 1
 
-    return np.transpose(labels, axes=(1, 2, 3, 0))
+    # return np.transpose(labels, axes=(1, 2, 3, 0))
+    return np.moveaxis(labels, 0, -1)  # to allow for any number of dimensions
+
 
 def label_log_odds(target, num_classes=None, categories=None):
     """Compute per-label signed distance maps as log-odds representations.
@@ -400,20 +435,26 @@ def label_log_odds(target, num_classes=None, categories=None):
     else:
         categories = np.arange(num_classes)
 
-    labels = -10000 * np.ones((num_classes,) + target.shape, dtype='int')
+    labels = -10000 * np.ones((num_classes,) + target.shape, dtype="int")
     for it_cls, cls in enumerate(categories):
         mask_label = target == cls
         bbox_label, crop_coord = crop_label(mask_label, margin=10)
 
-        d_in = (distance_transform_edt(bbox_label))
+        d_in = distance_transform_edt(bbox_label)
         d_out = -distance_transform_edt(~bbox_label)
         d = np.zeros_like(d_in)
         d[bbox_label] = d_in[bbox_label]
         d[~bbox_label] = d_out[~bbox_label]
 
-        labels[it_cls, crop_coord[0][0]: crop_coord[0][1], crop_coord[1][0]: crop_coord[1][1], crop_coord[2][0]: crop_coord[2][1]] = d
+        labels[
+            it_cls,
+            crop_coord[0][0] : crop_coord[0][1],
+            crop_coord[1][0] : crop_coord[1][1],
+            crop_coord[2][0] : crop_coord[2][1],
+        ] = d
 
     return labels
+
 
 def crop_label(mask, margin=10, threshold=0):
     """Crop a binary mask to its bounding box with an optional margin.
@@ -438,22 +479,23 @@ def crop_label(mask, margin=10, threshold=0):
     """
     ndim = len(mask.shape)
     if isinstance(margin, int):
-        margin=[margin]*ndim
+        margin = [margin] * ndim
 
     crop_coord = []
-    idx = np.where(mask>threshold)
+    idx = np.where(mask > threshold)
     for it_index, index in enumerate(idx):
         clow = max(0, np.min(idx[it_index]) - margin[it_index])
         chigh = min(mask.shape[it_index], np.max(idx[it_index]) + margin[it_index])
         crop_coord.append([clow, chigh])
 
     mask_cropped = mask[
-                   crop_coord[0][0]: crop_coord[0][1],
-                   crop_coord[1][0]: crop_coord[1][1],
-                   crop_coord[2][0]: crop_coord[2][1]
-                   ]
+        crop_coord[0][0] : crop_coord[0][1],
+        crop_coord[1][0] : crop_coord[1][1],
+        crop_coord[2][0] : crop_coord[2][1],
+    ]
 
     return mask_cropped, crop_coord
+
 
 def apply_crop(image, crop_coord):
     """Extract a sub-volume defined by crop coordinates.
@@ -470,10 +512,12 @@ def apply_crop(image, crop_coord):
     np.ndarray
         Cropped sub-volume.
     """
-    return image[crop_coord[0][0]: crop_coord[0][1],
-                 crop_coord[1][0]: crop_coord[1][1],
-                 crop_coord[2][0]: crop_coord[2][1]
-           ]
+    return image[
+        crop_coord[0][0] : crop_coord[0][1],
+        crop_coord[1][0] : crop_coord[1][1],
+        crop_coord[2][0] : crop_coord[2][1],
+    ]
+
 
 def compute_centroids_ras(seg_file, labelfile):
     """Compute RAS-space centroids for each label in a segmentation.
@@ -517,6 +561,7 @@ def compute_centroids_ras(seg_file, labelfile):
 
     return refCOG, ok
 
+
 def compute_distance_map_nongrid(labelmap, sampling_grid, labels_lut=None):
     """Compute signed distance maps evaluated on an arbitrary sampling grid.
 
@@ -542,23 +587,59 @@ def compute_distance_map_nongrid(labelmap, sampling_grid, labels_lut=None):
     if labels_lut is None:
         labels_lut = {ul: it_ul for it_ul, ul in enumerate(np.unique(labelmap))}
 
-    sampling_grid_nn = np.round(sampling_grid).astype('int')
+    sampling_grid_nn = np.round(sampling_grid).astype("int")
     sampling_grid_nn[0] = np.clip(sampling_grid_nn[0], 0, labelmap.shape[0] - 1)
     sampling_grid_nn[1] = np.clip(sampling_grid_nn[1], 0, labelmap.shape[1] - 1)
     sampling_grid_nn[2] = np.clip(sampling_grid_nn[2], 0, labelmap.shape[2] - 1)
-    distancemap = -200 * np.ones(sampling_grid_nn.shape[1:] + (len(labels_lut.keys()),), dtype='float32')
+    distancemap = -200 * np.ones(
+        sampling_grid_nn.shape[1:] + (len(labels_lut.keys()),), dtype="float32"
+    )
     for ul, it_ul in labels_lut.items():
 
         mask_label = labelmap == ul
-        mask_label_reg = mask_label[sampling_grid_nn[0], sampling_grid_nn[1], sampling_grid_nn[2]]
+        mask_label_reg = mask_label[
+            sampling_grid_nn[0], sampling_grid_nn[1], sampling_grid_nn[2]
+        ]
         if np.sum(mask_label) == 0:
             continue
         else:
 
-            idx_in = distance_transform_edt(mask_label, return_distances=False, return_indices=True)
-            d_in = np.sqrt(np.sum((idx_in[:, sampling_grid_nn[0], sampling_grid_nn[1], sampling_grid_nn[2]] - sampling_grid)**2, axis=0))
-            idx_out = distance_transform_edt(~mask_label,  return_distances=False, return_indices=True)
-            d_out = -np.sqrt(np.sum((idx_out[:, sampling_grid_nn[0], sampling_grid_nn[1], sampling_grid_nn[2]] - sampling_grid)**2, axis=0))
+            idx_in = distance_transform_edt(
+                mask_label, return_distances=False, return_indices=True
+            )
+            d_in = np.sqrt(
+                np.sum(
+                    (
+                        idx_in[
+                            :,
+                            sampling_grid_nn[0],
+                            sampling_grid_nn[1],
+                            sampling_grid_nn[2],
+                        ]
+                        - sampling_grid
+                    )
+                    ** 2,
+                    axis=0,
+                )
+            )
+            idx_out = distance_transform_edt(
+                ~mask_label, return_distances=False, return_indices=True
+            )
+            d_out = -np.sqrt(
+                np.sum(
+                    (
+                        idx_out[
+                            :,
+                            sampling_grid_nn[0],
+                            sampling_grid_nn[1],
+                            sampling_grid_nn[2],
+                        ]
+                        - sampling_grid
+                    )
+                    ** 2,
+                    axis=0,
+                )
+            )
 
             # With crop (it is approximate near the boundaries)
             # bbox_label, crop_coord = crop_label(mask_label, margin=5)
@@ -578,9 +659,10 @@ def compute_distance_map_nongrid(labelmap, sampling_grid, labels_lut=None):
             d = np.zeros_like(d_in)
             d[mask_label_reg] = d_in[mask_label_reg]
             d[~mask_label_reg] = d_out[~mask_label_reg]
-            distancemap[... , it_ul] = d
+            distancemap[..., it_ul] = d
 
     return distancemap
+
 
 def compute_distance_map(labelmap, soft_seg=True, labels_lut=None):
     """Compute signed distance maps on the native label grid.
@@ -607,7 +689,9 @@ def compute_distance_map(labelmap, soft_seg=True, labels_lut=None):
     if labels_lut is None:
         labels_lut = {ul: it_ul for it_ul, ul in enumerate(np.unique(labelmap))}
 
-    distancemap = -200 * np.ones(labelmap.shape + (len(labels_lut.keys()),), dtype='float32')
+    distancemap = -200 * np.ones(
+        labelmap.shape + (len(labels_lut.keys()),), dtype="float32"
+    )
     for ul, it_ul in labels_lut.items():
 
         mask_label = labelmap == ul
@@ -616,16 +700,17 @@ def compute_distance_map(labelmap, soft_seg=True, labels_lut=None):
         else:
             mask_label, crop_coord = crop_label(mask_label, margin=5)
 
-            d_in = (distance_transform_edt(mask_label))
+            d_in = distance_transform_edt(mask_label)
             d_out = -distance_transform_edt(~mask_label)
             d = np.zeros_like(d_in)
             d[mask_label] = d_in[mask_label]
             d[~mask_label] = d_out[~mask_label]
 
             distancemap[
-                crop_coord[0][0]: crop_coord[0][1],
-                crop_coord[1][0]: crop_coord[1][1],
-                crop_coord[2][0]: crop_coord[2][1], it_ul
+                crop_coord[0][0] : crop_coord[0][1],
+                crop_coord[1][0] : crop_coord[1][1],
+                crop_coord[2][0] : crop_coord[2][1],
+                it_ul,
             ] = d
 
     # distancemap = np.clip(distancemap, -3, np.max(distancemap))
@@ -634,6 +719,7 @@ def compute_distance_map(labelmap, soft_seg=True, labels_lut=None):
         distancemap = softmax(distancemap, axis=-1)
 
     return distancemap
+
 
 def compute_distance_map_crop(labelmap, soft_seg=True, labels_lut=None):
     """Compute signed distance maps using per-label bounding-box crops.
@@ -660,7 +746,9 @@ def compute_distance_map_crop(labelmap, soft_seg=True, labels_lut=None):
     if labels_lut is None:
         labels_lut = {ul: it_ul for it_ul, ul in enumerate(np.unique(labelmap))}
 
-    distancemap = -200 * np.ones(labelmap.shape + (len(labels_lut.keys()),), dtype='float32')
+    distancemap = -200 * np.ones(
+        labelmap.shape + (len(labels_lut.keys()),), dtype="float32"
+    )
     for ul, it_ul in labels_lut.items():
 
         mask_label = labelmap == ul
@@ -669,19 +757,20 @@ def compute_distance_map_crop(labelmap, soft_seg=True, labels_lut=None):
         else:
             bbox_label, crop_coord = crop_label(mask_label, margin=5)
 
-            d_in = (distance_transform_edt(bbox_label))
+            d_in = distance_transform_edt(bbox_label)
             d_out = -distance_transform_edt(~bbox_label)
             d = np.zeros_like(d_in)
             d[bbox_label] = d_in[bbox_label]
             d[~bbox_label] = d_out[~bbox_label]
 
-            distancemap[crop_coord[0][0]: crop_coord[0][1],
-                        crop_coord[1][0]: crop_coord[1][1],
-                        crop_coord[2][0]: crop_coord[2][1], it_ul] = d
+            distancemap[
+                crop_coord[0][0] : crop_coord[0][1],
+                crop_coord[1][0] : crop_coord[1][1],
+                crop_coord[2][0] : crop_coord[2][1],
+                it_ul,
+            ] = d
 
     if soft_seg:
         distancemap = softmax(distancemap, axis=-1)
 
     return distancemap
-
-

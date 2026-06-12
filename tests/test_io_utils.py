@@ -334,28 +334,28 @@ def test_load_array_if_path_file():
 # ----------------------------------------
 # tests for reformat_to_list
 # ----------------------------------------
-# def test_reformat_to_list_scalar():
-#     """Scalar should become list."""
+def test_reformat_to_list_scalar():
+    """Scalar should become list."""
 
-#     out = reformat_to_list(5, length=3)
+    out = reformat_to_list(5, length=3)
 
-#     assert out == [5, 5, 5]
-
-
-# def test_reformat_to_list_tuple():
-#     """Tuple should convert to list."""
-
-#     out = reformat_to_list((1, 2, 3))
-
-#     assert out == [1, 2, 3]
+    assert out == [5, 5, 5]
 
 
-# def test_reformat_to_list_dtype():
-#     """Type conversion should work."""
+def test_reformat_to_list_tuple():
+    """Tuple should convert to list."""
 
-#     out = reformat_to_list([1, 2, 3], dtype="float")
+    out = reformat_to_list((1, 2, 3))
 
-#     assert all(isinstance(x, float) for x in out)
+    assert out == [1, 2, 3]
+
+
+def test_reformat_to_list_dtype():
+    """Type conversion should work."""
+
+    out = reformat_to_list([1, 2, 3], dtype="float")
+
+    assert all(isinstance(x, float) for x in out)
 
 
 # ----------------------------------------
