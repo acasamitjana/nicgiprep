@@ -29,7 +29,6 @@ from nicgiprep.models import InstanceRigidModelLOG
 
 # from nicgiprep.callbacks import *
 from nicgiprep.utils.preprocessing_utils import *
-from nicgiprep.utils.label_utils import SYNTHSEG_APARC_LUT
 from nicgiprep.utils.io_utils import create_dir, save_volume, ProcessResult
 from nicgiprep.utils.synthmorph_utils import synthmorph_register, integrate_svf
 from nicgiprep.utils.def_utils import (
@@ -764,7 +763,7 @@ class USLRLinear(LongitudinalProcessor):
             )
 
         sss_proxy = nib.load(sss_filepath)
-        template_mask = np.zeros(self.net_shape + (len(SYNTHSEG_APARC_LUT),))
+        template_mask = np.zeros(self.net_shape + (len(self.labels_lut),))
         for sess_id, sess_files in sess_df.iterrows():
             extra_kwargs = {"subject": subject, "session": sess_id}
             aff_file = self._get_data(**{**extra_kwargs, **self.aff_long_ent})
@@ -827,74 +826,67 @@ class USLRLinear(LongitudinalProcessor):
             Forwarded to :meth:`_solve_graph`.
         """
         exit_dict = ProcessResult(exit_code=0, message="success")
-        try:
-            def_dir = join(self.tmp_dir, "sub-" + subject)
-            create_dir(def_dir)
+        def_dir = join(self.tmp_dir, "sub-" + subject)
+        create_dir(def_dir)
 
-            sess_df = self._get_sessions_file(subject)
-            if not isinstance(sess_df, pd.DataFrame):
-                if kwargs.get("verbose", False):
-                    print(sess_df["message"])
-                return sess_df
-
-            session_list = sess_df["session_id"]
-            sess_df.set_index("session_id", drop=False, inplace=True)
-
-            checkpoint = self._check_running_subject(subject, session_list, force_flag)
-
+        sess_df = self._get_sessions_file(subject)
+        if not isinstance(sess_df, pd.DataFrame):
             if kwargs.get("verbose", False):
-                print("* Subject: " + subject)
-            if (
-                checkpoint["exit_code"] == -1
-                or checkpoint["exit_code"] == 1
-                or checkpoint["exit_code"] == 5
-            ):
-                if kwargs.get("verbose", False):
-                    print(checkpoint["message"])
-                return checkpoint
+                print(sess_df["message"])
+            return sess_df
 
-            if checkpoint["exit_code"] in [0]:
-                # initialize graph
-                t_cog_d = self._init_graph(sess_df, def_dir, force_flag)
-                self._update_subject_layout(subject)
+        session_list = sess_df["session_id"]
+        sess_df.set_index("session_id", drop=False, inplace=True)
 
-                # compute graph
-                tmp_dir = join(self.tmp_dir, subject)
-                create_dir(tmp_dir)
-                graph_kwargs = {
-                    "n_epochs": 30,
-                    "cost": "l1",
-                    "lr": 0.1,
-                    "dir_results": tmp_dir,
-                    "max_iter": 20,
-                }
-                self._solve_graph(subject, sess_df, def_dir, t_cog_d, **graph_kwargs)
-                self._update_subject_layout(subject)
+        checkpoint = self._check_running_subject(subject, session_list, force_flag)
 
-            if checkpoint["exit_code"] in [0, 2]:
-                # create subject space
-                pr = self._create_subject_space(subject, sess_df)
-                if pr["exit_code"] != 0:
-                    return pr
-
-                pr = self._resample_to_subject_space(subject, sess_df)
-                if pr["exit_code"] != 0:
-                    return pr
-
-                pr = self._compute_etiv(subject, sess_df)
-                if pr["exit_code"] != 0:
-                    return pr
-
-                self._update_subject_layout(subject)
-
-            return exit_dict
-
-        except Exception as e:
+        if kwargs.get("verbose", False):
+            print("* Subject: " + subject)
+        if (
+            checkpoint["exit_code"] == -1
+            or checkpoint["exit_code"] == 1
+            or checkpoint["exit_code"] == 5
+        ):
             if kwargs.get("verbose", False):
-                print(traceback.format_exc())
-            return ProcessResult(
-                exit_code=-1, message=f"[error] subject {subject} failed: {e}"
-            )
+                print(checkpoint["message"])
+            return checkpoint
+
+        if checkpoint["exit_code"] in [0]:
+            # initialize graph
+            t_cog_d = self._init_graph(sess_df, def_dir, force_flag)
+            self._update_subject_layout(subject)
+
+            # compute graph
+            tmp_dir = join(self.tmp_dir, subject)
+            create_dir(tmp_dir)
+            graph_kwargs = {
+                "n_epochs": 30,
+                "cost": "l1",
+                "lr": 0.1,
+                "dir_results": tmp_dir,
+                "max_iter": 20,
+            }
+            self._solve_graph(subject, sess_df, def_dir, t_cog_d, **graph_kwargs)
+            self._update_subject_layout(subject)
+
+        if checkpoint["exit_code"] in [0, 2]:
+            # create subject space
+            pr = self._create_subject_space(subject, sess_df)
+            if pr["exit_code"] != 0:
+                return pr
+
+            pr = self._resample_to_subject_space(subject, sess_df)
+            if pr["exit_code"] != 0:
+                return pr
+
+            pr = self._compute_etiv(subject, sess_df)
+            if pr["exit_code"] != 0:
+                return pr
+
+            self._update_subject_layout(subject)
+
+        return exit_dict
+
 
     @staticmethod
     def init_st2_lineal(session_list: list[object], input_dir: str, eps: float = 1e-6):
@@ -1674,7 +1666,7 @@ class USLRDeformable(LongitudinalProcessor):
 
             seg_arr = np.array(seg_proxy.dataobj)
             onehot_arr = one_hot_encoding(
-                seg_arr, categories=SYNTHSEG_APARC_LUT
+                seg_arr, categories=self.labels_lut
             ).astype("float")
             onehot_proxy = nib.Nifti1Image(
                 onehot_arr, np.linalg.inv(aff_arr) @ seg_proxy.affine
@@ -1694,7 +1686,7 @@ class USLRDeformable(LongitudinalProcessor):
         im_template_arr = np.median(image_list_arr, axis=0)
         del image_list
 
-        seg_template_arr = np.zeros(im_template_arr.shape + (len(SYNTHSEG_APARC_LUT),))
+        seg_template_arr = np.zeros(im_template_arr.shape + (len(self.labels_lut),))
         for seg_proxy in seg_list:
             seg_template_arr += np.array(seg_proxy.dataobj)
 
@@ -1822,83 +1814,75 @@ class USLRDeformable(LongitudinalProcessor):
             Forwarded to :meth:`_solve_graph`.
         """
         exit_dict = ProcessResult(exit_code=0, message="success")
-        try:
-            assert cost in ["bch-l1", "bch-l2"]
+        assert cost in ["bch-l1", "bch-l2"]
 
-            sess_df = self._get_sessions_file(subject)
-            if not isinstance(sess_df, pd.DataFrame):
-                if kwargs.get("verbose", False):
-                    print(sess_df["message"])
-                return sess_df
-
-            session_list = sess_df["session_id"]
-            sess_df.set_index("session_id", drop=False, inplace=True)
-
-            checkpoint = self._check_running_subject(subject, session_list, force_flag)
+        sess_df = self._get_sessions_file(subject)
+        if not isinstance(sess_df, pd.DataFrame):
             if kwargs.get("verbose", False):
-                print("* Subject: " + subject)
+                print(sess_df["message"])
+            return sess_df
 
-            if checkpoint["exit_code"] == -1 or checkpoint["exit_code"] == 1:
-                if kwargs.get("verbose", False):
-                    print(checkpoint["message"])
-                return checkpoint
+        session_list = sess_df["session_id"]
+        sess_df.set_index("session_id", drop=False, inplace=True)
 
-            if checkpoint["exit_code"] in [5]:
-                if kwargs.get("verbose", False):
-                    print(checkpoint["message"])
-                return checkpoint
+        checkpoint = self._check_running_subject(subject, session_list, force_flag)
+        if kwargs.get("verbose", False):
+            print("* Subject: " + subject)
 
-            def_dir = join(self.tmp_dir, "sub-" + subject)
-            create_dir(def_dir)
-
-            if checkpoint["exit_code"] in [0]:
-                # compute svf v2r
-                svf_v2r_file = self._get_data(subject=subject, **self.svf_v2r_ent)
-                if svf_v2r_file is None:
-                    return ProcessResult(
-                        exit_code=-1,
-                        message="[error] please, something went wrong in the rigid "
-                        "registration step. Please check.",
-                    )
-                else:
-                    svf_v2r = np.load(svf_v2r_file.path)
-
-                # build the entire graph
-                self._init_graph(subject, session_list, def_dir, force_flag)
-                self._update_subject_layout(subject)
-
-                # solve spanning tree
-                T_latent = self._solve_graph(session_list, def_dir, cost)
-                for sess_id in sess_df.index:
-                    filename = self.build_path(
-                        {"subject": subject, "session": sess_id, **self.svf_long_ent}
-                    )
-                    filepath = join(DIR_PIPELINES["nicgiprep-long"], filename)
-                    create_dir(dirname(filepath))
-                    save_volume(
-                        T_latent[sess_id].astype("float32"), svf_v2r, path=filepath
-                    )
-
-                self._update_subject_layout(subject)
-
-            if checkpoint["exit_code"] in [0, 2]:
-                # compute template
-                self._compute_template(subject, sess_df)
-                self._update_subject_layout(subject)
-
-            if checkpoint["exit_code"] in [0, 2, 3]:
-                # compute mean SVF
-                self._compute_mean_trajectories(subject, session_list)
-                self._update_subject_layout(subject)
-
-            return exit_dict
-
-        except Exception as e:
+        if checkpoint["exit_code"] == -1 or checkpoint["exit_code"] == 1:
             if kwargs.get("verbose", False):
-                print(traceback.format_exc())
-            return ProcessResult(
-                exit_code=-1, message=f"[error] subject {subject} failed: {e}"
-            )
+                print(checkpoint["message"])
+            return checkpoint
+
+        if checkpoint["exit_code"] in [5]:
+            if kwargs.get("verbose", False):
+                print(checkpoint["message"])
+            return checkpoint
+
+        def_dir = join(self.tmp_dir, "sub-" + subject)
+        create_dir(def_dir)
+
+        if checkpoint["exit_code"] in [0]:
+            # compute svf v2r
+            svf_v2r_file = self._get_data(subject=subject, **self.svf_v2r_ent)
+            if svf_v2r_file is None:
+                return ProcessResult(
+                    exit_code=-1,
+                    message="[error] please, something went wrong in the rigid "
+                    "registration step. Please check.",
+                )
+            else:
+                svf_v2r = np.load(svf_v2r_file.path)
+
+            # build the entire graph
+            self._init_graph(subject, session_list, def_dir, force_flag)
+            self._update_subject_layout(subject)
+
+            # solve spanning tree
+            T_latent = self._solve_graph(session_list, def_dir, cost)
+            for sess_id in sess_df.index:
+                filename = self.build_path(
+                    {"subject": subject, "session": sess_id, **self.svf_long_ent}
+                )
+                filepath = join(DIR_PIPELINES["nicgiprep-long"], filename)
+                create_dir(dirname(filepath))
+                save_volume(
+                    T_latent[sess_id].astype("float32"), svf_v2r, path=filepath
+                )
+
+            self._update_subject_layout(subject)
+
+        if checkpoint["exit_code"] in [0, 2]:
+            # compute template
+            self._compute_template(subject, sess_df)
+            self._update_subject_layout(subject)
+
+        if checkpoint["exit_code"] in [0, 2, 3]:
+            # compute mean SVF
+            self._compute_mean_trajectories(subject, session_list)
+            self._update_subject_layout(subject)
+
+        return exit_dict
 
 
 class LongitudinalRegistration(LongitudinalProcessor):
@@ -1931,146 +1915,6 @@ class LongitudinalRegistration(LongitudinalProcessor):
         self.tmp_dir = join(self.tmp_dir, "long-reg")
         create_dir(self.tmp_dir)
         self.pipeline_dir = "nicgiprep-long"
-
-    def _check_running_subject(
-        self,
-        subject: str,
-        session_list: list[str],
-        force_flag: bool = False,
-        register_MNI: bool = False,
-    ) -> dict:
-        """Determine the processing checkpoint for a subject.
-
-        Parameters
-        ----------
-        subject : str
-            Subject ID of the processing subject.
-        session_list : list of str
-            Session IDs to include in the processing.
-        force_flag : bool, optional
-            If ``True``, ignore existing outputs and rerun.
-        register_MNI : bool, optional
-            Whether MNI registration is expected. Default is ``False``.
-
-        Returns
-        -------
-        dict
-            ``{'exit_code': int, 'message': str}``.  Exit codes:
-            ``-1`` error, ``0`` run full pipeline, ``1`` skip,
-            ``2`` graph done, ``3`` template done, ``4`` eTIV done,
-            ``5`` single timepoint.
-        """
-        # do not run if only 1 timepoint available
-        if len(session_list) == 1:
-            if register_MNI:
-                return {
-                    "exit_code": 5,
-                    "message": "[partly done] It has only 1 timepoint. Linking files and registering to MNI \n",
-                }
-            else:
-                return {
-                    "exit_code": 5,
-                    "message": "[done] It has only 1 timepoint. Linking files. \n",
-                }
-
-        # do not run if only 0 timepoint available
-        elif len(session_list) == 0:
-            return {
-                "exit_code": 1,
-                "message": "[done] It has 0 sessions available. Skipping.\n",
-            }
-
-        # do not run if some timepoint is not properly segmented
-        elif any(
-            [
-                self._get_data(
-                    **{"subject": subject, "session": t, **self.seg_entities}
-                )
-                is None
-                for t in session_list
-            ]
-        ):
-            return {
-                "exit_code": -1,
-                "message": "[error] not all sessions are correctly segmented. Please check.\n",
-            }
-
-        # do not run if it has already been processed
-        elif (
-            self._get_data(
-                **{"subject": subject, **self.aff_long_ent},
-                curr_len=len(session_list),
-                verbose=False,
-            )
-            is not None
-            and not force_flag
-        ):
-            filename_sss = self.build_path(
-                {"subject": subject, **self.template_long_entities}
-            )
-
-            if not exists(join(DIR_PIPELINES[self.pipeline_dir], filename_sss)):
-                return {
-                    "exit_code": 2,
-                    "message": "[partly done] graph is already computed; template and etiv missing.\n",
-                }
-            elif (
-                self._get_data(
-                    **{**self.im_long_ent, "subject": subject, "suffix": "T1wdseg"},
-                    curr_len=len(session_list),
-                    verbose=False,
-                )
-                is None
-            ):
-                return {
-                    "exit_code": 2,
-                    "message": "[partly done] graph is already computed; template and etiv missing.\n",
-                }
-            elif not exists(
-                join(
-                    DIR_PIPELINES[self.pipeline_dir],
-                    "sub-" + subject,
-                    "sub-" + subject + "_T1wetiv.npy",
-                )
-            ):
-                return {
-                    "exit_code": 3,
-                    "message": "[partly done] graph and template are already computed; subject etiv missing.\n",
-                }
-            elif (
-                self._get_data(
-                    **{"subject": subject, "space": "MNI", "suffix": "T1wdseg"},
-                    curr_len=len(session_list),
-                    verbose=False,
-                )
-                is None
-                and register_MNI is True
-            ):
-                return {
-                    "exit_code": 4,
-                    "message": "[partly done] graph, template and etiv done; MNI registration is missing.\n",
-                }
-            else:
-                return {
-                    "exit_code": 1,
-                    "message": "[done] subject already processed. "
-                    "Check the results in [..]/uslr-lin/sub-" + subject + ".\n",
-                }
-
-        # do not run if more segmentations than sessions are found
-        elif (
-            self._get_data(
-                **{"subject": subject, **self.seg_entities}, curr_len=len(session_list)
-            )
-            is None
-        ):
-            return {
-                "exit_code": -1,
-                "message": "[error] not all sessions are segmented. Please, run preprocess/synthseg.py first.\n",
-            }
-
-        else:
-            return {"exit_code": 0, "message": ""}
 
     def _register_to_MNI(self, subject: str, sess_df: pd.DataFrame):
         """Register the nonlinear template to MNI via centroid affine.
