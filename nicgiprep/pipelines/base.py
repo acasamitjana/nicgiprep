@@ -86,15 +86,15 @@ class Processor(object):
         self.tmp_dir = kwargs.get('tmp_dir', TMP_DIR)
         create_dir(self.tmp_dir)
 
-        self.seg_entities = {'scope': 'preproc', 'extension': 'nii.gz', 'suffix': ['T1wdseg', 'dseg']}
-        self.bf_entities = {'scope': 'preproc', 'extension': 'nii.gz', 'suffix': 'T1w', 'acquisition': [None, 'orig']}
+        self.seg_entities = {'scope': 'nicgiprep-base', 'extension': 'nii.gz', 'suffix': ['T1wdseg', 'dseg']}
+        self.bf_entities = {'scope': 'nicgiprep-base', 'extension': 'nii.gz', 'suffix': 'T1w', 'acquisition': [None, 'orig']}
 
         self.labels_lut = SYNTHSEG_APARC_LUT
         self.labels_dict = SYNTHSEG_APARC_DICT
 
         self.pipeline_is_initialized = False
 
-    def build_path(self, entities, absolute_paths=False, validate=False, strict=True):
+    def build_path(self, entities: dict, absolute_paths: bool=False, validate: bool=False, strict: bool=True) -> str:
         """Construct a relative valid BIDS file path from an entity dictionary. It follows the convention 
         specified in this NicGi-Prep
 
@@ -121,8 +121,13 @@ class Processor(object):
             and ``strict`` is ``False``.
         """
         entities = {k: v for k, v in entities.items() if k in filename_entities}
-        return self.bids_loader.build_path(entities, absolute_paths=absolute_paths, path_patterns=BIDS_PATH_PATTERN,
-                                           strict=strict, validate=validate)
+        scope = entities['scope'] if 'scope' in entities.keys() else 'all'
+        return self.bids_loader.build_path(entities,
+                                           scope=scope,
+                                           absolute_paths=absolute_paths,
+                                           path_patterns=BIDS_PATH_PATTERN,
+                                           strict=strict,
+                                           validate=validate)
 
     def _name(self):
         """Return the human-readable pipeline name used in console banners.
@@ -155,7 +160,7 @@ class Processor(object):
 
         return subjects
 
-    def _get_timepoints(self, subject, uslr=True):
+    def _get_sessions(self, subject, uslr=True):
         """Return the session IDs available for a given subject.
 
         Parameters
