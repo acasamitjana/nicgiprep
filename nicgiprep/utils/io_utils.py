@@ -1,13 +1,9 @@
 from typing import TypedDict, Optional, Union, Any, Sequence
-import pdb
-from datetime import datetime, date
 from os.path import join, exists, basename, dirname
 from os import makedirs, listdir
 import os
-import gc
 import subprocess
 import json
-import shutil
 
 import nibabel as nib
 from skimage.transform import rescale
@@ -16,6 +12,8 @@ import csv
 
 
 class ProcessResult(TypedDict, total=False):
+    """Dictionary for logging the output of pipeline steps."""
+
     exit_code: int
     message: str
     data: Optional[dict]  # optional payload

@@ -5,13 +5,11 @@ Provides base and specialised pipeline classes that wrap PyBIDS layout queries,
 coordinate volumetric resampling, label fusion, and longitudinal volume tracking.
 """
 
-import traceback
-from typing import Optional, Literal
+from typing import Literal
 from os.path import join, dirname, exists
 from joblib import delayed, Parallel
 import itertools
 
-from bids.layout import BIDSLayout
 import torch
 from torch import nn
 from skimage.morphology import ball, binary_dilation
@@ -102,6 +100,26 @@ class LongitudinalProcessor(Processor):
         return "LongitudinalProcessor"
 
     def _get_sessions_file(self, subject: str) -> pd.DataFrame | ProcessResult:
+        """Create a table with all sessions and needed information to process. It contains the following columns:
+            * session_id
+            * orig_t1w: the selected T1w image for the longitudinal pipeline. If there are multiple runs available in
+                        the  rawdata, select one randomly
+            * orig_seg: the supersynth segmentation of the selected T1w image for the longitudinal pipeline.
+            * orig_synthseg: the synthseg segmentation of the selected T1w image for the longitudinal pipeline. It
+                             will be used for rigid registration.
+
+        Parameters
+        ----------
+        subject : str
+            Subject ID
+
+        Returns
+        -------
+        pd.DataFrame | Process results
+            dataframe containing all session to process. It define at least three columns:
+            'session_id', 'orig_t1w' and 'orig_seg'
+
+        """
         sess_fpath = join(
             DIR_PIPELINES[self.pipeline_dir],
             "sub-" + subject,
@@ -116,7 +134,12 @@ class LongitudinalProcessor(Processor):
         ):
             return pd.read_csv(sess_fpath, sep="\t")
 
-        sess_df = {"session_id": [], "orig_t1w": [], "orig_seg": []}
+        sess_df = {
+            "session_id": [],
+            "orig_t1w": [],
+            "orig_seg": [],
+            "orig_synthseg": [],
+        }
         im_ent = {"scope": "nicgiprep-cross", "extension": "nii.gz", "suffix": "T1w"}
         for sess_id in self.bids_loader.get_session(subject=subject):
             im_files = self.bids_loader.get(
@@ -142,7 +165,12 @@ class LongitudinalProcessor(Processor):
             seg_files = self.bids_loader.get(
                 **{"subject": subject, "session": sess_id, **seg_ent}
             )
-            if len(im_files) == 0:
+
+            seg_ent["suffix"] = ["T1wsynthseg"]
+            seg_files_synthseg = self.bids_loader.get(
+                **{"subject": subject, "session": sess_id, **seg_ent}
+            )
+            if len(seg_files) == 0 or len(seg_files_synthseg) == 0:
                 return ProcessResult(
                     exit_code=-1,
                     message="[error] no segmentation files are found for subject: "
@@ -153,10 +181,12 @@ class LongitudinalProcessor(Processor):
                 )
 
             seg_file = seg_files[0]
+            seg_file_synthseg = seg_files_synthseg[0]
 
             sess_df["session_id"] += [sess_id]
             sess_df["orig_t1w"] += [im_file.path]
             sess_df["orig_seg"] += [seg_file.path]
+            sess_df["orig_synthseg"] += [seg_file_synthseg.path]
 
         sess_df = pd.DataFrame(sess_df)
         sess_df.to_csv(sess_fpath, sep="\t", index=False)
@@ -421,7 +451,7 @@ class USLRLinear(LongitudinalProcessor):
         Parameters
         ----------
         sess_df : pd.DataFrame
-            Dataframe with session_id as index and orig_t1w and orig_seg as columns
+            table with session_id as index and orig_t1w and orig_synthseg as columns
 
         Returns
         -------
@@ -433,7 +463,7 @@ class USLRLinear(LongitudinalProcessor):
         centroid_dict = {}
         ok = {}
         for sess_id, sess_files in sess_df.iterrows():
-            seg_filepath = sess_files["orig_seg"]
+            seg_filepath = sess_files["orig_synthseg"]
             centroid_dict[sess_id], ok[sess_id] = compute_centroids_ras(
                 seg_filepath, labels_registration
             )
@@ -449,11 +479,11 @@ class USLRLinear(LongitudinalProcessor):
         Parameters
         ----------
         sess_df : pd.DataFrame
-            Dataframe with session_id as index and orig_t1w and orig_seg as columns
+            Table with session_id as index and orig_t1w and orig_synthseg as columns
         """
         T_cog_d = {}
         for sess_id, sess_files in sess_df.iterrows():
-            seg_filepath = sess_files["orig_seg"]
+            seg_filepath = sess_files["orig_synthseg"]
 
             seg_proxy = nib.load(seg_filepath)
             data = np.array(seg_proxy.dataobj)
@@ -474,7 +504,7 @@ class USLRLinear(LongitudinalProcessor):
         Parameters
         ----------
         sess_df : pd.DataFrame
-            DataFrame with session_id as index and orig_t1w and orig_seg as columns
+            Table with session_id as index and orig_t1w and orig_synthseg as columns
         def_dir : str
             Directory where pairwise ``.npy`` affine files are written.
         force_flag : bool
@@ -523,8 +553,7 @@ class USLRLinear(LongitudinalProcessor):
         subject : str
             Subject ID.
         sess_df: pd.DataFrame
-            DataFrame with session_id as index and orig_t1w and orig_seg as columns, def_dir: str, t_cog_d: dict, **kwargs) -> ProcessResult:
-
+            Table with session_id as index and orig_t1w and orig_synthseg as columns,
         def_dir : str
             Directory containing pairwise ``<ref>_to_<flo>.npy`` files.
 
@@ -581,7 +610,7 @@ class USLRLinear(LongitudinalProcessor):
         subject : str
             Subject ID.
         sess_df : pd.DataFrame
-            DataFrame with session_id as index and orig_t1w and orig_seg as columns
+            Table with session_id as index and orig_t1w and orig_synthseg as columns
 
         Returns
         -------
@@ -593,7 +622,7 @@ class USLRLinear(LongitudinalProcessor):
             aff_file = self._get_data(
                 **{"session": sess_id, "subject": subject, **self.aff_long_ent}
             )
-            seg_file = sess_files["orig_seg"]
+            seg_file = sess_files["orig_synthseg"]
 
             if aff_file is None or seg_file is None:
                 return ProcessResult(
@@ -677,7 +706,7 @@ class USLRLinear(LongitudinalProcessor):
         subject : str
             Subject ID.
         sess_df : pd.DataFrame
-            DataFrame with session_id as index and orig_t1w and orig_seg as columns
+            Table with session_id as index and orig_t1w and orig_synthseg as columns
         """
 
         sss_kwargs = self.template_long_ent.copy()
@@ -745,7 +774,7 @@ class USLRLinear(LongitudinalProcessor):
         subject : str
             Subject ID.
         sess_df : pd.DataFrame
-            DataFrame with session_id as index and orig_t1w and orig_seg as columns
+            Table with session_id as index and orig_t1w and orig_seg as columns
         """
 
         sss_kwargs = self.template_long_ent.copy()
@@ -1503,7 +1532,7 @@ class USLRDeformable(LongitudinalProcessor):
         session_list: list[str],
         def_dir: str,
         force_flag: bool = False,
-    ) -> None:
+    ) -> ProcessResult | None:
         """Register all pairs of timepoints with SynthMorph and save the SVFs.
 
         Parameters
@@ -1519,7 +1548,7 @@ class USLRDeformable(LongitudinalProcessor):
             ``False``.
         """
         svf_v2r = np.load(
-            self._get_data(**{"subject": subject, **self.svf_v2r_ent}).path
+            self._get_data(**{"subject": subject, **self.svf_v2r_ent})[0].path
         )
         for sess_ref, sess_flo in itertools.permutations(session_list, 2):
             output_filepath = join(
@@ -1539,7 +1568,7 @@ class USLRDeformable(LongitudinalProcessor):
             if imref_file is None or imflo_file is None:
                 continue
 
-            fw_svf = synthmorph_register(imref_file, imflo_file)
+            fw_svf = synthmorph_register(imref_file[0], imflo_file[0])
             if fw_svf is None:
                 return ProcessResult(
                     exit_code=-1, message="[error] deformable registration has failed."
@@ -1601,7 +1630,7 @@ class USLRDeformable(LongitudinalProcessor):
         subject : str
             Subject ID.
         sess_df : pd.DataFrame
-            DataFrame with session_id as index and orig_t1w and orig_seg as columns
+            Table with session_id as index and orig_t1w and orig_seg as columns
         """
         sss_kwargs = self.template_long_ent.copy()
         sss_kwargs["subject"] = "subject"
@@ -1624,13 +1653,17 @@ class USLRDeformable(LongitudinalProcessor):
         seg_filename = self.build_path(
             {"suffix": "T1wdseg", "subject": subject, **self.template_long_ent}
         )
-
+        synthseg_filename = self.build_path(
+            {"suffix": "T1wsynthseg", "subject": subject, **self.template_long_ent}
+        )
         # compute template: image, mask, seg
         image_list = []
         seg_list = []
+        synthseg_list = []
         for sess_id, sess_files in sess_df.iterrows():
             im_file = sess_files["orig_t1w"]
             seg_file = sess_files["orig_seg"]
+            synthseg_file = sess_files["orig_synthseg"]
             aff_file = self._get_data(
                 **{"subject": subject, "session": sess_id, **self.aff_long_ent}
             )
@@ -1646,6 +1679,7 @@ class USLRDeformable(LongitudinalProcessor):
 
             im_proxy = nib.load(im_file.path)
             seg_proxy = nib.load(seg_file.path)
+            synthseg_proxy = nib.load(synthseg_file.path)
             aff_arr = np.load(aff_file.path)
             svf_proxy = nib.load(svf_file.path)
             flow_arr = integrate_svf(
@@ -1663,6 +1697,7 @@ class USLRDeformable(LongitudinalProcessor):
             im_proxy = vol_resample_fast(sss_proxy, im_proxy, proxyflow=flow_proxy)
             im_proxy.uncache()
 
+            # Segmentation
             seg_arr = np.array(seg_proxy.dataobj)
             onehot_arr = one_hot_encoding(seg_arr, categories=self.labels_lut).astype(
                 "float"
@@ -1675,8 +1710,22 @@ class USLRDeformable(LongitudinalProcessor):
             )
             onehot_proxy.uncache()
 
+            # Synthseg segmentation -- for utils (registration to MNI).
+            synthseg_arr = np.array(synthseg_proxy.dataobj)
+            synthonehot_arr = one_hot_encoding(
+                synthseg_arr, categories=self.synthseg_lut
+            ).astype("float")
+            synthonehot_proxy = nib.Nifti1Image(
+                synthonehot_arr, np.linalg.inv(aff_arr) @ synthseg_proxy.affine
+            )
+            synthonehot_proxy = vol_resample_fast(
+                sss_proxy, synthonehot_proxy, proxyflow=flow_proxy
+            )
+            synthonehot_proxy.uncache()
+
             image_list.append(im_proxy)
             seg_list.append(onehot_proxy)
+            synthseg_list.append(synthonehot_proxy)
 
         # save image (median and std), mask (and etiv) and seg.
         image_list_arr = np.stack(
@@ -1693,6 +1742,18 @@ class USLRDeformable(LongitudinalProcessor):
         seg_template_arr = np.argmax(seg_template_arr, axis=-1)
         seg_template_arr = self._undo_one_hot(seg_template_arr)
 
+        synthseg_template_arr = np.zeros(
+            im_template_arr.shape + (len(self.labels_lut),)
+        )
+        for seg_proxy in synthseg_list:
+            synthseg_template_arr += np.array(seg_proxy.dataobj)
+
+        del synthseg_list
+        synthseg_template_arr = np.argmax(synthseg_template_arr, axis=-1)
+        synthseg_template_arr = self._undo_one_hot(
+            synthseg_template_arr, lut=self.synthseg_lut
+        )
+
         save_volume(
             im_template_arr,
             sss_proxy.affine,
@@ -1702,6 +1763,11 @@ class USLRDeformable(LongitudinalProcessor):
             seg_template_arr,
             sss_proxy.affine,
             join(DIR_PIPELINES[self.pipeline_dir], seg_filename),
+        )
+        save_volume(
+            synthseg_template_arr,
+            sss_proxy.affine,
+            join(DIR_PIPELINES[self.pipeline_dir], synthseg_filename),
         )
 
     def _compute_mean_trajectories(
@@ -1883,6 +1949,12 @@ class USLRDeformable(LongitudinalProcessor):
 
 
 class LongitudinalRegistration(LongitudinalProcessor):
+    """Concatenation of linear and nonlinear longitudinal registration via BCH-approximated USLR.
+
+    Estimates per-timepoint deformation to the latent template by solving a spanning-tree problem over
+    pairwise deformation fields using L1 or L2 regression on a control-point grid.
+    It also computes the nonlinear template and the subject registration to MNI.
+    """
 
     def __init__(self, bids_loader, subject_list=None, **kwargs):
         """
@@ -1923,7 +1995,7 @@ class LongitudinalRegistration(LongitudinalProcessor):
         subject : str
             Subject ID.
         sess_df : pd.DataFrame
-            DataFrame with session_id as index and orig_t1w and orig_seg as columns
+            Table with session_id as index and orig_t1w and orig_seg and orig_synthseg as columns
         """
         mni_ent = {"subject": subject, "space": "MNI"}
         aff_fname = self.build_path(
@@ -1940,7 +2012,7 @@ class LongitudinalRegistration(LongitudinalProcessor):
             **{"suffix": "T1w", "subject": subject, **self.template_long_ent}
         )
         template_seg = self._get_data(
-            **{"suffix": "T1wdseg", "subject": subject, **self.template_long_ent}
+            **{"suffix": "T1wsynthseg", "subject": subject, **self.template_long_ent}
         )
         if template_seg is None or template_im is None:
             return ProcessResult(
@@ -2007,7 +2079,18 @@ class LongitudinalRegistration(LongitudinalProcessor):
     def process_subject(
         self, subject: str, force_flag: bool = False, **kwargs
     ) -> ProcessResult:
+        """Run the full linear+nonlinear USLR pipeline for one subject.
 
+        Orchestrates: linear, nonlinear and subject MNI registration.
+
+        Parameters
+        ----------
+        subject : str
+            Subject ID.
+        force_flag : bool, optional
+            If ``True``, rerun all steps. Default is ``False``.
+        **kwargs
+        """
         # build sessions file with the filename used for each session (T1w)
         sess_df = self._get_sessions_file(subject)
         if not isinstance(sess_df, pd.DataFrame):

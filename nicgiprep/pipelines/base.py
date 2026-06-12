@@ -13,7 +13,7 @@ from bids.layout import BIDSLayout, BIDSLayoutIndexer, BIDSFile
 
 from setup import *
 from nicgiprep.utils.log_utils import LogBIDSLoader
-from nicgiprep.utils.label_utils import SUPERSYNTH_LUT
+from nicgiprep.utils.label_utils import SUPERSYNTH_LUT, SYNTHSEG_APARC_LUT
 from nicgiprep.utils.io_utils import create_dir
 
 
@@ -99,6 +99,7 @@ class Processor(object):
             "suffix": ["T1wdseg", "dseg"],
         }
         self.labels_lut = SUPERSYNTH_LUT
+        self.synthseg_lut = SYNTHSEG_APARC_LUT
 
         self.pipeline_is_initialized = False
 
@@ -361,7 +362,9 @@ class Processor(object):
 
         return part_df
 
-    def _undo_one_hot(self, y, dtype="float32"):
+    def _undo_one_hot(
+        self, y: np.ndarray, lut: Optional[dict] = None, dtype: str = "float32"
+    ) -> np.ndarray:
         """Convert a one-hot channel index array back to integer label values.
 
         Parameters
@@ -377,8 +380,11 @@ class Processor(object):
         np.ndarray
             Integer label map with the same shape as ``y``.
         """
+        if lut is None:
+            lut = self.labels_lut
+
         y_true = np.zeros_like(y)
-        for ul, it_ul in self.labels_lut.items():
+        for ul, it_ul in lut.items():
             y_true[y == it_ul] = ul
 
         return y_true.astype(dtype)

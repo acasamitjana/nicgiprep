@@ -1,7 +1,5 @@
-from typing import Union, Literal, Optional
+from typing import Union, Literal
 import itertools
-import pdb
-import copy
 
 import numpy as np
 import torch
@@ -73,6 +71,13 @@ class InstanceRigidModelLOG(nn.Module):
 
     @property
     def matrix(self) -> np.ndarray:
+        """Compute 4×4 rigid transformation matrices from log-space parameters for all sessions available (N)
+
+        Returns
+        -------
+        np.ndarray
+            Stacked transformation matrices, shape ``(4, 4, N)``.
+        """
         return self._compute_matrix().cpu().numpy()
 
     def _compute_matrix(self) -> torch.Tensor:
