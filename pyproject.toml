@@ -1,3 +1,56 @@
+[build-system]
+requires = ["setuptools>=82.0.1"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nicgiprep"  # Or your chosen name (lowercase, no spaces)
+version = "0.1.0"
+authors = [
+    {name="Adrià Casamitjana", email="adria.casamitjana@udg.edu"},
+    {name="Agustín Cartaya Lathulerie", email="agustin.cartaya@udg.edu"},
+    {name="Clara Lisazo", email="clara.lisazo@udg.edu"},
+    {name="Rachika E. Hamadache", email="rachika.hamadache@udg.edu"},
+
+]
+description = "Neuroimaging preprocessing pipeline for corss-sectional, multimodal and longituindal analyses."
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE*"]
+requires-python = ">=3.10"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Medical Science applications",
+
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Medical Science Apps.",
+]
+# List your core dependencies here instead of a separate requirements.txt
+dependencies = [
+    "numpy>=2.2.6",
+    "scipy>=1.15.3",
+    "matplotlib>=3.4.0", # For visualizing dwell positions
+    "seaborn>=0.13.2",
+    "scikit-image>=0.25.2",
+    "scikit-learn>=1.7.2",
+    "pillow>=12.1.1"
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "black"]
+
+[project.urls]
+"Homepage" = "https://github.com/acasamitjana/nicgiprep"
+"Bug Tracker" = "https://github.com/acasamitjana/nicgiprep/issues"
+
+[tool.setuptools.packages.find]
+include = ["nicgiprep"]
+
+[project.scripts]
+nicgiprep-cross = "nicgiprep.scripts.cross_sectional_pipe:main"
+nicgiprep-long = "nicgiprep.scripts.longitudinal_pipe:main"
+nicgiprep-mm = "nicgiprep.scripts.multimodal_pipe:main"
+
 [tool.setuptools.package-data]
 "nicgiprep.data.labels_classes_priors" = ["*.npy"]
 "nicgiprep.data.data_tutorial" = ["*"]
