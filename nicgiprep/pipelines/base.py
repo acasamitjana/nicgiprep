@@ -155,7 +155,7 @@ class Processor(object):
 
         return subjects
 
-    def _get_timepoints(self, subject, uslr=True):
+    def _get_sessions(self, subject, uslr=True):
         """Return the session IDs available for a given subject.
 
         Parameters
