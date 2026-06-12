@@ -194,8 +194,6 @@ def test_save_and_reload_nifti():
 # ----------------------------------------
 # tests for get_dims
 # ----------------------------------------
-
-
 def test_get_dims_without_channels():
     """Test spatial dims detection without channel axis."""
     shape = (*IMG_SHAPE,)
