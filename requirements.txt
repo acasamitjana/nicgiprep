@@ -97,7 +97,6 @@ SQLAlchemy==2.0.29
 stack-data==0.6.3
 statannotations==0.7.1
 statsmodels==0.14.2
-surfa==0.6.0
 sympy==1.12
 tensorboard==2.18.0
 tensorboard-data-server==0.7.2
