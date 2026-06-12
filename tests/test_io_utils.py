@@ -162,7 +162,7 @@ def test_save_and_reload_npz():
 
     path = f"{TEST_OUTPUT_DIR}/save_test.npz"
 
-    save_volume(vol, None, None, str(path))
+    save_volume(vol, None, str(path))
 
     loaded = load_volume(str(path))
 
@@ -180,7 +180,7 @@ def test_save_and_reload_nifti():
 
     path = f"{TEST_OUTPUT_DIR}/save_test.nii.gz"
 
-    save_volume(vol, np.eye(4), None, str(path))
+    save_volume(vol, np.eye(4), str(path))
 
     loaded = load_volume(str(path))
 
