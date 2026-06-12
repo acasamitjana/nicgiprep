@@ -1,12 +1,9 @@
-import pdb
-from datetime import datetime, date
+from typing import TypedDict, Optional, Union, Any, Sequence
 from os.path import join, exists, basename, dirname
 from os import makedirs, listdir
 import os
-import gc
 import subprocess
 import json
-import shutil
 
 import nibabel as nib
 from skimage.transform import rescale
@@ -14,7 +11,15 @@ import numpy as np
 import csv
 
 
-def get_bids_entities(fname):
+class ProcessResult(TypedDict, total=False):
+    """Dictionary for logging the output of pipeline steps."""
+
+    exit_code: int
+    message: str
+    data: Optional[dict]  # optional payload
+
+
+def get_bids_entities(fname: str) -> dict:
     """Parse BIDS entities from a filename into a dictionary.
 
     Parameters
@@ -52,7 +57,7 @@ def get_bids_entities(fname):
     return edict
 
 
-def save_nii(im, v2r, filepath):
+def save_nii(im: np.ndarray, v2r: np.ndarray, filepath: str) -> None:
     """Save a NumPy array as a NIfTI file, creating parent directories as needed.
 
     Boolean arrays are cast to ``uint8`` and ``int64`` arrays to ``float``
@@ -77,7 +82,7 @@ def save_nii(im, v2r, filepath):
     nib.save(img, filepath)
 
 
-def check_nan(v):
+def check_nan(v: Union[str, float]) -> bool:
     """Return whether a value represents a missing / NaN observation.
 
     Parameters
@@ -97,7 +102,7 @@ def check_nan(v):
         return False
 
 
-def create_dir(path, subdirs=None):
+def create_dir(path: str, subdirs: Optional[Union[str, list[str]]] = None) -> None:
     """Create a directory (and optional sub-directories) if they do not exist.
 
     Parameters
@@ -120,7 +125,7 @@ def create_dir(path, subdirs=None):
                 makedirs(join(path, subdir))
 
 
-def remove_dir(path):
+def remove_dir(path: str) -> None:
     """Recursively remove a directory and all its contents.
 
     Parameters
@@ -131,7 +136,7 @@ def remove_dir(path):
     subprocess.call(["rm", "-rf", path])
 
 
-def create_derivative_dir(path, description):
+def create_derivative_dir(path: str, description: str) -> None:
     """Create a BIDS derivative directory with a ``dataset_description.json``.
 
     The JSON file is only written if it does not already exist.
@@ -159,7 +164,12 @@ def create_derivative_dir(path, description):
             outfile.write(json_object)
 
 
-def write_json_derivatives(pixdim, volshape, filename, extra_kwargs={}):
+def write_json_derivatives(
+    pixdim: Sequence[float],
+    volshape: Sequence[int],
+    filename: str,
+    extra_kwargs: dict = {},
+) -> None:
     """Write a BIDS-style JSON sidecar with image resolution and shape.
 
     Parameters
@@ -189,7 +199,7 @@ def write_json_derivatives(pixdim, volshape, filename, extra_kwargs={}):
         outfile.write(json_object)
 
 
-def create_results_dir(results_dir, subdirs=None):
+def create_results_dir(results_dir: str, subdirs: Optional[list[str]] = None) -> None:
     """Create a results directory with standard sub-directories.
 
     Parameters
@@ -211,7 +221,7 @@ def create_results_dir(results_dir, subdirs=None):
                 makedirs(join(results_dir, sd))
 
 
-def mri_convert_nifti_directory(directory, extension=".nii.gz"):
+def mri_convert_nifti_directory(directory: str, extension: str = ".nii.gz") -> None:
     """Convert all NIfTI / MGZ files in a directory to a target format via ``mri_convert``.
 
     Files already in the target ``extension`` are skipped.
@@ -242,7 +252,7 @@ def mri_convert_nifti_directory(directory, extension=".nii.gz"):
         subprocess.call(["mri_convert", join(directory, f), join(directory, new_f)])
 
 
-def read_lta(file):
+def read_lta(file: str) -> np.ndarray:
     """Read a FreeSurfer LTA (linear transform array) file into a 4×4 matrix.
 
     Parameters
@@ -265,7 +275,12 @@ def read_lta(file):
     return lta
 
 
-def read_tsv(path, k=None, delimiter="\t", codec_read=False):
+def read_tsv(
+    path: str,
+    k: Optional[Union[str, list[str]]] = None,
+    delimiter: str = "\t",
+    codec_read: bool = False,
+) -> dict:
     """Read a delimited file into a dictionary keyed by one or more columns.
 
     Parameters
@@ -299,7 +314,7 @@ def read_tsv(path, k=None, delimiter="\t", codec_read=False):
     return t
 
 
-def write_affine_matrix(path, affine_matrix):
+def write_affine_matrix(path: str, affine_matrix: np.ndarray) -> None:
     """Write a 4×4 affine matrix to a space-delimited text file.
 
     Parameters
@@ -315,7 +330,9 @@ def write_affine_matrix(path, affine_matrix):
             csvwriter.writerow(affine_matrix[it_row])
 
 
-def read_affine_matrix(path, full=False):
+def read_affine_matrix(
+    path: str, full: bool = False
+) -> Union[np.ndarray, tuple[np.ndarray, np.ndarray]]:
     """Read an affine matrix from a space-delimited text file.
 
     Parameters
@@ -359,7 +376,7 @@ def read_affine_matrix(path, full=False):
         return rotation_matrix, translation_vector
 
 
-def load_array_if_path(var, load_as_numpy=True):
+def load_array_if_path(var: Any, load_as_numpy: bool = True) -> Any:
     """Load a NumPy array from a file path, or pass through the value unchanged.
 
     Parameters
@@ -381,7 +398,7 @@ def load_array_if_path(var, load_as_numpy=True):
     return var
 
 
-def get_dims(shape, max_channels=10):
+def get_dims(shape: Sequence[int], max_channels: int = 10) -> tuple[int, int]:
     """Infer the number of spatial dimensions and channels from an array shape.
 
     If the last dimension is ≤ ``max_channels`` it is interpreted as a channel
@@ -420,7 +437,7 @@ def get_dims(shape, max_channels=10):
     return n_dims, n_channels
 
 
-def get_ras_axes(aff, n_dims=3):
+def get_ras_axes(aff: np.ndarray, n_dims: int = 3) -> np.ndarray:
     """Find which voxel axis corresponds to each RAS axis from an affine matrix.
 
     Parameters
@@ -449,8 +466,13 @@ def get_ras_axes(aff, n_dims=3):
 
 
 def align_volume_to_ref(
-    volume, aff, aff_ref=None, return_aff=False, n_dims=None, return_copy=True
-):
+    volume: np.ndarray,
+    aff: np.ndarray,
+    aff_ref: Optional[np.ndarray] = None,
+    return_aff: bool = False,
+    n_dims: Optional[int] = None,
+    return_copy: bool = True,
+) -> Union[np.ndarray, tuple[np.ndarray, np.ndarray]]:
     """Align a volume to the axis orientation and flip direction of a reference affine.
 
     Swaps and flips axes of ``volume`` so that its orientation matches
@@ -522,7 +544,12 @@ def align_volume_to_ref(
         return new_volume
 
 
-def reformat_to_list(var, length=None, load_as_numpy=False, dtype=None):
+def reformat_to_list(
+    var: Union[str, int, float, bool, list, tuple, np.ndarray, None],
+    length: Optional[int] = None,
+    load_as_numpy: bool = False,
+    dtype: Optional[str] = None,
+) -> Optional[list]:
     """Reformat a scalar, tuple, array, or string into a typed list of given length.
 
     Parameters
@@ -555,7 +582,9 @@ def reformat_to_list(var, length=None, load_as_numpy=False, dtype=None):
     if var is None:
         return None
     var = load_array_if_path(var, load_as_numpy=load_as_numpy)
-    if isinstance(var, (int, float, np.integer, np.floating)):
+    if isinstance(
+        var, (int, float, np.int, np.int32, np.int64, np.float, np.float32, np.float64)
+    ):
         var = [var]
     elif isinstance(var, tuple):
         var = list(var)
@@ -599,7 +628,13 @@ def reformat_to_list(var, length=None, load_as_numpy=False, dtype=None):
     return var
 
 
-def load_volume(path_volume, im_only=True, squeeze=True, dtype=None, aff_ref=None):
+def load_volume(
+    path_volume: str,
+    im_only: bool = True,
+    squeeze: bool = True,
+    dtype: Optional[str] = None,
+    aff_ref: Optional[np.ndarray] = None,
+) -> Union[np.ndarray, tuple[np.ndarray, np.ndarray, Any]]:
     """Load a medical image volume from disk.
 
     Supported formats: ``.nii``, ``.nii.gz``, ``.mgz``, ``.npz``.
@@ -668,7 +703,15 @@ def load_volume(path_volume, im_only=True, squeeze=True, dtype=None, aff_ref=Non
         return volume, aff, header
 
 
-def save_volume(volume, aff, header, path, res=None, dtype=None, n_dims=3):
+def save_volume(
+    volume: np.ndarray,
+    aff: np.ndarray | str | None,
+    path: str,
+    header: Optional[nib.Nifti1Header] = None,
+    res: Optional[float | int] = None,
+    dtype: Optional[str] = None,
+    n_dims: int = 3,
+):
     """Save a volume array to disk as a NIfTI or NPZ file.
 
     Parameters
@@ -718,7 +761,12 @@ def save_volume(volume, aff, header, path, res=None, dtype=None, n_dims=3):
         nib.save(nifty, path)
 
 
-def get_volume_info(path_volume, return_volume=False, aff_ref=None, max_channels=10):
+def get_volume_info(
+    path_volume: str,
+    return_volume: bool = False,
+    aff_ref: Optional[np.ndarray] = None,
+    max_channels: int = 10,
+) -> tuple:
     """Gather metadata about a volume without necessarily returning the data.
 
     Parameters
@@ -786,7 +834,7 @@ def get_volume_info(path_volume, return_volume=False, aff_ref=None, max_channels
         return im_shape, aff, n_dims, n_channels, header, data_res
 
 
-def get_run(file):
+def get_run(file: str) -> str:
     """Extract the BIDS ``run`` index from a filename.
 
     Parameters
@@ -806,7 +854,9 @@ def get_run(file):
     return ""
 
 
-def load_chunk(ps, chunk, ps_id):
+def load_chunk(
+    ps: nib.Nifti1Image, chunk: list[list[int]], ps_id: Any
+) -> tuple[np.ndarray, Any]:
     """Load a spatial sub-volume (chunk) from a NIfTI proxy and add a batch axis.
 
     Parameters
@@ -837,7 +887,9 @@ def load_chunk(ps, chunk, ps_id):
     )
 
 
-def load_chunk_rescale(ps, chunk, ps_id, factor):
+def load_chunk_rescale(
+    ps: nib.Nifti1Image, chunk: list[list[int]], ps_id: Any, factor: float
+) -> tuple[np.ndarray, Any]:
     """Load and spatially rescale a NIfTI volume, then return a chunk.
 
     Parameters
@@ -872,7 +924,7 @@ def load_chunk_rescale(ps, chunk, ps_id, factor):
     )
 
 
-def get_age(age):
+def get_age(age: Union[str, float]) -> Optional[float]:
     """Parse an age value to float, returning ``None`` for missing values.
 
     Parameters
@@ -889,13 +941,13 @@ def get_age(age):
         age = None
     try:
         age = float(age)
-    except:
+    except Exception:
         age = None
 
     return age
 
 
-def get_dx_bl(subject):
+def get_dx_bl(subject: Any) -> int:
     """Extract the baseline diagnosis code from a subject object.
 
     Looks up ``'dx'`` then ``'diagnosis'`` in the subject dictionary, and
@@ -929,7 +981,7 @@ def get_dx_bl(subject):
     return dx
 
 
-def get_dx(dx):
+def get_dx(dx: str) -> int:
     """Map a diagnosis string to an integer code.
 
     Parameters
@@ -963,7 +1015,7 @@ def get_dx(dx):
     return dx
 
 
-def get_dx_long(dx_list):
+def get_dx_long(dx_list: list[str]) -> int:
     """Derive a longitudinal diagnosis code from a list of cross-sectional diagnoses.
 
     Combines baseline and last diagnosis to classify trajectories such as
@@ -1060,7 +1112,7 @@ DX_DICT = {
 }
 
 
-def read_FS_volumes(file, labs=None):
+def read_FS_volumes(file: str, labs: Optional[dict] = None) -> tuple[dict, float]:
     """Parse regional volumes and eTIV from a FreeSurfer stats file.
 
     Parameters
@@ -1098,7 +1150,7 @@ def read_FS_volumes(file, labs=None):
     return fs_vols, etiv
 
 
-def get_float_vol(v):
+def get_float_vol(v: Any) -> float:
     """Safely cast a value to float, returning ``-4`` on failure.
 
     Parameters
@@ -1113,5 +1165,5 @@ def get_float_vol(v):
     """
     try:
         return float(v)
-    except:
+    except Exception:
         return -4

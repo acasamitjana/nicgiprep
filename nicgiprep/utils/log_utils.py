@@ -1,4 +1,4 @@
-
+from typing import Optional
 
 
 class LogBIDSLoader(object):
@@ -10,7 +10,7 @@ class LogBIDSLoader(object):
         Default expected number of files per query.
     """
 
-    def __init__(self, num_files):
+    def __init__(self, num_files: int) -> None:
         """
         Parameters
         ----------
@@ -19,8 +19,9 @@ class LogBIDSLoader(object):
         """
         self.num_files = num_files
 
-
-    def check_length(self, file_list, curr_len=None):
+    def check_length(
+        self, file_list: list[str], curr_len: Optional[int] = None
+    ) -> dict:
         """Check that the number of found files matches the expected count.
 
         Parameters
@@ -43,13 +44,19 @@ class LogBIDSLoader(object):
         curr_len = self.num_files if curr_len is None else curr_len
 
         if len(file_list) != curr_len:
-            return {'exit_code': -1, 'file': None,
-                    'log': 'Files found: ' + str(len(file_list)) + '; files expected: ' + str(curr_len) +
-                           '. Please refine the search.\n' }
+            return {
+                "exit_code": -1,
+                "file": None,
+                "log": "Files found: "
+                + str(len(file_list))
+                + "; files expected: "
+                + str(curr_len)
+                + ". Please refine the search.\n",
+            }
 
         else:
-            d = {'exit_code': 0, 'log': ''}
+            d = {"exit_code": 0, "log": ""}
             if curr_len == 1:
-                return {**d, 'file': file_list[0]}
+                return {**d, "file": file_list[0]}
             else:
-                return {**d, 'file': file_list}
+                return {**d, "file": file_list}

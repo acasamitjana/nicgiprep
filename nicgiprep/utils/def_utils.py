@@ -1,17 +1,18 @@
-import pdb
+from typing import Optional, Union, Sequence
 import nibabel as nib
-import torch
-import tensorflow as tf
 
 import numpy as np
 import surfa as sf
+from nibabel import Nifti1Image
 from scipy.optimize import linprog
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 
-def fast_3D_interp_torch(X, II, JJ, KK, mode):
+def fast_3D_interp_torch(
+    X: torch.Tensor, II: torch.Tensor, JJ: torch.Tensor, KK: torch.Tensor, mode: str
+) -> torch.Tensor:
     """Interpolate a 3D scalar volume at arbitrary coordinates using PyTorch.
 
     Parameters
@@ -109,7 +110,13 @@ def fast_3D_interp_torch(X, II, JJ, KK, mode):
     return Y
 
 
-def fast_3D_interp_field_torch(X, II, JJ, KK, mode="linear"):
+def fast_3D_interp_field_torch(
+    X: torch.Tensor,
+    II: torch.Tensor,
+    JJ: torch.Tensor,
+    KK: torch.Tensor,
+    mode: str = "linear",
+) -> torch.Tensor:
     """Interpolate a 3D multi-channel field at arbitrary coordinates using PyTorch.
 
     Parameters
@@ -137,7 +144,6 @@ def fast_3D_interp_field_torch(X, II, JJ, KK, mode="linear"):
         If ``mode`` is not ``'nearest'`` or ``'linear'``.
     """
     num_channels = X.shape[-1]
-
     if mode == "nearest":
         IIr = torch.round(II).long()
         JJr = torch.round(JJ).long()
@@ -146,13 +152,10 @@ def fast_3D_interp_field_torch(X, II, JJ, KK, mode="linear"):
         IIr[IIr < 0] = 0
         JJr[JJr < 0] = 0
         KKr[KKr < 0] = 0
-
         IIr[IIr > (X.shape[0] - 1)] = X.shape[0] - 1
         JJr[JJr > (X.shape[1] - 1)] = X.shape[1] - 1
         KKr[KKr > (X.shape[2] - 1)] = X.shape[2] - 1
-
-        Y = torch.zeros((*II.shape, num_channels), device=X.device)
-
+        Y = torch.zeros([*II.shape, num_channels], device=X.device)
         for channel in range(num_channels):
             Xc = X[..., channel]
             Y[..., channel] = Xc[IIr, JJr, KKr]
@@ -227,8 +230,13 @@ def fast_3D_interp_field_torch(X, II, JJ, KK, mode="linear"):
 
 
 def vol_resample_fast(
-    ref_proxy, flo_proxy, proxyflow=None, mode="linear", device="cpu", return_np=False
-):
+    ref_proxy: Nifti1Image,
+    flo_proxy: Nifti1Image,
+    proxyflow: Optional[Nifti1Image] = None,
+    mode: str = "linear",
+    device: str = "cpu",
+    return_np: bool = False,
+) -> Union[np.ndarray, Nifti1Image]:
     """Resample a floating image into the space of a reference image using PyTorch.
 
     Optionally applies a dense displacement field before resampling.
@@ -326,7 +334,8 @@ def vol_resample_fast(
         return nib.Nifti1Image(reg_image, ref_proxy.affine)
 
 
-def compute_gradient(flow):
+
+def compute_gradient(flow: np.ndarray) -> np.ndarray:
     """Compute the spatial gradient of a 3D vector field using central differences.
 
     Boundary voxels are left at zero (no padding is applied).
@@ -358,7 +367,8 @@ def compute_gradient(flow):
     return gradient_map
 
 
-def compute_jacobian(flow):
+
+def compute_jacobian(flow: np.ndarray) -> np.ndarray:
     """Compute the Jacobian determinant of a displacement field.
 
     Parameters
@@ -379,7 +389,8 @@ def compute_jacobian(flow):
     return np.linalg.det(gradient_map)
 
 
-def lie_bracket(v, w):
+
+def lie_bracket(v: np.ndarray, w: np.ndarray) -> np.ndarray:
     """Compute the Lie bracket (commutator) of two vector fields.
 
     The Lie bracket is defined as ``[v, w] = Jw * v - Jv * w``, where
@@ -404,10 +415,13 @@ def lie_bracket(v, w):
     # vw = Jw[..., 0, :]*v[..., 0:1] + Jw[..., 1, :]*v[..., 1:2] + Jw[..., 2, :]*v[..., 2:3] - Jv[..., 0, :]*w[..., 0:1] - Jv[..., 1, :]*w[..., 1:2] - Jv[..., 2, :]*w[..., 2:3]#
     # vw = Jv[..., 0, 0]*w[..., 0] + Jv[..., 1, 1]*w[..., 1] + Jv[..., 2,1]*w[..., 2] - Jw[..., 0,0]*v[..., 0] - Jw[..., 1,1]*v[..., 1] - Jw[..., 2,2]*v[..., 2]#
     # vw = Jw[..., 0]*v[..., 0:1] + Jw[..., 1]*v[..., 1:2] + Jw[..., 2]*v[..., 2:3] - Jv[..., 0]*w[..., 0:1] - Jv[..., 1]*w[..., 1:2] - Jv[..., 2]*w[..., 2:3]#
-    return vw  #
+    return vw   #
 
 
-def pole_ladder(long_svf, mni_svf, steps=80):
+
+def pole_ladder(
+    long_svf: np.ndarray, mni_svf: np.ndarray, steps: int = 80
+) -> np.ndarray:
     """Parallel-transport a longitudinal SVF along an inter-subject SVF using the pole-ladder scheme.
 
     Approximates parallel transport on the diffeomorphism group by
@@ -441,7 +455,8 @@ def pole_ladder(long_svf, mni_svf, steps=80):
     return u
 
 
-def svf_to_vox(proxysvf):
+
+def svf_to_vox(proxysvf: Nifti1Image) -> Nifti1Image:
     """Convert an SVF from RAS to voxel displacement units.
 
     Parameters
@@ -465,7 +480,7 @@ def svf_to_vox(proxysvf):
     return nib.Nifti1Image(np.transpose(svf_vox, axes=(1, 2, 3, 0)), proxysvf.affine)
 
 
-def svf_to_ras(proxysvf):
+def svf_to_ras(proxysvf: Nifti1Image) -> Nifti1Image:
     """Convert an SVF from voxel to RAS displacement units.
 
     Equivalent to multiplying the voxel SVF by the voxel-to-RAS matrix with
@@ -507,7 +522,9 @@ def svf_to_ras(proxysvf):
     return nib.Nifti1Image(np.transpose(svf_ras, axes=(1, 2, 3, 0)), proxysvf.affine)
 
 
-def network_space(im, shape, center=None):
+def network_space(
+    im: sf.Volume, shape: Sequence[int], center: Optional[sf.Volume] = None
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Construct transform from network space to the voxel space of an image.
 
     Constructs a coordinate transform from the space the network will operate
@@ -550,7 +567,7 @@ def network_space(im, shape, center=None):
     )
 
 
-def getM(ref, mov, use_L1=False):
+def getM(ref: np.ndarray, mov: np.ndarray, use_L1: bool = False) -> np.ndarray:
     """Estimate a 4×4 affine matrix from point correspondences.
 
     Solves the least-squares problem ``mov ≈ M * ref`` for a 12-DOF affine
@@ -586,12 +603,17 @@ def getM(ref, mov, use_L1=False):
     )
 
     b = np.concatenate(
+        
         [np.transpose(mov[0, :]), np.transpose(mov[1, :]), np.transpose(mov[2, :])],
+       
         axis=0,
+    ,
     )
 
     x = np.matmul(
+        
         np.linalg.inv(np.matmul(np.transpose(A), A)), np.matmul(np.transpose(A), b)
+    
     )
 
     # If L1 minimization: we use L2 solution as initialization and miminize L1
@@ -625,7 +647,9 @@ def getM(ref, mov, use_L1=False):
     return M
 
 
-def create_empty_template(image_list):
+def create_empty_template(
+    image_list: list[str | Nifti1Image], margin_bb: int = 5
+) -> tuple[np.ndarray, np.ndarray, tuple[int]]:
     """Build a bounding-box template that encompasses a list of brain images.
 
     Computes the average RAS bounding box across all images (with a 5 mm
@@ -635,10 +659,12 @@ def create_empty_template(image_list):
     ----------
     image_list : list of str or nibabel.Nifti1Image
         Images whose non-zero voxel extents define the bounding box.
+    margin_bb : int
+        Margin from each axis from the mask
 
     Returns
     -------
-    rasMosaic : np.ndarray
+    ras_mosaic : np.ndarray
         RAS coordinates of all template voxels, shape ``(4, N_vox)``.
     template_vox2ras0 : np.ndarray
         Voxel-to-RAS affine of the template, shape ``(4, 4)``.
@@ -647,7 +673,6 @@ def create_empty_template(image_list):
     """
     boundaries_min = np.zeros((len(image_list), 3))
     boundaries_max = np.zeros((len(image_list), 3))
-    margin_bb = 5
     for it_lil, lil in enumerate(image_list):
 
         if isinstance(lil, nib.nifti1.Nifti1Image):
@@ -718,7 +743,7 @@ def create_empty_template(image_list):
     RR = II + minR
     AA = JJ + minA
     SS = KK + minS
-    rasMosaic = np.concatenate(
+    ras_mosaic = np.concatenate(
         (
             RR.reshape(-1, 1),
             AA.reshape(-1, 1),
@@ -728,7 +753,7 @@ def create_empty_template(image_list):
         axis=1,
     ).T
 
-    return rasMosaic, template_vox2ras0, tuple(template_size)
+    return ras_mosaic, template_vox2ras0, tuple(template_size)
 
 
 class VecInt(nn.Module):
@@ -750,7 +775,9 @@ class VecInt(nn.Module):
         Spatial transformer used to compose intermediate deformations.
     """
 
-    def __init__(self, field_shape, int_steps=7, **kwargs):
+    def __init__(
+        self, field_shape: tuple[int, ...], int_steps: int = 7, **kwargs
+    ) -> None:
         """
         Parameters
         ----------
@@ -764,7 +791,7 @@ class VecInt(nn.Module):
         self.scale = 1 / (2**self.int_steps)
         self.transformer = SpatialTransformer(field_shape)
 
-    def forward(self, field, **kwargs):
+    def forward(self, field: torch.Tensor, **kwargs) -> torch.Tensor:
         """Integrate the velocity field.
 
         Parameters
@@ -794,6 +821,7 @@ class VecInt(nn.Module):
         return output
 
 
+
 class RescaleTransform(nn.Module):
     """Resize a displacement field and rescale its vector magnitudes accordingly.
 
@@ -812,8 +840,14 @@ class RescaleTransform(nn.Module):
     """
 
     def __init__(
-        self, inshape, factor=None, target_size=None, gaussian_filter_flag=False
-    ):
+        
+        self,
+        inshape: tuple[int, ...],
+        factor: Optional[Union[float, list[float], tuple[float, ...]]] = None,
+        target_size: Optional[tuple[int, ...]] = None,
+        gaussian_filter_flag: bool = False
+    ,
+    ) -> None:
         """
         Parameters
         ----------
@@ -860,7 +894,9 @@ class RescaleTransform(nn.Module):
                 raise ValueError("[RESCALE TF] No valid kernel found.")
             self.register_buffer("kernel", kernel)
 
-    def gaussian_filter_2d(self, kernel_sigma):
+    def gaussian_filter_2d(
+        self, kernel_sigma: Union[float, list[float]]
+    ) -> torch.Tensor:
         """Build a 2D separable Gaussian convolution kernel as a registered buffer.
 
         Parameters
@@ -920,7 +956,9 @@ class RescaleTransform(nn.Module):
 
         return total_kernel
 
-    def gaussian_filter_3d(self, kernel_sigma):
+    def gaussian_filter_3d(
+        self, kernel_sigma: Union[float, list[float]]
+    ) -> torch.Tensor:
         """Build a 3D separable Gaussian convolution kernel as a registered buffer.
 
         Parameters
@@ -970,11 +1008,11 @@ class RescaleTransform(nn.Module):
         kernel = kernel / np.sum(kernel)
 
         # Reshape
-        kernel = kernel.reshape(1, 1, kernel_size[0], kernel_size[1], kernel_size[2])
+        kernel = kernel.reshape(1, 1, kernel_size[0], kernel_size[1],  kernel_size[2])
 
         # Total kernel
 
-        total_kernel = np.zeros((3, 3) + tuple(kernel_size))
+        total_kernel = np.zeros((3,  3) + tuple(kernel_size))
         total_kernel[0, 0] = kernel
         total_kernel[1, 1] = kernel
         total_kernel[2, 2] = kernel
@@ -983,7 +1021,7 @@ class RescaleTransform(nn.Module):
 
         return total_kernel
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Rescale the displacement field.
 
         Parameters
@@ -1007,7 +1045,9 @@ class RescaleTransform(nn.Module):
 
             # resize first to save memory
             x = F.interpolate(
+                
                 x, align_corners=True, scale_factor=self.factor, mode=self.mode
+            
             )
             for i in range(self.ndims):
                 x[:, i] = x[:, i] * self.factor[i]
@@ -1017,7 +1057,9 @@ class RescaleTransform(nn.Module):
             for i in range(self.ndims):
                 x[:, i] = x[:, i] * self.factor[i]
             x = F.interpolate(
+                
                 x, align_corners=True, scale_factor=self.factor, mode=self.mode
+            
             )
 
         # don't do anything if resize is 1
@@ -1035,7 +1077,7 @@ class SpatialInterpolation(nn.Module):
     (https://github.com/voxelmorph/voxelmorph/blob/master/pytorch/model.py).
     """
 
-    def __init__(self, mode="bilinear", padding_mode="zeros"):
+    def __init__(self, mode: str = "bilinear", padding_mode: str = "zeros") -> None:
         """
         Parameters
         ----------
@@ -1051,7 +1093,9 @@ class SpatialInterpolation(nn.Module):
         self.mode = mode
         self.padding_mode = padding_mode
 
-    def forward(self, src, new_locs, **kwargs):
+    def forward(
+        self, src: torch.Tensor, new_locs: torch.Tensor, **kwargs
+    ) -> torch.Tensor:
         """Interpolate ``src`` at the given normalised coordinates.
 
         Parameters
@@ -1113,7 +1157,12 @@ class SpatialTransformer(nn.Module):
         Pre-computed identity sampling grid, shape ``(1, ndims, *size)``.
     """
 
-    def __init__(self, size, mode="bilinear", padding_mode="border"):
+    def __init__(
+        self,
+        size: tuple[int, ...],
+        mode: str = "bilinear",
+        padding_mode: str = "border",
+    ) -> None:
         """
         Parameters
         ----------
@@ -1139,7 +1188,7 @@ class SpatialTransformer(nn.Module):
         self.mode = mode
         self.padding_mode = padding_mode
 
-    def forward(self, src, flow, **kwargs):
+    def forward(self, src: torch.Tensor, flow: torch.Tensor, **kwargs) -> torch.Tensor:
         """Warp ``src`` by adding ``flow`` to the pre-built identity grid.
 
         Parameters
