@@ -1,0 +1,25 @@
+nicgiprep
+=========
+
+**nicgiprep** is a neuroimaging preprocessing pipeline for longitudinal and multimodal MRI data.
+It provides BIDS-compatible processing for cross-sectional, longitudinal, and multimodal studies
+using SynthSeg and SynthMorph for segmentation and registration.
+
+.. note::
+   This project is under active development.
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Getting Started
+
+   getting_started/installation
+   getting_started/quickstart
+
+.. toctree::
+   :maxdepth: 2
+   :caption: API Reference
+
+   api/pipelines
+   api/callbacks
+   api/models
+   api/utils
