@@ -1,0 +1,518 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>models &mdash; nicgiprep  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            nicgiprep
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting Started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../getting_started/installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../getting_started/quickstart.html">Quickstart</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">API Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../api/pipelines.html">Pipelines</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../api/callbacks.html">Callbacks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../api/models.html">Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../api/utils.html">Utils</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">nicgiprep</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">Module code</a></li>
+      <li class="breadcrumb-item active">models</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for models</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span><span class="w"> </span><span class="nn">itertools</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pdb</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">copy</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">nn</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nicgiprep.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">def_utils</span>
+
+<span class="c1">#########################################</span>
+<span class="c1">##   Linear Registration/Deformation   ##</span>
+<span class="c1">#########################################</span>
+
+<div class="viewcode-block" id="InstanceRigidModelLOG">
+<a class="viewcode-back" href="../api/models.html#models.InstanceRigidModelLOG">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">InstanceRigidModelLOG</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Instance-specific rigid registration via log-space parameterisation.</span>
+
+<span class="sd">    Jointly estimates per-timepoint rigid transformations by minimising the</span>
+<span class="sd">    discrepancy between predicted and observed pairwise log-rigid transforms.</span>
+<span class="sd">    Rotation and translation are stored as Lie-algebra elements and converted</span>
+<span class="sd">    to 4×4 matrices via the matrix exponential.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    N : int</span>
+<span class="sd">        Number of timepoints.</span>
+<span class="sd">    K : int</span>
+<span class="sd">        Number of pairwise combinations ``N*(N-1)//2``.</span>
+<span class="sd">    angle : torch.nn.Parameter</span>
+<span class="sd">        Lie-algebra rotation vector per timepoint, shape ``(3, N)``.</span>
+<span class="sd">    translation : torch.nn.Parameter</span>
+<span class="sd">        Translation vector per timepoint, shape ``(3, N)``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timepoints</span><span class="p">,</span> <span class="n">reg_weight</span><span class="o">=</span><span class="mf">0.001</span><span class="p">,</span> <span class="n">cost</span><span class="o">=</span><span class="s1">&#39;l1&#39;</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s1">&#39;cpu&#39;</span><span class="p">,</span> <span class="n">torch_dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        timepoints : list</span>
+<span class="sd">            Ordered list of timepoint identifiers (strings or objects with</span>
+<span class="sd">            an ``.id`` attribute).</span>
+<span class="sd">        reg_weight : float, optional</span>
+<span class="sd">            Weight for the L2 regularisation on rotation and translation</span>
+<span class="sd">            parameters. Default is 0.001.</span>
+<span class="sd">        cost : {&#39;l1&#39;, &#39;l2&#39;}, optional</span>
+<span class="sd">            Pairwise fitting loss. Default is ``&#39;l1&#39;``.</span>
+<span class="sd">        device : str, optional</span>
+<span class="sd">            PyTorch device string. Default is ``&#39;cpu&#39;``.</span>
+<span class="sd">        torch_dtype : torch.dtype, optional</span>
+<span class="sd">            Floating-point dtype for parameters. Default is</span>
+<span class="sd">            ``torch.float``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">device</span> <span class="o">=</span> <span class="n">device</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cost</span> <span class="o">=</span> <span class="n">cost</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">reg_weight</span> <span class="o">=</span> <span class="n">reg_weight</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">timepoints</span> <span class="o">=</span> <span class="n">timepoints</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">N</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">timepoints</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">K</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">N</span> <span class="o">*</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">N</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="o">/</span> <span class="mi">2</span><span class="p">)</span>
+
+        <span class="c1"># Parameters</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">angle</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Parameter</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">N</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">translation</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Parameter</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">N</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">angle</span><span class="o">.</span><span class="n">requires_grad</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">translation</span><span class="o">.</span><span class="n">requires_grad</span> <span class="o">=</span> <span class="kc">True</span>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_compute_matrix</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Compute 4×4 rigid transformation matrices from log-space parameters.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        torch.Tensor</span>
+<span class="sd">            Stacked transformation matrices, shape ``(4, 4, N)``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">T</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">4</span><span class="p">,</span><span class="mi">4</span><span class="p">,</span><span class="bp">self</span><span class="o">.</span><span class="n">N</span><span class="p">))</span>
+        <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">N</span><span class="p">):</span>
+            <span class="n">theta</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">angle</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">n</span><span class="p">]</span><span class="o">**</span><span class="mi">2</span><span class="p">))</span> <span class="c1"># torch.sum(torch.abs(self.angle))</span>
+            <span class="n">W</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span><span class="mi">3</span><span class="p">))</span>
+            <span class="n">W</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span><span class="mi">0</span><span class="p">],</span> <span class="n">W</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">angle</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="n">n</span><span class="p">],</span> <span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">angle</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="n">n</span><span class="p">]</span>
+            <span class="n">W</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">2</span><span class="p">],</span> <span class="n">W</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">angle</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="n">n</span><span class="p">],</span> <span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">angle</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="n">n</span><span class="p">]</span>
+            <span class="n">W</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span><span class="mi">1</span><span class="p">],</span> <span class="n">W</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span><span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">angle</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="n">n</span><span class="p">],</span> <span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">angle</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="n">n</span><span class="p">]</span>
+            <span class="n">V</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span> <span class="o">+</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="n">torch</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">theta</span><span class="p">))</span> <span class="o">/</span> <span class="p">(</span><span class="n">theta</span> <span class="o">**</span> <span class="mi">2</span><span class="p">)</span> <span class="o">*</span> <span class="n">W</span> <span class="o">+</span> <span class="p">(</span><span class="n">theta</span> <span class="o">-</span> <span class="n">torch</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">theta</span><span class="p">))</span> <span class="o">/</span> <span class="p">(</span><span class="n">theta</span> <span class="o">**</span> <span class="mi">3</span><span class="p">)</span> <span class="o">*</span> <span class="n">torch</span><span class="o">.</span><span class="n">matmul</span><span class="p">(</span><span class="n">W</span><span class="p">,</span><span class="n">W</span><span class="p">)</span>
+
+            <span class="n">T</span><span class="p">[:</span><span class="mi">3</span><span class="p">,</span> <span class="p">:</span><span class="mi">3</span><span class="p">,</span> <span class="n">n</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span> <span class="o">+</span> <span class="n">torch</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">theta</span><span class="p">)</span> <span class="o">/</span> <span class="n">theta</span> <span class="o">*</span> <span class="n">W</span>      <span class="o">+</span>      <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="n">torch</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">theta</span><span class="p">))</span> <span class="o">/</span> <span class="p">(</span><span class="n">theta</span> <span class="o">**</span> <span class="mi">2</span><span class="p">)</span> <span class="o">*</span> <span class="n">torch</span><span class="o">.</span><span class="n">matmul</span><span class="p">(</span><span class="n">W</span><span class="p">,</span><span class="n">W</span><span class="p">)</span>
+            <span class="n">T</span><span class="p">[:</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="n">n</span><span class="p">]</span> <span class="o">=</span> <span class="n">V</span> <span class="o">@</span> <span class="bp">self</span><span class="o">.</span><span class="n">translation</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">n</span><span class="p">]</span><span class="c1">#torch.matmul(V, self.translation[..., n])</span>
+            <span class="n">T</span><span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="n">n</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
+
+            <span class="c1">#</span>
+            <span class="c1"># for n in range(self.N):</span>
+            <span class="c1">#</span>
+            <span class="c1">#     T[..., n] = torch.chain_matmul(self.T0inv, T[..., n], self.T0)</span>
+
+        <span class="k">return</span> <span class="n">T</span>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_build_combinations</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timepoints</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Build pairwise log-rigid difference vectors for all timepoint pairs.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        timepoints : list</span>
+<span class="sd">            Ordered timepoints (same format as passed to ``__init__``).</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        torch.Tensor</span>
+<span class="sd">            Pairwise log-rigid vectors, shape ``(6, K)``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">K</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">K</span>
+        <span class="k">if</span> <span class="nb">any</span><span class="p">([</span><span class="nb">isinstance</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">timepoints</span><span class="p">]):</span>
+            <span class="n">timepoints_dict</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="n">t</span><span class="p">:</span> <span class="n">it_t</span> <span class="k">for</span> <span class="n">it_t</span><span class="p">,</span> <span class="n">t</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">timepoints</span><span class="p">)</span>
+            <span class="p">}</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">timepoints_dict</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="n">t</span><span class="o">.</span><span class="n">id</span><span class="p">:</span> <span class="n">it_t</span> <span class="k">for</span> <span class="n">it_t</span><span class="p">,</span> <span class="n">t</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">timepoints</span><span class="p">)</span>
+            <span class="p">}</span>  <span class="c1"># needed for non consecutive timepoints (if we&#39;d like to skip one for whatever reason)</span>
+
+        <span class="n">Tij</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">6</span><span class="p">,</span> <span class="n">K</span><span class="p">))</span>
+
+        <span class="n">k</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">for</span> <span class="n">tp_ref</span><span class="p">,</span> <span class="n">tp_flo</span> <span class="ow">in</span> <span class="n">itertools</span><span class="o">.</span><span class="n">combinations</span><span class="p">(</span><span class="n">timepoints</span><span class="p">,</span> <span class="mi">2</span><span class="p">):</span>
+
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tp_ref</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+                <span class="n">t0</span> <span class="o">=</span> <span class="n">timepoints_dict</span><span class="p">[</span><span class="n">tp_ref</span><span class="o">.</span><span class="n">id</span><span class="p">]</span>
+                <span class="n">t1</span> <span class="o">=</span> <span class="n">timepoints_dict</span><span class="p">[</span><span class="n">tp_flo</span><span class="o">.</span><span class="n">id</span><span class="p">]</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">t0</span> <span class="o">=</span> <span class="n">timepoints_dict</span><span class="p">[</span><span class="n">tp_ref</span><span class="p">]</span>
+                <span class="n">t1</span> <span class="o">=</span> <span class="n">timepoints_dict</span><span class="p">[</span><span class="n">tp_flo</span><span class="p">]</span>
+            <span class="n">Tij</span><span class="p">[:</span><span class="mi">3</span><span class="p">,</span> <span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">angle</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">t1</span><span class="p">]</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">angle</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">t0</span><span class="p">]</span>
+            <span class="n">Tij</span><span class="p">[</span><span class="mi">3</span><span class="p">:,</span> <span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">translation</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">t1</span><span class="p">]</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">translation</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">t0</span><span class="p">]</span>
+
+            <span class="n">k</span> <span class="o">+=</span> <span class="mi">1</span>
+
+        <span class="k">return</span> <span class="n">Tij</span>
+
+
+<div class="viewcode-block" id="InstanceRigidModelLOG.forward">
+<a class="viewcode-back" href="../api/models.html#models.InstanceRigidModelLOG.forward">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">logRobs</span><span class="p">,</span> <span class="n">timepoints</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Compute the fitting loss between predicted and observed pairwise transforms.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        logRobs : torch.Tensor</span>
+<span class="sd">            Observed pairwise log-rigid vectors, shape ``(6, K)``.</span>
+<span class="sd">        timepoints : list</span>
+<span class="sd">            Ordered timepoints used to index parameters.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        torch.Tensor</span>
+<span class="sd">            Scalar loss value.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If ``self.cost`` is not ``&#39;l1&#39;`` or ``&#39;l2&#39;``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">logTij</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_combinations</span><span class="p">(</span><span class="n">timepoints</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">cost</span> <span class="o">==</span> <span class="s1">&#39;l1&#39;</span><span class="p">:</span>
+            <span class="n">loss</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">sum</span><span class="p">((</span><span class="n">logTij</span> <span class="o">-</span> <span class="n">logRobs</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)))</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">K</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">cost</span> <span class="o">==</span> <span class="s1">&#39;l2&#39;</span><span class="p">:</span>
+            <span class="n">loss</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">sum</span><span class="p">((</span><span class="n">logTij</span> <span class="o">-</span> <span class="n">logRobs</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span> <span class="o">+</span> <span class="mf">1e-6</span><span class="p">)</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">K</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;Cost &#39;</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">cost</span> <span class="o">+</span> <span class="s1">&#39; not valid. Choose </span><span class="se">\&#39;</span><span class="s1">l1</span><span class="se">\&#39;</span><span class="s1"> of </span><span class="se">\&#39;</span><span class="s1">l2</span><span class="se">\&#39;</span><span class="s1">.&#39;</span> <span class="p">)</span>
+        <span class="n">loss</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">reg_weight</span> <span class="o">*</span> <span class="n">torch</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">angle</span><span class="o">**</span><span class="mi">2</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span> <span class="o">+</span> <span class="n">torch</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">translation</span><span class="o">**</span><span class="mi">2</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span> <span class="c1"># / self.K</span>
+
+        <span class="k">return</span> <span class="n">loss</span></div>
+</div>
+
+
+<div class="viewcode-block" id="ST2Nonlinear">
+<a class="viewcode-back" href="../api/models.html#models.ST2Nonlinear">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ST2Nonlinear</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Spatio-temporal squared (ST²) nonlinear registration model.</span>
+
+<span class="sd">    Estimates per-timepoint stationary velocity fields (SVFs) on a</span>
+<span class="sd">    control-point grid that minimise discrepancy between predicted and</span>
+<span class="sd">    observed pairwise deformation fields.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    N : int</span>
+<span class="sd">        Number of timepoints.</span>
+<span class="sd">    K : int</span>
+<span class="sd">        Number of pairwise combinations ``N*(N-1)//2``.</span>
+<span class="sd">    T : torch.nn.ParameterDict</span>
+<span class="sd">        Per-timepoint SVFs keyed by timepoint ID, each of shape</span>
+<span class="sd">        ``(1, 3, *cp_size)``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">obs_size</span><span class="p">,</span> <span class="n">cp_size</span><span class="p">,</span> <span class="n">factor</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">cost</span><span class="o">=</span><span class="s1">&#39;l1&#39;</span><span class="p">,</span> <span class="n">timepoints</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">init_T</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">reg_weight</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+                 <span class="n">version</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s1">&#39;cpu&#39;</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        obs_size : tuple of int</span>
+<span class="sd">            Spatial shape of the observation (displacement) grid</span>
+<span class="sd">            ``(X, Y, Z)``.</span>
+<span class="sd">        cp_size : tuple of int</span>
+<span class="sd">            Spatial shape of the control-point grid ``(X&#39;, Y&#39;, Z&#39;)``.</span>
+<span class="sd">        factor : int, optional</span>
+<span class="sd">            Up-scale factor from control-point to observation grid.</span>
+<span class="sd">            Default is 2.</span>
+<span class="sd">        cost : {&#39;l1&#39;, &#39;l2&#39;}, optional</span>
+<span class="sd">            Residual fitting loss. Default is ``&#39;l1&#39;``.</span>
+<span class="sd">        timepoints : list, optional</span>
+<span class="sd">            Ordered timepoint objects (used when ``init_T`` is ``None``).</span>
+<span class="sd">        init_T : dict, optional</span>
+<span class="sd">            Mapping ``{timepoint_id: torch.Tensor}`` to initialise SVFs.</span>
+<span class="sd">            If provided, ``timepoints`` is ignored.</span>
+<span class="sd">        reg_weight : float, optional</span>
+<span class="sd">            Regularisation weight. Default is 1.</span>
+<span class="sd">        version : int, optional</span>
+<span class="sd">            Algorithm variant: ``0`` uses ``_build_combinations``;</span>
+<span class="sd">            ``1`` uses ``_get_difference``. Default is 0.</span>
+<span class="sd">        device : str, optional</span>
+<span class="sd">            PyTorch device string. Default is ``&#39;cpu&#39;``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">obs_size</span> <span class="o">=</span> <span class="n">obs_size</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cost</span> <span class="o">=</span> <span class="n">cost</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">device</span> <span class="o">=</span> <span class="n">device</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">factor</span> <span class="o">=</span> <span class="n">factor</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">reg_weight</span> <span class="o">=</span> <span class="n">reg_weight</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">version</span> <span class="o">=</span> <span class="n">version</span>
+
+        <span class="k">if</span> <span class="n">init_T</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">N</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">init_T</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">T</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">ParameterDict</span><span class="p">({</span><span class="n">tid</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Parameter</span><span class="p">(</span><span class="n">T</span><span class="p">)</span> <span class="k">for</span> <span class="n">tid</span><span class="p">,</span> <span class="n">T</span> <span class="ow">in</span> <span class="n">init_T</span><span class="o">.</span><span class="n">items</span><span class="p">()})</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
+
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">N</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">timepoints</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">T</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">ParameterDict</span><span class="p">({</span><span class="n">t</span><span class="o">.</span><span class="n">id</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Parameter</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span> <span class="o">+</span> <span class="n">cp_size</span><span class="p">))</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">timepoints</span><span class="p">})</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
+
+        <span class="c1"># for T in self.T.values():</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">T</span><span class="o">.</span><span class="n">requires_grad</span> <span class="o">=</span> <span class="kc">True</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">K</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">N</span> <span class="o">*</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">N</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">/</span> <span class="mi">2</span><span class="p">)</span>
+
+        <span class="c1"># ii = torch.arange(0, obs_size[0], dtype=torch.int, device=device)</span>
+        <span class="c1"># jj = torch.arange(0, obs_size[1], dtype=torch.int, device=device)</span>
+        <span class="c1"># kk = torch.arange(0, obs_size[2], dtype=torch.int, device=device)</span>
+        <span class="n">ii</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">cp_size</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+        <span class="n">jj</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">cp_size</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+        <span class="n">kk</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">cp_size</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">grid</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">meshgrid</span><span class="p">(</span><span class="n">ii</span><span class="p">,</span> <span class="n">jj</span><span class="p">,</span> <span class="n">kk</span><span class="p">,</span> <span class="n">indexing</span><span class="o">=</span><span class="s1">&#39;ij&#39;</span><span class="p">),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">),</span> <span class="mi">0</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">integrate</span> <span class="o">=</span> <span class="n">def_utils</span><span class="o">.</span><span class="n">VecInt</span><span class="p">(</span><span class="n">cp_size</span><span class="p">,</span> <span class="n">int_steps</span><span class="o">=</span><span class="mi">7</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">upscale</span> <span class="o">=</span> <span class="n">def_utils</span><span class="o">.</span><span class="n">RescaleTransform</span><span class="p">(</span><span class="n">cp_size</span><span class="p">,</span> <span class="n">factor</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">factor</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">)</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">factor</span> <span class="o">!=</span> <span class="mi">1</span> <span class="k">else</span> <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">downscale</span> <span class="o">=</span> <span class="n">def_utils</span><span class="o">.</span><span class="n">RescaleTransform</span><span class="p">(</span><span class="n">cp_size</span><span class="p">,</span> <span class="n">factor</span><span class="o">=</span><span class="mi">1</span><span class="o">/</span><span class="bp">self</span><span class="o">.</span><span class="n">factor</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">)</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">factor</span> <span class="o">!=</span> <span class="mi">1</span> <span class="k">else</span> <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">interp</span> <span class="o">=</span> <span class="n">def_utils</span><span class="o">.</span><span class="n">SpatialInterpolation</span><span class="p">()</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_compose_fields</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">f1</span><span class="p">,</span> <span class="n">f2</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Compose two displacement fields via spatial interpolation.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        f1 : torch.Tensor</span>
+<span class="sd">            First displacement field, shape ``(1, 3, *cp_size)``.</span>
+<span class="sd">        f2 : torch.Tensor</span>
+<span class="sd">            Second displacement field, shape ``(1, 3, *cp_size)``.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        torch.Tensor</span>
+<span class="sd">            Composed displacement ``f1 ∘ f2``, same shape as ``f1``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">GG2</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">grid</span> <span class="o">+</span> <span class="n">f1</span>
+        <span class="n">f2_int</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">interp</span><span class="p">(</span><span class="n">f2</span><span class="p">,</span> <span class="n">GG2</span><span class="o">.</span><span class="n">clone</span><span class="p">())</span>
+        <span class="n">GG3</span> <span class="o">=</span> <span class="n">GG2</span> <span class="o">+</span> <span class="n">f2_int</span>
+        <span class="k">return</span> <span class="n">GG3</span> <span class="o">-</span>  <span class="bp">self</span><span class="o">.</span><span class="n">grid</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_build_combinations</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tid_list</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Predict pairwise composed deformations from per-timepoint SVFs.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        tid_list : list of str</span>
+<span class="sd">            Pairs in ``&#39;ref_to_flo&#39;`` format specifying which combinations</span>
+<span class="sd">            to evaluate.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        torch.Tensor</span>
+<span class="sd">            Predicted pairwise fields,</span>
+<span class="sd">            shape ``(*obs_size, 3, len(tid_list))``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">K</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">K</span>
+        <span class="n">k</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">R_hat</span> <span class="o">=</span> <span class="p">[]</span><span class="c1">#torch.zeros(self.obs_size + (3, K), device=self.device, requires_grad=True)</span>
+        <span class="k">for</span> <span class="n">tp_id</span> <span class="ow">in</span> <span class="n">tid_list</span><span class="p">:</span>
+            <span class="n">tp_ref</span><span class="p">,</span> <span class="n">tp_flo</span> <span class="o">=</span> <span class="n">tp_id</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;_to_&#39;</span><span class="p">)</span>
+            <span class="c1"># FIELD_REF = self.upscale(self.integrate(-self.T[tp_ref]))</span>
+            <span class="c1"># FIELD_FLO = self.upscale(self.integrate(self.T[tp_flo]))</span>
+            <span class="n">FIELD_REF</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">integrate</span><span class="p">(</span><span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">T</span><span class="p">[</span><span class="n">tp_ref</span><span class="p">])</span>
+            <span class="n">FIELD_FLO</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">integrate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">T</span><span class="p">[</span><span class="n">tp_flo</span><span class="p">])</span>
+            <span class="n">R</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_compose_fields</span><span class="p">(</span><span class="n">FIELD_REF</span><span class="p">,</span> <span class="n">FIELD_FLO</span><span class="p">)</span>
+            <span class="n">R_hat</span> <span class="o">+=</span> <span class="p">[</span><span class="n">R</span><span class="p">]</span>
+
+            <span class="n">k</span> <span class="o">+=</span> <span class="mi">1</span>
+
+        <span class="n">R_hat</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">permute</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span><span class="n">R_hat</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">R_hat</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_difference</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">R</span><span class="p">,</span> <span class="n">tid_list</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Compute residuals between observed and predicted pairwise fields.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        R : torch.Tensor</span>
+<span class="sd">            Observed pairwise displacement fields,</span>
+<span class="sd">            shape ``(*obs_size, 3, K)``.</span>
+<span class="sd">        tid_list : list of str</span>
+<span class="sd">            Pairs in ``&#39;ref_to_flo&#39;`` format.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        torch.Tensor</span>
+<span class="sd">            Residual fields, shape ``(*obs_size, 3, K)``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">R</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">permute</span><span class="p">(</span><span class="n">R</span><span class="p">,</span> <span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">))</span>
+        <span class="n">R_hat</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">it_tp</span><span class="p">,</span> <span class="n">tp_id</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">tid_list</span><span class="p">):</span>
+            <span class="n">tp_ref</span><span class="p">,</span> <span class="n">tp_flo</span> <span class="o">=</span> <span class="n">tp_id</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;_to_&#39;</span><span class="p">)</span>
+            <span class="n">FIELD_FLO</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">upscale</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">integrate</span><span class="p">(</span><span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">T</span><span class="p">[</span><span class="n">tp_flo</span><span class="p">]))</span><span class="o">.</span><span class="n">float</span><span class="p">()</span>
+            <span class="n">FIELD_REF</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">upscale</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">integrate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">T</span><span class="p">[</span><span class="n">tp_ref</span><span class="p">]))</span><span class="o">.</span><span class="n">float</span><span class="p">()</span>
+            <span class="n">GG</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">grid</span> <span class="o">+</span> <span class="n">R</span><span class="p">[</span><span class="n">it_tp</span><span class="p">]</span>
+            <span class="n">f1_int</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">interp</span><span class="p">(</span><span class="n">FIELD_FLO</span><span class="p">,</span> <span class="n">GG</span><span class="o">.</span><span class="n">clone</span><span class="p">())</span>
+            <span class="n">GG2</span> <span class="o">=</span> <span class="n">GG</span> <span class="o">+</span> <span class="n">f1_int</span>
+            <span class="n">f2_int</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">interp</span><span class="p">(</span><span class="n">FIELD_REF</span><span class="p">,</span> <span class="n">GG2</span><span class="o">.</span><span class="n">clone</span><span class="p">())</span>
+            <span class="n">GG3</span> <span class="o">=</span> <span class="n">GG2</span> <span class="o">+</span> <span class="n">f2_int</span>
+            <span class="n">R_hat</span> <span class="o">+=</span> <span class="p">[</span><span class="n">GG3</span> <span class="o">-</span>  <span class="bp">self</span><span class="o">.</span><span class="n">grid</span><span class="p">]</span>
+
+        <span class="n">R_hat</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">permute</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span><span class="n">R_hat</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">R_hat</span>
+
+<div class="viewcode-block" id="ST2Nonlinear.forward">
+<a class="viewcode-back" href="../api/models.html#models.ST2Nonlinear.forward">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">R</span><span class="p">,</span> <span class="n">tid_list</span><span class="p">,</span> <span class="n">M</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Compute the fitting loss between predicted and observed pairwise fields.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        R : torch.Tensor</span>
+<span class="sd">            Observed pairwise displacement fields,</span>
+<span class="sd">            shape ``(*obs_size, 3, K)``.</span>
+<span class="sd">        tid_list : list of str</span>
+<span class="sd">            Pairs in ``&#39;ref_to_flo&#39;`` format.</span>
+<span class="sd">        M : torch.Tensor, optional</span>
+<span class="sd">            Spatial weight mask applied to the residuals. If ``None``,</span>
+<span class="sd">            all voxels contribute equally.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        torch.Tensor</span>
+<span class="sd">            Scalar loss value.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If ``self.cost`` is not ``&#39;l1&#39;`` or ``&#39;l2&#39;``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">version</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">R_hat</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_combinations</span><span class="p">(</span><span class="n">tid_list</span><span class="p">)</span>
+            <span class="n">residue</span> <span class="o">=</span> <span class="n">R_hat</span> <span class="o">-</span> <span class="n">R</span>
+
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">version</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">residue</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_difference</span><span class="p">(</span><span class="n">R</span><span class="p">,</span> <span class="n">tid_list</span><span class="p">)</span>
+
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">R_hat</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_combinations</span><span class="p">(</span><span class="n">tid_list</span><span class="p">)</span>
+            <span class="n">residue</span> <span class="o">=</span> <span class="n">R_hat</span> <span class="o">-</span> <span class="n">R</span>
+
+        <span class="c1"># pdb.set_trace()</span>
+        <span class="c1"># import nibabel as nib</span>
+        <span class="c1"># img = nib.Nifti1Image(R_hat[..., 10].cpu().detach().numpy(), np.eye(4))</span>
+        <span class="c1"># nib.save(img, &#39;R_hat.prova.nii.gz&#39;)</span>
+        <span class="c1"># img = nib.Nifti1Image(R[..., 10].cpu().detach().numpy(), np.eye(4))</span>
+        <span class="c1"># nib.save(img, &#39;R.prova.nii.gz&#39;)</span>
+
+        <span class="k">if</span> <span class="n">M</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">reduce_fn</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">sum</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">reduce_fn</span> <span class="o">=</span> <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">x</span><span class="o">*</span><span class="n">M</span><span class="p">)</span><span class="c1">#/torch.sum(M)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">cost</span> <span class="o">==</span> <span class="s1">&#39;l1&#39;</span><span class="p">:</span>
+            <span class="n">loss</span> <span class="o">=</span> <span class="n">reduce_fn</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">sum</span><span class="p">((</span><span class="n">residue</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span><span class="p">,</span> <span class="n">axis</span><span class="o">=-</span><span class="mi">2</span><span class="p">)))</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">cost</span> <span class="o">==</span> <span class="s1">&#39;l2&#39;</span><span class="p">:</span>
+            <span class="n">loss</span> <span class="o">=</span> <span class="n">reduce_fn</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">sum</span><span class="p">((</span><span class="n">residue</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span><span class="p">,</span> <span class="n">axis</span><span class="o">=-</span><span class="mi">2</span><span class="p">))</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;Cost &#39;</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">cost</span> <span class="o">+</span> <span class="s1">&#39; not valid. Choose </span><span class="se">\&#39;</span><span class="s1">l1</span><span class="se">\&#39;</span><span class="s1"> of </span><span class="se">\&#39;</span><span class="s1">l2</span><span class="se">\&#39;</span><span class="s1">.&#39;</span> <span class="p">)</span>
+
+        <span class="c1"># reg_loss = torch.sum(torch.sqrt(torch.sum(torch.sum(torch.cat([T for T in self.T.values()], dim=0), dim=0)**2, dim=0)))</span>
+        <span class="c1"># loss += self.reg_weight * reg_loss</span>
+
+        <span class="c1"># loss.backward()</span>
+        <span class="c1"># for p in self.parameters():</span>
+        <span class="c1">#     print(torch.max(torch.sqrt(torch.sum(p.grad ** 2, dim=1))))</span>
+
+        <span class="k">return</span> <span class="n">loss</span></div>
+</div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Adrià Casamitjana, Agustín Cartaya Lathulerie, Clara Lisazo, Rachika E. Hamadache.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

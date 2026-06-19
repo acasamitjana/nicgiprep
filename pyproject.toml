@@ -1,0 +1,3 @@
+[tool.setuptools.package-data]
+"nicgiprep.data.labels_classes_priors" = ["*.npy"]
+"nicgiprep.data.data_tutorial" = ["*"]

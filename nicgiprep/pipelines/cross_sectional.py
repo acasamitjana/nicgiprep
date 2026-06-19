@@ -8,7 +8,6 @@ import nibabel as nib
 from skimage.morphology import ball, binary_dilation
 
 from setup import *
-from nicgiprep.callbacks import *
 from nicgiprep.pipelines import Processor
 from nicgiprep.utils.preprocessing_utils import *
 from nicgiprep.utils.fn_utils import one_hot_encoding, rescale_voxel_size
@@ -703,8 +702,10 @@ class BiasCorrectionProcessor(CrossSectionalProcessor):
                 os.makedirs(preproc_dirname)
 
             # input segs
+            synthseg_entities = copy.copy(self.seg_entities)
+            synthseg_entities["suffix"] = ["T1wsynthseg", "synthseg"]
             seg_file = self._get_data(
-                **{"session": sess_id, "subject": subject, **self.synthseg_entities}
+                **{"session": sess_id, "subject": subject, **synthseg_entities}
             )
             if seg_file is None:
                 continue
@@ -950,8 +951,10 @@ class MNIRegistrationProcessor(CrossSectionalProcessor):
                 os.makedirs(preproc_dirname)
 
             # input segs
+            synthseg_entities = copy.copy(self.seg_entities)
+            synthseg_entities["suffix"] = ["T1wsynthseg", "synthseg"]
             seg_file = self._get_data(
-                **{"session": sess_id, "subject": subject, **self.synthseg_entities}
+                **{"session": sess_id, "subject": subject, **synthseg_entities}
             )
             if seg_file is None:
                 continue

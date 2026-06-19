@@ -1,0 +1,1245 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>utils.io_utils &mdash; nicgiprep  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../index.html" class="icon icon-home">
+            nicgiprep
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting Started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../getting_started/installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../getting_started/quickstart.html">Quickstart</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">API Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../api/pipelines.html">Pipelines</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../api/callbacks.html">Callbacks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../api/models.html">Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../api/utils.html">Utils</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">nicgiprep</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">utils.io_utils</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for utils.io_utils</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span><span class="w"> </span><span class="nn">pdb</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">datetime</span><span class="w"> </span><span class="kn">import</span> <span class="n">datetime</span><span class="p">,</span> <span class="n">date</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">os.path</span><span class="w"> </span><span class="kn">import</span> <span class="n">join</span><span class="p">,</span> <span class="n">exists</span><span class="p">,</span> <span class="n">basename</span><span class="p">,</span> <span class="n">dirname</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">os</span><span class="w"> </span><span class="kn">import</span> <span class="n">makedirs</span><span class="p">,</span> <span class="n">listdir</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">gc</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">subprocess</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">shutil</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">nibabel</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">nib</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">skimage.transform</span><span class="w"> </span><span class="kn">import</span> <span class="n">rescale</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">csv</span>
+
+<div class="viewcode-block" id="get_bids_entities">
+<a class="viewcode-back" href="../../api/utils.html#utils.io_utils.get_bids_entities">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">get_bids_entities</span><span class="p">(</span><span class="n">fname</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Parse BIDS entities from a filename into a dictionary.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    fname : str</span>
+<span class="sd">        BIDS-formatted filename (e.g.</span>
+<span class="sd">        ``sub-001_ses-01_T1w.nii.gz``).</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dict</span>
+<span class="sd">        Mapping of entity keys to values. The ``&#39;subject&#39;`` and</span>
+<span class="sd">        ``&#39;session&#39;`` keys are normalised from the BIDS short forms</span>
+<span class="sd">        ``&#39;sub&#39;`` and ``&#39;ses&#39;``. A ``&#39;suffix&#39;`` and ``&#39;extension&#39;``</span>
+<span class="sd">        key are also set for the final filename component.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">edict</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">fparts</span> <span class="o">=</span> <span class="n">basename</span><span class="p">(</span><span class="n">fname</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;_&#39;</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">fparts</span><span class="p">:</span>
+
+        <span class="k">if</span> <span class="s1">&#39;.&#39;</span> <span class="ow">in</span> <span class="n">f</span><span class="p">:</span>
+            <span class="n">edict</span><span class="p">[</span><span class="s1">&#39;suffix&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;.&#39;</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="n">edict</span><span class="p">[</span><span class="s1">&#39;extension&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;.&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">f</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;.&#39;</span><span class="p">)[</span><span class="mi">1</span><span class="p">:])</span>
+
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">e</span><span class="p">,</span> <span class="n">v</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;-&#39;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">e</span> <span class="o">==</span> <span class="s1">&#39;sub&#39;</span><span class="p">:</span>
+                <span class="n">e</span> <span class="o">=</span> <span class="s1">&#39;subject&#39;</span>
+            <span class="k">elif</span> <span class="n">e</span> <span class="o">==</span> <span class="s1">&#39;ses&#39;</span><span class="p">:</span>
+                <span class="n">e</span> <span class="o">=</span> <span class="s1">&#39;session&#39;</span>
+
+            <span class="n">edict</span><span class="p">[</span><span class="s1">&#39;suffix&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">e</span>
+            <span class="n">edict</span><span class="p">[</span><span class="n">e</span><span class="p">]</span> <span class="o">=</span> <span class="n">v</span>
+
+    <span class="k">return</span> <span class="n">edict</span></div>
+
+
+<div class="viewcode-block" id="save_nii">
+<a class="viewcode-back" href="../../api/utils.html#utils.io_utils.save_nii">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">save_nii</span><span class="p">(</span><span class="n">im</span><span class="p">,</span> <span class="n">v2r</span><span class="p">,</span> <span class="n">filepath</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Save a NumPy array as a NIfTI file, creating parent directories as needed.</span>
+
+<span class="sd">    Boolean arrays are cast to ``uint8`` and ``int64`` arrays to ``float``</span>
+<span class="sd">    before saving to ensure NIfTI compatibility.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    im : np.ndarray</span>
+<span class="sd">        Image data to save.</span>
+<span class="sd">    v2r : np.ndarray</span>
+<span class="sd">        Voxel-to-RAS affine matrix, shape ``(4, 4)``.</span>
+<span class="sd">    filepath : str</span>
+<span class="sd">        Output file path (e.g. ``path/to/image.nii.gz``).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">im</span><span class="o">.</span><span class="n">dtype</span> <span class="ow">in</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">bool_</span><span class="p">]:</span>
+        <span class="n">im</span> <span class="o">=</span> <span class="n">im</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="s1">&#39;uint8&#39;</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="n">im</span><span class="o">.</span><span class="n">dtype</span> <span class="ow">in</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">]:</span>
+        <span class="n">im</span> <span class="o">=</span> <span class="n">im</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="s1">&#39;float&#39;</span><span class="p">)</span>
+
+    <span class="n">create_dir</span><span class="p">(</span><span class="n">dirname</span><span class="p">(</span><span class="n">filepath</span><span class="p">))</span>
+    <span class="n">img</span> <span class="o">=</span> <span class="n">nib</span><span class="o">.</span><span class="n">Nifti1Image</span><span class="p">(</span><span class="n">im</span><span class="p">,</span> <span class="n">v2r</span><span class="p">)</span>
+    <span class="n">nib</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">img</span><span class="p">,</span> <span class="n">filepath</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="check_nan">
+<a class="viewcode-back" href="../../api/utils.html#utils.io_utils.check_nan">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">check_nan</span><span class="p">(</span><span class="n">v</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return whether a value represents a missing / NaN observation.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    v : str or float</span>
+<span class="sd">        Value to test.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    bool</span>
+<span class="sd">        ``True`` if ``v`` is ``&#39;&#39;``, ``&#39;nan&#39;``, ``&#39;NaN&#39;``, or</span>
+<span class="sd">        ``float(&#39;nan&#39;)``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">v</span> <span class="ow">in</span> <span class="p">[</span><span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="s1">&#39;nan&#39;</span><span class="p">,</span> <span class="s1">&#39;NaN&#39;</span><span class="p">]</span> <span class="ow">or</span> <span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">v</span><span class="p">):</span>
+        <span class="k">return</span> <span class="kc">True</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">False</span></div>
+
+
+<div class="viewcode-block" id="create_dir">
+<a class="viewcode-back" href="../../api/utils.html#utils.io_utils.create_dir">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">create_dir</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">subdirs</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Create a directory (and optional sub-directories) if they do not exist.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    path : str</span>
+<span class="sd">        Root directory to create.</span>
+<span class="sd">    subdirs : str or list of str, optional</span>
+<span class="sd">        Sub-directory name(s) to create inside ``path``. If ``None``,</span>
+<span class="sd">        only ``path`` itself is created.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">subdirs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">exists</span><span class="p">(</span><span class="n">path</span><span class="p">):</span>
+            <span class="n">makedirs</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">subdirs</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+            <span class="n">subdirs</span> <span class="o">=</span> <span class="p">[</span><span class="n">subdirs</span><span class="p">]</span>
+
+        <span class="k">for</span> <span class="n">subdir</span> <span class="ow">in</span> <span class="n">subdirs</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">exists</span><span class="p">(</span><span class="n">join</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">subdir</span><span class="p">)):</span>
+                <span class="n">makedirs</span><span class="p">(</span><span class="n">join</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">subdir</span><span class="p">))</span></div>
+
+
+<div class="viewcode-block" id="remove_dir">
+<a class="viewcode-back" href="../../api/utils.html#utils.io_utils.remove_dir">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">remove_dir</span><span class="p">(</span><span class="n">path</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Recursively remove a directory and all its contents.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    path : str</span>
+<span class="sd">        Path to the directory to remove.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">subprocess</span><span class="o">.</span><span class="n">call</span><span class="p">([</span><span class="s1">&#39;rm&#39;</span><span class="p">,</span> <span class="s1">&#39;-rf&#39;</span><span class="p">,</span> <span class="n">path</span><span class="p">])</span></div>
+
+
+<div class="viewcode-block" id="create_derivative_dir">
+<a class="viewcode-back" href="../../api/utils.html#utils.io_utils.create_derivative_dir">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">create_derivative_dir</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">description</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Create a BIDS derivative directory with a ``dataset_description.json``.</span>
+
+<span class="sd">    The JSON file is only written if it does not already exist.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    path : str</span>
+<span class="sd">        Path to the derivative directory to create.</span>
+<span class="sd">    description : str</span>
+<span class="sd">        Human-readable description written to the ``&#39;Description&#39;`` field</span>
+<span class="sd">        of ``dataset_description.json``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">path</span><span class="p">):</span> <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+    <span class="n">data_descr_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="s1">&#39;dataset_description.json&#39;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">data_descr_path</span><span class="p">):</span>
+        <span class="n">data_descr</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">data_descr</span><span class="p">[</span><span class="s1">&#39;Name&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+        <span class="n">data_descr</span><span class="p">[</span><span class="s1">&#39;BIDSVersion&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;1.0.2&#39;</span>
+        <span class="n">data_descr</span><span class="p">[</span><span class="s1">&#39;GeneratedBy&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[{</span><span class="s1">&#39;Name&#39;</span><span class="p">:</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="n">path</span><span class="p">)}]</span>
+        <span class="n">data_descr</span><span class="p">[</span><span class="s1">&#39;Description&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">description</span>
+        <span class="n">json_object</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">data_descr</span><span class="p">,</span> <span class="n">indent</span><span class="o">=</span><span class="mi">4</span><span class="p">)</span>
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">data_descr_path</span><span class="p">,</span> <span class="s1">&#39;w&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">outfile</span><span class="p">:</span>
+            <span class="n">outfile</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">json_object</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="write_json_derivatives">
+<a class="viewcode-back" href="../../api/utils.html#utils.io_utils.write_json_derivatives">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">write_json_derivatives</span><span class="p">(</span><span class="n">pixdim</span><span class="p">,</span> <span class="n">volshape</span><span class="p">,</span> <span class="n">filename</span><span class="p">,</span> <span class="n">extra_kwargs</span><span class="o">=</span><span class="p">{}):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Write a BIDS-style JSON sidecar with image resolution and shape.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    pixdim : array-like of float</span>
+<span class="sd">        Voxel sizes along R, A, S axes in mm (length ≥ 3).</span>
+<span class="sd">    volshape : array-like of int</span>
+<span class="sd">        Image dimensions along X, Y, Z axes (length ≥ 3).</span>
+<span class="sd">    filename : str</span>
+<span class="sd">        Output ``.json`` file path.</span>
+<span class="sd">    extra_kwargs : dict, optional</span>
+<span class="sd">        Additional key-value pairs to merge into the JSON object.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">im_json</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;Resolution&quot;</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s2">&quot;R&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">pixdim</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span>
+            <span class="s2">&quot;A&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">pixdim</span><span class="p">[</span><span class="mi">1</span><span class="p">]),</span>
+            <span class="s2">&quot;S&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">pixdim</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
+        <span class="p">},</span>
+        <span class="s2">&quot;ImageShape&quot;</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s2">&quot;X&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">volshape</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span>
+            <span class="s2">&quot;Y&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">volshape</span><span class="p">[</span><span class="mi">1</span><span class="p">]),</span>
+            <span class="s2">&quot;Z&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">volshape</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
+        <span class="p">}}</span>
+
+    <span class="n">im_json</span> <span class="o">=</span> <span class="p">{</span><span class="o">**</span><span class="n">im_json</span><span class="p">,</span> <span class="o">**</span><span class="n">extra_kwargs</span><span class="p">}</span>
+
+    <span class="n">json_object</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">im_json</span><span class="p">,</span> <span class="n">indent</span><span class="o">=</span><span class="mi">4</span><span class="p">)</span>
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="s1">&#39;w&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">outfile</span><span class="p">:</span>
+        <span class="n">outfile</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">json_object</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="create_results_dir">
+<a class="viewcode-back" href="../../api/utils.html#utils.io_utils.create_results_dir">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">create_results_dir</span><span class="p">(</span><span class="n">results_dir</span><span class="p">,</span> <span class="n">subdirs</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Create a results directory with standard sub-directories.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    results_dir : str</span>
+<span class="sd">        Root results directory to create.</span>
+<span class="sd">    subdirs : list of str, optional</span>
+<span class="sd">        Sub-directory names to create. Defaults to</span>
+<span class="sd">        ``[&#39;checkpoints&#39;, &#39;results&#39;]``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">subdirs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">subdirs</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;checkpoints&#39;</span><span class="p">,</span> <span class="s1">&#39;results&#39;</span><span class="p">]</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">exists</span><span class="p">(</span><span class="n">results_dir</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">sd</span> <span class="ow">in</span> <span class="n">subdirs</span><span class="p">:</span>
+            <span class="n">makedirs</span><span class="p">(</span><span class="n">join</span><span class="p">(</span><span class="n">results_dir</span><span class="p">,</span> <span class="n">sd</span><span class="p">))</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">sd</span> <span class="ow">in</span> <span class="n">subdirs</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">exists</span><span class="p">(</span><span class="n">join</span><span class="p">(</span><span class="n">results_dir</span><span class="p">,</span> <span class="n">sd</span><span class="p">)):</span>
+                <span class="n">makedirs</span><span class="p">(</span><span class="n">join</span><span class="p">(</span><span class="n">results_dir</span><span class="p">,</span> <span class="n">sd</span><span class="p">))</span></div>
+
+
+<div class="viewcode-block" id="mri_convert_nifti_directory">
+<a class="viewcode-back" href="../../api/utils.html#utils.io_utils.mri_convert_nifti_directory">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">mri_convert_nifti_directory</span><span class="p">(</span><span class="n">directory</span><span class="p">,</span> <span class="n">extension</span><span class="o">=</span><span class="s1">&#39;.nii.gz&#39;</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Convert all NIfTI / MGZ files in a directory to a target format via ``mri_convert``.</span>
+
+<span class="sd">    Files already in the target ``extension`` are skipped.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    directory : str</span>
+<span class="sd">        Path to the directory containing the images to convert.</span>
+<span class="sd">    extension : str, optional</span>
+<span class="sd">        Target file extension. Default is ``&#39;.nii.gz&#39;``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">files</span> <span class="o">=</span> <span class="n">listdir</span><span class="p">(</span><span class="n">directory</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">files</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">extension</span> <span class="ow">in</span> <span class="n">f</span><span class="p">:</span>
+            <span class="k">continue</span>
+        <span class="k">elif</span> <span class="s1">&#39;.nii.gz&#39;</span> <span class="ow">in</span> <span class="n">f</span><span class="p">:</span>
+            <span class="n">new_f</span> <span class="o">=</span> <span class="n">f</span><span class="p">[:</span><span class="o">-</span><span class="mi">6</span><span class="p">]</span> <span class="o">+</span> <span class="n">extension</span>
+
+        <span class="k">elif</span> <span class="s1">&#39;.nii&#39;</span> <span class="ow">in</span> <span class="n">f</span><span class="p">:</span>
+            <span class="n">new_f</span> <span class="o">=</span> <span class="n">f</span><span class="p">[:</span><span class="o">-</span><span class="mi">4</span><span class="p">]</span> <span class="o">+</span> <span class="n">extension</span>
+
+        <span class="k">elif</span> <span class="s1">&#39;.mgz&#39;</span> <span class="ow">in</span> <span class="n">f</span><span class="p">:</span>
+            <span class="n">new_f</span> <span class="o">=</span> <span class="n">f</span><span class="p">[:</span><span class="o">-</span><span class="mi">4</span><span class="p">]</span> <span class="o">+</span> <span class="n">extension</span>
+
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">continue</span>
+
+        <span class="n">subprocess</span><span class="o">.</span><span class="n">call</span><span class="p">([</span><span class="s1">&#39;mri_convert&#39;</span><span class="p">,</span> <span class="n">join</span><span class="p">(</span><span class="n">directory</span><span class="p">,</span> <span class="n">f</span><span class="p">),</span> <span class="n">join</span><span class="p">(</span><span class="n">directory</span><span class="p">,</span> <span class="n">new_f</span><span class="p">)])</span></div>
+
+
+<div class="viewcode-block" id="read_lta">
+<a class="viewcode-back" href="../../api/utils.html#utils.io_utils.read_lta">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">read_lta</span><span class="p">(</span><span class="n">file</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Read a FreeSurfer LTA (linear transform array) file into a 4×4 matrix.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    file : str</span>
+<span class="sd">        Path to the ``.lta`` file.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    np.ndarray</span>
+<span class="sd">        Affine transformation matrix, shape ``(4, 4)``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">lta</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">4</span><span class="p">,</span><span class="mi">4</span><span class="p">))</span>
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="s1">&#39;r&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">txtfile</span><span class="p">:</span>
+        <span class="n">lines</span> <span class="o">=</span> <span class="n">txtfile</span><span class="o">.</span><span class="n">readlines</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">it_row</span><span class="p">,</span> <span class="n">l</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">lines</span><span class="p">[</span><span class="mi">5</span><span class="p">:</span><span class="mi">9</span><span class="p">]):</span>
+            <span class="n">aff_row</span> <span class="o">=</span> <span class="n">l</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39; &#39;</span><span class="p">)[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+            <span class="n">lta</span><span class="p">[</span><span class="n">it_row</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="nb">float</span><span class="p">(</span><span class="n">ar</span><span class="p">)</span> <span class="k">for</span> <span class="n">ar</span> <span class="ow">in</span> <span class="n">aff_row</span><span class="p">]</span>
+
+    <span class="k">return</span> <span class="n">lta</span></div>
+
+
+<div class="viewcode-block" id="read_tsv">
+<a class="viewcode-back" href="../../api/utils.html#utils.io_utils.read_tsv">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">read_tsv</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">delimiter</span><span class="o">=</span><span class="s1">&#39;</span><span class="se">\t</span><span class="s1">&#39;</span><span class="p">,</span> <span class="n">codec_read</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Read a delimited file into a dictionary keyed by one or more columns.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    path : str</span>
+<span class="sd">        Path to the TSV (or CSV) file.</span>
+<span class="sd">    k : str or list of str, optional</span>
+<span class="sd">        Column name(s) to use as the dictionary key. Multiple columns are</span>
+<span class="sd">        joined with ``&#39;_&#39;``. Defaults to the first column in the file.</span>
+<span class="sd">    delimiter : str, optional</span>
+<span class="sd">        Field delimiter. Default is ``&#39;\\t&#39;``.</span>
+<span class="sd">    codec_read : bool, optional</span>
+<span class="sd">        Reserved for future use. Currently unused. Default is ``False``.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dict</span>
+<span class="sd">        Mapping from key string to the full row dictionary.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">t</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="s1">&#39;r&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">csvfile</span><span class="p">:</span>
+        <span class="n">csvreader</span> <span class="o">=</span> <span class="n">csv</span><span class="o">.</span><span class="n">DictReader</span><span class="p">(</span><span class="n">csvfile</span><span class="p">,</span> <span class="n">delimiter</span><span class="o">=</span><span class="n">delimiter</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">k</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span> <span class="n">k</span> <span class="o">=</span> <span class="n">csvreader</span><span class="o">.</span><span class="n">fieldnames</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span> <span class="n">k</span> <span class="o">=</span> <span class="p">[</span><span class="n">k</span><span class="p">]</span>
+
+        <span class="k">for</span> <span class="n">it_row</span><span class="p">,</span> <span class="n">row</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">csvreader</span><span class="p">):</span>
+            <span class="n">t</span><span class="p">[</span><span class="s1">&#39;_&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="n">row</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">k</span><span class="p">])]</span> <span class="o">=</span> <span class="n">row</span>
+
+    <span class="k">return</span> <span class="n">t</span></div>
+
+
+<div class="viewcode-block" id="write_affine_matrix">
+<a class="viewcode-back" href="../../api/utils.html#utils.io_utils.write_affine_matrix">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">write_affine_matrix</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">affine_matrix</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Write a 4×4 affine matrix to a space-delimited text file.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    path : str</span>
+<span class="sd">        Output file path.</span>
+<span class="sd">    affine_matrix : np.ndarray</span>
+<span class="sd">        Affine matrix, shape ``(4, 4)``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="s1">&#39;w&#39;</span><span class="p">,</span> <span class="n">newline</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">csvfile</span><span class="p">:</span>
+        <span class="n">csvwriter</span> <span class="o">=</span> <span class="n">csv</span><span class="o">.</span><span class="n">writer</span><span class="p">(</span><span class="n">csvfile</span><span class="p">,</span> <span class="n">delimiter</span><span class="o">=</span><span class="s1">&#39; &#39;</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">it_row</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">4</span><span class="p">):</span>
+            <span class="n">csvwriter</span><span class="o">.</span><span class="n">writerow</span><span class="p">(</span><span class="n">affine_matrix</span><span class="p">[</span><span class="n">it_row</span><span class="p">])</span></div>
+
+
+<div class="viewcode-block" id="read_affine_matrix">
+<a class="viewcode-back" href="../../api/utils.html#utils.io_utils.read_affine_matrix">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">read_affine_matrix</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">full</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Read an affine matrix from a space-delimited text file.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    path : str</span>
+<span class="sd">        Path to the file produced by :func:`write_affine_matrix`.</span>
+<span class="sd">    full : bool, optional</span>
+<span class="sd">        If ``True``, return the full 4×4 affine matrix. If ``False``</span>
+<span class="sd">        (default), return the 3×3 rotation block and the 3-element</span>
+<span class="sd">        translation vector separately.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    affine_matrix : np.ndarray</span>
+<span class="sd">        Shape ``(4, 4)`` when ``full=True``.</span>
+<span class="sd">    rotation_matrix : np.ndarray</span>
+<span class="sd">        Shape ``(3, 3)`` when ``full=False``.</span>
+<span class="sd">    translation_vector : np.ndarray</span>
+<span class="sd">        Shape ``(3,)`` when ``full=False``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="s1">&#39;r&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">csvfile</span><span class="p">:</span>
+        <span class="n">rotation_matrix</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span>
+        <span class="n">translation_vector</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">3</span><span class="p">,))</span>
+        <span class="n">csvreader</span> <span class="o">=</span> <span class="n">csv</span><span class="o">.</span><span class="n">reader</span><span class="p">(</span><span class="n">csvfile</span><span class="p">,</span> <span class="n">delimiter</span><span class="o">=</span><span class="s1">&#39; &#39;</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">it_row</span><span class="p">,</span> <span class="n">row</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">csvreader</span><span class="p">):</span>
+            <span class="n">rotation_matrix</span><span class="p">[</span><span class="n">it_row</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+            <span class="n">rotation_matrix</span><span class="p">[</span><span class="n">it_row</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+            <span class="n">rotation_matrix</span><span class="p">[</span><span class="n">it_row</span><span class="p">,</span> <span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
+            <span class="n">translation_vector</span><span class="p">[</span><span class="n">it_row</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+            <span class="k">if</span> <span class="n">it_row</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+                <span class="k">break</span>
+
+    <span class="k">if</span> <span class="n">full</span><span class="p">:</span>
+        <span class="n">affine_matrix</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">4</span><span class="p">,</span><span class="mi">4</span><span class="p">))</span>
+        <span class="n">affine_matrix</span><span class="p">[:</span><span class="mi">3</span><span class="p">,</span> <span class="p">:</span><span class="mi">3</span><span class="p">]</span> <span class="o">=</span> <span class="n">rotation_matrix</span>
+        <span class="n">affine_matrix</span><span class="p">[:</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">]</span> <span class="o">=</span> <span class="n">translation_vector</span>
+        <span class="n">affine_matrix</span><span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
+        <span class="k">return</span> <span class="n">affine_matrix</span>
+
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">rotation_matrix</span><span class="p">,</span> <span class="n">translation_vector</span></div>
+
+
+<div class="viewcode-block" id="load_array_if_path">
+<a class="viewcode-back" href="../../api/utils.html#utils.io_utils.load_array_if_path">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">load_array_if_path</span><span class="p">(</span><span class="n">var</span><span class="p">,</span> <span class="n">load_as_numpy</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Load a NumPy array from a file path, or pass through the value unchanged.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    var : str or any</span>
+<span class="sd">        If a string and ``load_as_numpy`` is ``True``, treated as a file path</span>
+<span class="sd">        and loaded with ``np.load``. Otherwise returned as-is.</span>
+<span class="sd">    load_as_numpy : bool, optional</span>
+<span class="sd">        Whether to attempt loading ``var`` as a NumPy file. Default is ``True``.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    np.ndarray or any</span>
+<span class="sd">        Loaded array, or the original ``var`` if no loading was performed.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="p">(</span><span class="nb">isinstance</span><span class="p">(</span><span class="n">var</span><span class="p">,</span> <span class="nb">str</span><span class="p">))</span> <span class="o">&amp;</span> <span class="n">load_as_numpy</span><span class="p">:</span>
+        <span class="k">assert</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isfile</span><span class="p">(</span><span class="n">var</span><span class="p">),</span> <span class="s1">&#39;No such path: </span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">var</span>
+        <span class="n">var</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">var</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">var</span></div>
+
+
+<div class="viewcode-block" id="get_dims">
+<a class="viewcode-back" href="../../api/utils.html#utils.io_utils.get_dims">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">get_dims</span><span class="p">(</span><span class="n">shape</span><span class="p">,</span> <span class="n">max_channels</span><span class="o">=</span><span class="mi">10</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Infer the number of spatial dimensions and channels from an array shape.</span>
+
+<span class="sd">    If the last dimension is ≤ ``max_channels`` it is interpreted as a channel</span>
+<span class="sd">    axis; otherwise the array is treated as purely spatial with one channel.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    shape : sequence of int</span>
+<span class="sd">        Shape of the array (e.g. ``volume.shape``).</span>
+<span class="sd">    max_channels : int, optional</span>
+<span class="sd">        Maximum value of the last dimension that is still considered a channel</span>
+<span class="sd">        axis. Default is 10.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    n_dims : int</span>
+<span class="sd">        Number of spatial dimensions.</span>
+<span class="sd">    n_channels : int</span>
+<span class="sd">        Number of channels.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; get_dims([150, 150, 150], max_channels=10)</span>
+<span class="sd">    (3, 1)</span>
+<span class="sd">    &gt;&gt;&gt; get_dims([150, 150, 150, 3], max_channels=10)</span>
+<span class="sd">    (3, 3)</span>
+<span class="sd">    &gt;&gt;&gt; get_dims([150, 150, 150, 15], max_channels=10)</span>
+<span class="sd">    (4, 1)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">&lt;=</span> <span class="n">max_channels</span><span class="p">:</span>
+        <span class="n">n_dims</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">shape</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span>
+        <span class="n">n_channels</span> <span class="o">=</span> <span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">n_dims</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">shape</span><span class="p">)</span>
+        <span class="n">n_channels</span> <span class="o">=</span> <span class="mi">1</span>
+    <span class="k">return</span> <span class="n">n_dims</span><span class="p">,</span> <span class="n">n_channels</span></div>
+
+
+<div class="viewcode-block" id="get_ras_axes">
+<a class="viewcode-back" href="../../api/utils.html#utils.io_utils.get_ras_axes">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">get_ras_axes</span><span class="p">(</span><span class="n">aff</span><span class="p">,</span> <span class="n">n_dims</span><span class="o">=</span><span class="mi">3</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Find which voxel axis corresponds to each RAS axis from an affine matrix.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    aff : np.ndarray</span>
+<span class="sd">        Affine matrix. Accepted shapes: ``(n_dims, n_dims)``,</span>
+<span class="sd">        ``(n_dims+1, n_dims+1)``, or ``(n_dims, n_dims+1)``.</span>
+<span class="sd">    n_dims : int, optional</span>
+<span class="sd">        Number of spatial dimensions. Default is 3.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    np.ndarray</span>
+<span class="sd">        1D array of length ``n_dims`` mapping each RAS axis (R=0, A=1, S=2)</span>
+<span class="sd">        to the corresponding voxel axis index.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">aff_inverted</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">inv</span><span class="p">(</span><span class="n">aff</span><span class="p">)</span>
+    <span class="n">img_ras_axes</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">absolute</span><span class="p">(</span><span class="n">aff_inverted</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="n">n_dims</span><span class="p">,</span> <span class="mi">0</span><span class="p">:</span><span class="n">n_dims</span><span class="p">]),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_dims</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">i</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">img_ras_axes</span><span class="p">:</span>
+            <span class="n">unique</span><span class="p">,</span> <span class="n">counts</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">img_ras_axes</span><span class="p">,</span> <span class="n">return_counts</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="n">incorrect_value</span> <span class="o">=</span> <span class="n">unique</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">counts</span><span class="p">)]</span>
+            <span class="n">img_ras_axes</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">img_ras_axes</span> <span class="o">==</span> <span class="n">incorrect_value</span><span class="p">)[</span><span class="mi">0</span><span class="p">][</span><span class="o">-</span><span class="mi">1</span><span class="p">]]</span> <span class="o">=</span> <span class="n">i</span>
+
+    <span class="k">return</span> <span class="n">img_ras_axes</span></div>
+
+
+<div class="viewcode-block" id="align_volume_to_ref">
+<a class="viewcode-back" href="../../api/utils.html#utils.io_utils.align_volume_to_ref">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">align_volume_to_ref</span><span class="p">(</span><span class="n">volume</span><span class="p">,</span> <span class="n">aff</span><span class="p">,</span> <span class="n">aff_ref</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">return_aff</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">n_dims</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">return_copy</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Align a volume to the axis orientation and flip direction of a reference affine.</span>
+
+<span class="sd">    Swaps and flips axes of ``volume`` so that its orientation matches</span>
+<span class="sd">    ``aff_ref``, updating the affine accordingly.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    volume : np.ndarray</span>
+<span class="sd">        Floating volume to reorient.</span>
+<span class="sd">    aff : np.ndarray</span>
+<span class="sd">        Affine matrix of the floating volume, shape ``(4, 4)``.</span>
+<span class="sd">    aff_ref : np.ndarray, optional</span>
+<span class="sd">        Target orientation affine. Defaults to ``np.eye(4)`` (identity /</span>
+<span class="sd">        RAS-aligned).</span>
+<span class="sd">    return_aff : bool, optional</span>
+<span class="sd">        If ``True``, also return the updated affine matrix. Default is</span>
+<span class="sd">        ``False``.</span>
+<span class="sd">    n_dims : int, optional</span>
+<span class="sd">        Number of spatial dimensions. Inferred from ``volume.shape`` when</span>
+<span class="sd">        ``None``.</span>
+<span class="sd">    return_copy : bool, optional</span>
+<span class="sd">        If ``True``, operate on a copy of the volume. Default is ``True``.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    new_volume : np.ndarray</span>
+<span class="sd">        Reoriented volume.</span>
+<span class="sd">    aff_flo : np.ndarray</span>
+<span class="sd">        Updated affine, shape ``(4, 4)``. Only returned when</span>
+<span class="sd">        ``return_aff=True``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="c1"># work on copy</span>
+    <span class="n">new_volume</span> <span class="o">=</span> <span class="n">volume</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span> <span class="k">if</span> <span class="n">return_copy</span> <span class="k">else</span> <span class="n">volume</span>
+    <span class="n">aff_flo</span> <span class="o">=</span> <span class="n">aff</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+    <span class="c1"># default value for aff_ref</span>
+    <span class="k">if</span> <span class="n">aff_ref</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">aff_ref</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">4</span><span class="p">)</span>
+
+    <span class="c1"># extract ras axes</span>
+    <span class="k">if</span> <span class="n">n_dims</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">n_dims</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">get_dims</span><span class="p">(</span><span class="n">new_volume</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+    <span class="n">ras_axes_ref</span> <span class="o">=</span> <span class="n">get_ras_axes</span><span class="p">(</span><span class="n">aff_ref</span><span class="p">,</span> <span class="n">n_dims</span><span class="o">=</span><span class="n">n_dims</span><span class="p">)</span>
+    <span class="n">ras_axes_flo</span> <span class="o">=</span> <span class="n">get_ras_axes</span><span class="p">(</span><span class="n">aff_flo</span><span class="p">,</span> <span class="n">n_dims</span><span class="o">=</span><span class="n">n_dims</span><span class="p">)</span>
+
+    <span class="c1"># align axes</span>
+    <span class="n">aff_flo</span><span class="p">[:,</span> <span class="n">ras_axes_ref</span><span class="p">]</span> <span class="o">=</span> <span class="n">aff_flo</span><span class="p">[:,</span> <span class="n">ras_axes_flo</span><span class="p">]</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_dims</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">ras_axes_flo</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">!=</span> <span class="n">ras_axes_ref</span><span class="p">[</span><span class="n">i</span><span class="p">]:</span>
+            <span class="n">new_volume</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">swapaxes</span><span class="p">(</span><span class="n">new_volume</span><span class="p">,</span> <span class="n">ras_axes_flo</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">ras_axes_ref</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
+            <span class="n">swapped_axis_idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">ras_axes_flo</span> <span class="o">==</span> <span class="n">ras_axes_ref</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
+            <span class="n">ras_axes_flo</span><span class="p">[</span><span class="n">swapped_axis_idx</span><span class="p">],</span> <span class="n">ras_axes_flo</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">ras_axes_flo</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">ras_axes_flo</span><span class="p">[</span><span class="n">swapped_axis_idx</span><span class="p">]</span>
+
+    <span class="c1"># align directions</span>
+    <span class="n">dot_products</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">aff_flo</span><span class="p">[:</span><span class="mi">3</span><span class="p">,</span> <span class="p">:</span><span class="mi">3</span><span class="p">]</span> <span class="o">*</span> <span class="n">aff_ref</span><span class="p">[:</span><span class="mi">3</span><span class="p">,</span> <span class="p">:</span><span class="mi">3</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_dims</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">dot_products</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">new_volume</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">flip</span><span class="p">(</span><span class="n">new_volume</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="n">i</span><span class="p">)</span>
+            <span class="n">aff_flo</span><span class="p">[:,</span> <span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="o">-</span> <span class="n">aff_flo</span><span class="p">[:,</span> <span class="n">i</span><span class="p">]</span>
+            <span class="n">aff_flo</span><span class="p">[:</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">]</span> <span class="o">=</span> <span class="n">aff_flo</span><span class="p">[:</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">]</span> <span class="o">-</span> <span class="n">aff_flo</span><span class="p">[:</span><span class="mi">3</span><span class="p">,</span> <span class="n">i</span><span class="p">]</span> <span class="o">*</span> <span class="p">(</span><span class="n">new_volume</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">return_aff</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">new_volume</span><span class="p">,</span> <span class="n">aff_flo</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">new_volume</span></div>
+
+
+<div class="viewcode-block" id="reformat_to_list">
+<a class="viewcode-back" href="../../api/utils.html#utils.io_utils.reformat_to_list">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">reformat_to_list</span><span class="p">(</span><span class="n">var</span><span class="p">,</span> <span class="n">length</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">load_as_numpy</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Reformat a scalar, tuple, array, or string into a typed list of given length.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    var : str, int, float, bool, list, tuple, or np.ndarray</span>
+<span class="sd">        Value to reformat. ``None`` is returned unchanged.</span>
+<span class="sd">    length : int, optional</span>
+<span class="sd">        Desired list length. If ``var`` has a single element it is replicated;</span>
+<span class="sd">        otherwise ``var`` must already have this length.</span>
+<span class="sd">    load_as_numpy : bool, optional</span>
+<span class="sd">        If ``True`` and ``var`` is a string, load it as a NumPy array first.</span>
+<span class="sd">        Default is ``False``.</span>
+<span class="sd">    dtype : {&#39;int&#39;, &#39;float&#39;, &#39;bool&#39;, &#39;str&#39;}, optional</span>
+<span class="sd">        Convert every list element to this type after reformatting.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    list or None</span>
+<span class="sd">        Reformatted list, or ``None`` if ``var`` is ``None``.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If ``var`` is a list/array of length ≠ 1 and ≠ ``length``.</span>
+<span class="sd">    TypeError</span>
+<span class="sd">        If ``var`` cannot be converted to a list.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="c1"># convert to list</span>
+    <span class="k">if</span> <span class="n">var</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="n">var</span> <span class="o">=</span> <span class="n">load_array_if_path</span><span class="p">(</span><span class="n">var</span><span class="p">,</span> <span class="n">load_as_numpy</span><span class="o">=</span><span class="n">load_as_numpy</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">var</span><span class="p">,</span> <span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">int</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">float</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)):</span>
+        <span class="n">var</span> <span class="o">=</span> <span class="p">[</span><span class="n">var</span><span class="p">]</span>
+    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">var</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">):</span>
+        <span class="n">var</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">var</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">var</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">var</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="p">(</span><span class="mi">1</span><span class="p">,):</span>
+            <span class="n">var</span> <span class="o">=</span> <span class="p">[</span><span class="n">var</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">var</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="n">var</span><span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">var</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="n">var</span> <span class="o">=</span> <span class="p">[</span><span class="n">var</span><span class="p">]</span>
+    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">var</span><span class="p">,</span> <span class="nb">bool</span><span class="p">):</span>
+        <span class="n">var</span> <span class="o">=</span> <span class="p">[</span><span class="n">var</span><span class="p">]</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">var</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">length</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">var</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="n">var</span> <span class="o">=</span> <span class="n">var</span> <span class="o">*</span> <span class="n">length</span>
+            <span class="k">elif</span> <span class="nb">len</span><span class="p">(</span><span class="n">var</span><span class="p">)</span> <span class="o">!=</span> <span class="n">length</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;if var is a list/tuple/numpy array, it should be of length 1 or </span><span class="si">{0}</span><span class="s1">, &#39;</span>
+                                 <span class="s1">&#39;had </span><span class="si">{1}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">length</span><span class="p">,</span> <span class="n">var</span><span class="p">))</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s1">&#39;var should be an int, float, tuple, list, numpy array, or path to numpy array&#39;</span><span class="p">)</span>
+
+    <span class="c1"># convert items type</span>
+    <span class="k">if</span> <span class="n">dtype</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">dtype</span> <span class="o">==</span> <span class="s1">&#39;int&#39;</span><span class="p">:</span>
+            <span class="n">var</span> <span class="o">=</span> <span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">var</span><span class="p">]</span>
+        <span class="k">elif</span> <span class="n">dtype</span> <span class="o">==</span> <span class="s1">&#39;float&#39;</span><span class="p">:</span>
+            <span class="n">var</span> <span class="o">=</span> <span class="p">[</span><span class="nb">float</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">var</span><span class="p">]</span>
+        <span class="k">elif</span> <span class="n">dtype</span> <span class="o">==</span> <span class="s1">&#39;bool&#39;</span><span class="p">:</span>
+            <span class="n">var</span> <span class="o">=</span> <span class="p">[</span><span class="nb">bool</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">var</span><span class="p">]</span>
+        <span class="k">elif</span> <span class="n">dtype</span> <span class="o">==</span> <span class="s1">&#39;str&#39;</span><span class="p">:</span>
+            <span class="n">var</span> <span class="o">=</span> <span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">var</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;dtype should be &#39;str&#39;, &#39;float&#39;, &#39;int&#39;, or &#39;bool&#39;; had </span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">dtype</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">var</span></div>
+
+
+<div class="viewcode-block" id="load_volume">
+<a class="viewcode-back" href="../../api/utils.html#utils.io_utils.load_volume">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">load_volume</span><span class="p">(</span><span class="n">path_volume</span><span class="p">,</span> <span class="n">im_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">squeeze</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">aff_ref</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Load a medical image volume from disk.</span>
+
+<span class="sd">    Supported formats: ``.nii``, ``.nii.gz``, ``.mgz``, ``.npz``.</span>
+<span class="sd">    For ``.npz`` files the array must be stored under the key</span>
+<span class="sd">    ``&#39;vol_data&#39;``; the affine defaults to identity and the header is blank.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    path_volume : str</span>
+<span class="sd">        Path to the image file.</span>
+<span class="sd">    im_only : bool, optional</span>
+<span class="sd">        If ``True`` (default), return only the volume array. If ``False``,</span>
+<span class="sd">        also return the affine matrix and header.</span>
+<span class="sd">    squeeze : bool, optional</span>
+<span class="sd">        Whether to squeeze singleton dimensions. Default is ``True``.</span>
+<span class="sd">    dtype : str, optional</span>
+<span class="sd">        NumPy dtype to cast the volume to after loading (e.g. ``&#39;float32&#39;``).</span>
+<span class="sd">        Integer dtypes trigger rounding before casting.</span>
+<span class="sd">    aff_ref : np.ndarray, optional</span>
+<span class="sd">        If provided, align the volume to this 4×4 affine matrix before</span>
+<span class="sd">        returning.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    volume : np.ndarray</span>
+<span class="sd">        Image data array.</span>
+<span class="sd">    aff : np.ndarray</span>
+<span class="sd">        Affine matrix, shape ``(4, 4)``. Only returned when</span>
+<span class="sd">        ``im_only=False``.</span>
+<span class="sd">    header : nibabel header</span>
+<span class="sd">        Image header. Only returned when ``im_only=False``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">assert</span> <span class="n">path_volume</span><span class="o">.</span><span class="n">endswith</span><span class="p">((</span><span class="s1">&#39;.nii&#39;</span><span class="p">,</span> <span class="s1">&#39;.nii.gz&#39;</span><span class="p">,</span> <span class="s1">&#39;.mgz&#39;</span><span class="p">,</span> <span class="s1">&#39;.npz&#39;</span><span class="p">)),</span> <span class="s1">&#39;Unknown data file: </span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">path_volume</span>
+
+    <span class="k">if</span> <span class="n">path_volume</span><span class="o">.</span><span class="n">endswith</span><span class="p">((</span><span class="s1">&#39;.nii&#39;</span><span class="p">,</span> <span class="s1">&#39;.nii.gz&#39;</span><span class="p">,</span> <span class="s1">&#39;.mgz&#39;</span><span class="p">)):</span>
+        <span class="n">x</span> <span class="o">=</span> <span class="n">nib</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">path_volume</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">squeeze</span><span class="p">:</span>
+            <span class="n">volume</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="n">x</span><span class="o">.</span><span class="n">get_fdata</span><span class="p">())</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">volume</span> <span class="o">=</span> <span class="n">x</span><span class="o">.</span><span class="n">get_fdata</span><span class="p">()</span>
+        <span class="n">aff</span> <span class="o">=</span> <span class="n">x</span><span class="o">.</span><span class="n">affine</span>
+        <span class="n">header</span> <span class="o">=</span> <span class="n">x</span><span class="o">.</span><span class="n">header</span>
+    <span class="k">else</span><span class="p">:</span>  <span class="c1"># npz</span>
+        <span class="n">volume</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">path_volume</span><span class="p">)[</span><span class="s1">&#39;vol_data&#39;</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">squeeze</span><span class="p">:</span>
+            <span class="n">volume</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="n">volume</span><span class="p">)</span>
+        <span class="n">aff</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">4</span><span class="p">)</span>
+        <span class="n">header</span> <span class="o">=</span> <span class="n">nib</span><span class="o">.</span><span class="n">Nifti1Header</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">dtype</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="s1">&#39;int&#39;</span> <span class="ow">in</span> <span class="n">dtype</span><span class="p">:</span>
+            <span class="n">volume</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="n">volume</span><span class="p">)</span>
+        <span class="n">volume</span> <span class="o">=</span> <span class="n">volume</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">)</span>
+
+    <span class="c1"># align image to reference affine matrix</span>
+    <span class="k">if</span> <span class="n">aff_ref</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">n_dims</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">get_dims</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">volume</span><span class="o">.</span><span class="n">shape</span><span class="p">),</span> <span class="n">max_channels</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+        <span class="n">volume</span><span class="p">,</span> <span class="n">aff</span> <span class="o">=</span> <span class="n">align_volume_to_ref</span><span class="p">(</span><span class="n">volume</span><span class="p">,</span> <span class="n">aff</span><span class="p">,</span> <span class="n">aff_ref</span><span class="o">=</span><span class="n">aff_ref</span><span class="p">,</span> <span class="n">return_aff</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">n_dims</span><span class="o">=</span><span class="n">n_dims</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">im_only</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">volume</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">volume</span><span class="p">,</span> <span class="n">aff</span><span class="p">,</span> <span class="n">header</span></div>
+
+
+<div class="viewcode-block" id="save_volume">
+<a class="viewcode-back" href="../../api/utils.html#utils.io_utils.save_volume">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">save_volume</span><span class="p">(</span><span class="n">volume</span><span class="p">,</span> <span class="n">aff</span><span class="p">,</span> <span class="n">header</span><span class="p">,</span> <span class="n">path</span><span class="p">,</span> <span class="n">res</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">n_dims</span><span class="o">=</span><span class="mi">3</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Save a volume array to disk as a NIfTI or NPZ file.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    volume : np.ndarray</span>
+<span class="sd">        Image data to save.</span>
+<span class="sd">    aff : np.ndarray or str or None</span>
+<span class="sd">        Voxel-to-RAS affine matrix, shape ``(4, 4)``. Pass ``&#39;FS&#39;`` to use</span>
+<span class="sd">        the standard FreeSurfer output affine, or ``None`` for identity.</span>
+<span class="sd">    header : nibabel header or None</span>
+<span class="sd">        Image header. A blank ``Nifti1Header`` is used when ``None``.</span>
+<span class="sd">    path : str</span>
+<span class="sd">        Output file path (``.nii``, ``.nii.gz``, or ``.npz``).</span>
+<span class="sd">    res : float or array-like of float, optional</span>
+<span class="sd">        If provided, update the voxel sizes in the header before saving.</span>
+<span class="sd">    dtype : str, optional</span>
+<span class="sd">        NumPy dtype for the saved data. Integer dtypes trigger rounding.</span>
+<span class="sd">    n_dims : int, optional</span>
+<span class="sd">        Number of spatial dimensions, used to interpret ``res``. Default is 3.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">exists</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">dirname</span><span class="p">(</span><span class="n">path</span><span class="p">)):</span> <span class="n">makedirs</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">dirname</span><span class="p">(</span><span class="n">path</span><span class="p">))</span>
+    <span class="k">if</span> <span class="s1">&#39;.npz&#39;</span> <span class="ow">in</span> <span class="n">path</span><span class="p">:</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">savez_compressed</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">vol_data</span><span class="o">=</span><span class="n">volume</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">header</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">header</span> <span class="o">=</span> <span class="n">nib</span><span class="o">.</span><span class="n">Nifti1Header</span><span class="p">()</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">aff</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">aff</span> <span class="o">==</span> <span class="s1">&#39;FS&#39;</span><span class="p">:</span>
+                <span class="n">aff</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]])</span>
+        <span class="k">elif</span> <span class="n">aff</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">aff</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">4</span><span class="p">)</span>
+        <span class="n">nifty</span> <span class="o">=</span> <span class="n">nib</span><span class="o">.</span><span class="n">Nifti1Image</span><span class="p">(</span><span class="n">volume</span><span class="p">,</span> <span class="n">aff</span><span class="p">,</span> <span class="n">header</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">dtype</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="s1">&#39;int&#39;</span> <span class="ow">in</span> <span class="n">dtype</span><span class="p">:</span>
+                <span class="n">volume</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="n">volume</span><span class="p">)</span>
+            <span class="n">volume</span> <span class="o">=</span> <span class="n">volume</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">)</span>
+            <span class="n">nifty</span><span class="o">.</span><span class="n">set_data_dtype</span><span class="p">(</span><span class="n">dtype</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">res</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">n_dims</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">n_dims</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">get_dims</span><span class="p">(</span><span class="n">volume</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+            <span class="n">res</span> <span class="o">=</span> <span class="n">reformat_to_list</span><span class="p">(</span><span class="n">res</span><span class="p">,</span> <span class="n">length</span><span class="o">=</span><span class="n">n_dims</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+            <span class="n">nifty</span><span class="o">.</span><span class="n">header</span><span class="o">.</span><span class="n">set_zooms</span><span class="p">(</span><span class="n">res</span><span class="p">)</span>
+        <span class="n">nib</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">nifty</span><span class="p">,</span> <span class="n">path</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="get_volume_info">
+<a class="viewcode-back" href="../../api/utils.html#utils.io_utils.get_volume_info">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">get_volume_info</span><span class="p">(</span><span class="n">path_volume</span><span class="p">,</span> <span class="n">return_volume</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">aff_ref</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">max_channels</span><span class="o">=</span><span class="mi">10</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Gather metadata about a volume without necessarily returning the data.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    path_volume : str</span>
+<span class="sd">        Path to the image file.</span>
+<span class="sd">    return_volume : bool, optional</span>
+<span class="sd">        If ``True``, include the loaded array in the return tuple. Default is</span>
+<span class="sd">        ``False``.</span>
+<span class="sd">    aff_ref : np.ndarray, optional</span>
+<span class="sd">        If provided, align the volume and recompute shape / resolution in this</span>
+<span class="sd">        4×4 reference space before returning.</span>
+<span class="sd">    max_channels : int, optional</span>
+<span class="sd">        Passed to :func:`get_dims` to determine the channel threshold.</span>
+<span class="sd">        Default is 10.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    volume : np.ndarray</span>
+<span class="sd">        Image data. Only included when ``return_volume=True``.</span>
+<span class="sd">    im_shape : list of int</span>
+<span class="sd">        Spatial shape (without channel dimension).</span>
+<span class="sd">    aff : np.ndarray</span>
+<span class="sd">        Original affine matrix, shape ``(4, 4)``.</span>
+<span class="sd">    n_dims : int</span>
+<span class="sd">        Number of spatial dimensions.</span>
+<span class="sd">    n_channels : int</span>
+<span class="sd">        Number of image channels.</span>
+<span class="sd">    header : nibabel header</span>
+<span class="sd">        Image header.</span>
+<span class="sd">    data_res : np.ndarray</span>
+<span class="sd">        Voxel sizes in mm, length ``n_dims``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># read image</span>
+    <span class="n">im</span><span class="p">,</span> <span class="n">aff</span><span class="p">,</span> <span class="n">header</span> <span class="o">=</span> <span class="n">load_volume</span><span class="p">(</span><span class="n">path_volume</span><span class="p">,</span> <span class="n">im_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+    <span class="c1"># understand if image is multichannel</span>
+    <span class="n">im_shape</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">im</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+    <span class="n">n_dims</span><span class="p">,</span> <span class="n">n_channels</span> <span class="o">=</span> <span class="n">get_dims</span><span class="p">(</span><span class="n">im_shape</span><span class="p">,</span> <span class="n">max_channels</span><span class="o">=</span><span class="n">max_channels</span><span class="p">)</span>
+    <span class="n">im_shape</span> <span class="o">=</span> <span class="n">im_shape</span><span class="p">[:</span><span class="n">n_dims</span><span class="p">]</span>
+
+    <span class="c1"># get labels res</span>
+    <span class="k">if</span> <span class="s1">&#39;.nii&#39;</span> <span class="ow">in</span> <span class="n">path_volume</span><span class="p">:</span>
+        <span class="n">data_res</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">header</span><span class="p">[</span><span class="s1">&#39;pixdim&#39;</span><span class="p">][</span><span class="mi">1</span><span class="p">:</span><span class="n">n_dims</span> <span class="o">+</span> <span class="mi">1</span><span class="p">])</span>
+    <span class="k">elif</span> <span class="s1">&#39;.mgz&#39;</span> <span class="ow">in</span> <span class="n">path_volume</span><span class="p">:</span>
+        <span class="n">data_res</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">header</span><span class="p">[</span><span class="s1">&#39;delta&#39;</span><span class="p">])</span>  <span class="c1"># mgz image</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">data_res</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">1.0</span><span class="p">]</span> <span class="o">*</span> <span class="n">n_dims</span><span class="p">)</span>
+
+    <span class="c1"># align to given affine matrix</span>
+    <span class="k">if</span> <span class="n">aff_ref</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">ras_axes</span> <span class="o">=</span> <span class="n">get_ras_axes</span><span class="p">(</span><span class="n">aff</span><span class="p">,</span> <span class="n">n_dims</span><span class="o">=</span><span class="n">n_dims</span><span class="p">)</span>
+        <span class="n">ras_axes_ref</span> <span class="o">=</span> <span class="n">get_ras_axes</span><span class="p">(</span><span class="n">aff_ref</span><span class="p">,</span> <span class="n">n_dims</span><span class="o">=</span><span class="n">n_dims</span><span class="p">)</span>
+        <span class="n">im</span> <span class="o">=</span> <span class="n">align_volume_to_ref</span><span class="p">(</span><span class="n">im</span><span class="p">,</span> <span class="n">aff</span><span class="p">,</span> <span class="n">aff_ref</span><span class="o">=</span><span class="n">aff_ref</span><span class="p">,</span> <span class="n">n_dims</span><span class="o">=</span><span class="n">n_dims</span><span class="p">)</span>
+        <span class="n">im_shape</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">im_shape</span><span class="p">)</span>
+        <span class="n">data_res</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">data_res</span><span class="p">)</span>
+        <span class="n">im_shape</span><span class="p">[</span><span class="n">ras_axes_ref</span><span class="p">]</span> <span class="o">=</span> <span class="n">im_shape</span><span class="p">[</span><span class="n">ras_axes</span><span class="p">]</span>
+        <span class="n">data_res</span><span class="p">[</span><span class="n">ras_axes_ref</span><span class="p">]</span> <span class="o">=</span> <span class="n">data_res</span><span class="p">[</span><span class="n">ras_axes</span><span class="p">]</span>
+        <span class="n">im_shape</span> <span class="o">=</span> <span class="n">im_shape</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+
+    <span class="c1"># return info</span>
+    <span class="k">if</span> <span class="n">return_volume</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">im</span><span class="p">,</span> <span class="n">im_shape</span><span class="p">,</span> <span class="n">aff</span><span class="p">,</span> <span class="n">n_dims</span><span class="p">,</span> <span class="n">n_channels</span><span class="p">,</span> <span class="n">header</span><span class="p">,</span> <span class="n">data_res</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">im_shape</span><span class="p">,</span> <span class="n">aff</span><span class="p">,</span> <span class="n">n_dims</span><span class="p">,</span> <span class="n">n_channels</span><span class="p">,</span> <span class="n">header</span><span class="p">,</span> <span class="n">data_res</span></div>
+
+
+<div class="viewcode-block" id="get_run">
+<a class="viewcode-back" href="../../api/utils.html#utils.io_utils.get_run">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">get_run</span><span class="p">(</span><span class="n">file</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Extract the BIDS ``run`` index from a filename.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    file : str</span>
+<span class="sd">        BIDS filename (e.g. ``sub-001_ses-01_run-02_T1w.nii.gz``).</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    str</span>
+<span class="sd">        The run index string (e.g. ``&#39;02&#39;``), or ``&#39;&#39;`` if no run entity is</span>
+<span class="sd">        present.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">file</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;_&#39;</span><span class="p">):</span>
+        <span class="k">if</span> <span class="s1">&#39;run&#39;</span> <span class="ow">in</span> <span class="n">f</span><span class="p">:</span> <span class="k">return</span> <span class="n">f</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;-&#39;</span><span class="p">)[</span><span class="mi">1</span><span class="p">]</span>
+    <span class="k">return</span> <span class="s1">&#39;&#39;</span></div>
+
+
+<div class="viewcode-block" id="load_chunk">
+<a class="viewcode-back" href="../../api/utils.html#utils.io_utils.load_chunk">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">load_chunk</span><span class="p">(</span><span class="n">ps</span><span class="p">,</span> <span class="n">chunk</span><span class="p">,</span> <span class="n">ps_id</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Load a spatial sub-volume (chunk) from a NIfTI proxy and add a batch axis.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    ps : nibabel.Nifti1Image</span>
+<span class="sd">        Source image proxy.</span>
+<span class="sd">    chunk : list of [int, int]</span>
+<span class="sd">        Crop coordinates ``[[x0, x1], [y0, y1], [z0, z1]]``.</span>
+<span class="sd">    ps_id : any</span>
+<span class="sd">        Identifier passed through as the second return value (e.g. subject ID).</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    data : np.ndarray</span>
+<span class="sd">        Sub-volume with a leading batch dimension, shape ``(1, dx, dy, dz)``.</span>
+<span class="sd">    ps_id : any</span>
+<span class="sd">        The ``ps_id`` argument, unchanged.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">ps</span><span class="o">.</span><span class="n">dataobj</span><span class="p">[</span><span class="n">chunk</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">]:</span><span class="n">chunk</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">1</span><span class="p">],</span> <span class="n">chunk</span><span class="p">[</span><span class="mi">1</span><span class="p">][</span><span class="mi">0</span><span class="p">]:</span><span class="n">chunk</span><span class="p">[</span><span class="mi">1</span><span class="p">][</span><span class="mi">1</span><span class="p">],</span> <span class="n">chunk</span><span class="p">[</span><span class="mi">2</span><span class="p">][</span><span class="mi">0</span><span class="p">]:</span><span class="n">chunk</span><span class="p">[</span><span class="mi">2</span><span class="p">][</span><span class="mi">1</span><span class="p">]])[</span><span class="n">np</span><span class="o">.</span><span class="n">newaxis</span><span class="p">],</span> <span class="n">ps_id</span></div>
+
+
+<div class="viewcode-block" id="load_chunk_rescale">
+<a class="viewcode-back" href="../../api/utils.html#utils.io_utils.load_chunk_rescale">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">load_chunk_rescale</span><span class="p">(</span><span class="n">ps</span><span class="p">,</span> <span class="n">chunk</span><span class="p">,</span> <span class="n">ps_id</span><span class="p">,</span> <span class="n">factor</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Load and spatially rescale a NIfTI volume, then return a chunk.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    ps : nibabel.Nifti1Image</span>
+<span class="sd">        Source image proxy.</span>
+<span class="sd">    chunk : list of [int, int]</span>
+<span class="sd">        Crop coordinates ``[[x0, x1], [y0, y1], [z0, z1]]`` applied after</span>
+<span class="sd">        rescaling.</span>
+<span class="sd">    ps_id : any</span>
+<span class="sd">        Identifier passed through as the second return value.</span>
+<span class="sd">    factor : float</span>
+<span class="sd">        Isotropic rescaling factor applied to the first three dimensions.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    data : np.ndarray</span>
+<span class="sd">        Rescaled and cropped sub-volume with a leading batch dimension,</span>
+<span class="sd">        shape ``(1, dx, dy, dz)``.</span>
+<span class="sd">    ps_id : any</span>
+<span class="sd">        The ``ps_id`` argument, unchanged.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">svf</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">ps</span><span class="o">.</span><span class="n">dataobj</span><span class="p">)</span>
+    <span class="n">svf</span> <span class="o">=</span> <span class="n">rescale</span><span class="p">(</span><span class="n">svf</span><span class="p">,</span> <span class="p">[</span><span class="n">factor</span><span class="p">]</span><span class="o">*</span><span class="mi">3</span>  <span class="o">+</span> <span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+    <span class="k">return</span> <span class="n">svf</span><span class="p">[</span><span class="n">chunk</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">]:</span><span class="n">chunk</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">1</span><span class="p">],</span> <span class="n">chunk</span><span class="p">[</span><span class="mi">1</span><span class="p">][</span><span class="mi">0</span><span class="p">]:</span><span class="n">chunk</span><span class="p">[</span><span class="mi">1</span><span class="p">][</span><span class="mi">1</span><span class="p">],</span> <span class="n">chunk</span><span class="p">[</span><span class="mi">2</span><span class="p">][</span><span class="mi">0</span><span class="p">]:</span><span class="n">chunk</span><span class="p">[</span><span class="mi">2</span><span class="p">][</span><span class="mi">1</span><span class="p">]][</span><span class="n">np</span><span class="o">.</span><span class="n">newaxis</span><span class="p">],</span> <span class="n">ps_id</span></div>
+
+
+<div class="viewcode-block" id="get_age">
+<a class="viewcode-back" href="../../api/utils.html#utils.io_utils.get_age">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">get_age</span><span class="p">(</span><span class="n">age</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Parse an age value to float, returning ``None`` for missing values.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    age : str or float</span>
+<span class="sd">        Age value, possibly ``&#39;nan&#39;`` or a non-numeric string.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    float or None</span>
+<span class="sd">        Parsed age, or ``None`` if parsing fails or the value is ``&#39;nan&#39;``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">age</span> <span class="o">==</span> <span class="s1">&#39;nan&#39;</span><span class="p">:</span> <span class="n">age</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">age</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">age</span><span class="p">)</span>
+    <span class="k">except</span><span class="p">:</span>
+        <span class="n">age</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">return</span> <span class="n">age</span></div>
+
+
+<div class="viewcode-block" id="get_dx_bl">
+<a class="viewcode-back" href="../../api/utils.html#utils.io_utils.get_dx_bl">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">get_dx_bl</span><span class="p">(</span><span class="n">subject</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Extract the baseline diagnosis code from a subject object.</span>
+
+<span class="sd">    Looks up ``&#39;dx&#39;`` then ``&#39;diagnosis&#39;`` in the subject dictionary, and</span>
+<span class="sd">    falls back to deriving the longitudinal diagnosis from session metadata.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    subject : object</span>
+<span class="sd">        Subject object with attributes ``sbj_dict`` (dict) and ``sessions``</span>
+<span class="sd">        (list of session objects with ``sess_metadata`` dicts).</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    int</span>
+<span class="sd">        Diagnosis code as defined in :data:`DX_DICT`.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="s1">&#39;dx&#39;</span> <span class="ow">in</span> <span class="n">subject</span><span class="o">.</span><span class="n">sbj_dict</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+        <span class="n">dx</span> <span class="o">=</span> <span class="n">subject</span><span class="o">.</span><span class="n">sbj_dict</span><span class="p">[</span><span class="s1">&#39;dx&#39;</span><span class="p">]</span>
+    <span class="k">elif</span> <span class="s1">&#39;diagnosis&#39;</span> <span class="ow">in</span> <span class="n">subject</span><span class="o">.</span><span class="n">sbj_dict</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+        <span class="n">dx</span> <span class="o">=</span> <span class="n">subject</span><span class="o">.</span><span class="n">sbj_dict</span><span class="p">[</span><span class="s1">&#39;diagnosis&#39;</span><span class="p">]</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">dx</span> <span class="o">=</span> <span class="n">DX_DICT</span><span class="p">[</span><span class="n">get_dx_long</span><span class="p">([</span><span class="n">tp</span><span class="o">.</span><span class="n">sess_metadata</span><span class="p">[</span><span class="s1">&#39;dx&#39;</span><span class="p">]</span> <span class="k">if</span> <span class="s1">&#39;dx&#39;</span> <span class="ow">in</span> <span class="n">tp</span><span class="o">.</span><span class="n">sess_metadata</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span> <span class="k">else</span> <span class="s1">&#39;&#39;</span> <span class="k">for</span> <span class="n">tp</span> <span class="ow">in</span> <span class="n">subject</span><span class="o">.</span><span class="n">sessions</span><span class="p">])]</span>
+
+    <span class="k">return</span> <span class="n">dx</span></div>
+
+
+<div class="viewcode-block" id="get_dx">
+<a class="viewcode-back" href="../../api/utils.html#utils.io_utils.get_dx">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">get_dx</span><span class="p">(</span><span class="n">dx</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Map a diagnosis string to an integer code.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    dx : str</span>
+<span class="sd">        Diagnosis label. Recognised values include ``&#39;&#39;``, ``&#39;-1&#39;``,</span>
+<span class="sd">        ``&#39;CN&#39;``, ``&#39;Control&#39;``, ``&#39;CTR&#39;``, ``&#39;MCI&#39;``, ``&#39;Dementia&#39;``,</span>
+<span class="sd">        ``&#39;AD&#39;``, ``&#39;FTD&#39;``, ``&#39;DFT&#39;``, and ``&#39;PortadorGENFI&#39;``.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    int</span>
+<span class="sd">        Integer code: ``-1`` unknown, ``0`` CN, ``1`` MCI, ``2`` AD/Dementia,</span>
+<span class="sd">        ``3`` FTD, ``4`` GENFI carrier.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">dx</span> <span class="o">==</span> <span class="s1">&#39;&#39;</span><span class="p">:</span>
+        <span class="n">dx</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
+    <span class="k">elif</span> <span class="n">dx</span> <span class="o">==</span> <span class="s1">&#39;-1&#39;</span><span class="p">:</span>
+        <span class="n">dx</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
+    <span class="k">elif</span> <span class="n">dx</span> <span class="ow">in</span> <span class="p">[</span><span class="s1">&#39;CN&#39;</span><span class="p">,</span> <span class="s1">&#39;Control&#39;</span><span class="p">,</span> <span class="s1">&#39;CTR&#39;</span><span class="p">]:</span>
+        <span class="n">dx</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="k">elif</span> <span class="n">dx</span> <span class="o">==</span> <span class="s1">&#39;MCI&#39;</span><span class="p">:</span>
+        <span class="n">dx</span> <span class="o">=</span> <span class="mi">1</span>
+    <span class="k">elif</span> <span class="n">dx</span> <span class="ow">in</span> <span class="p">[</span><span class="s1">&#39;Dementia&#39;</span><span class="p">,</span> <span class="s1">&#39;AD&#39;</span><span class="p">]:</span>
+        <span class="n">dx</span> <span class="o">=</span> <span class="mi">2</span>
+    <span class="k">elif</span> <span class="n">dx</span> <span class="ow">in</span> <span class="p">[</span><span class="s1">&#39;FTD&#39;</span><span class="p">,</span> <span class="s1">&#39;DFT&#39;</span><span class="p">]:</span>
+        <span class="n">dx</span> <span class="o">=</span> <span class="mi">3</span>
+    <span class="k">elif</span> <span class="n">dx</span> <span class="ow">in</span> <span class="p">[</span><span class="s1">&#39;PortadorGENFI&#39;</span><span class="p">]:</span>
+        <span class="n">dx</span> <span class="o">=</span> <span class="mi">4</span>
+
+    <span class="k">return</span> <span class="n">dx</span></div>
+
+
+<div class="viewcode-block" id="get_dx_long">
+<a class="viewcode-back" href="../../api/utils.html#utils.io_utils.get_dx_long">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">get_dx_long</span><span class="p">(</span><span class="n">dx_list</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Derive a longitudinal diagnosis code from a list of cross-sectional diagnoses.</span>
+
+<span class="sd">    Combines baseline and last diagnosis to classify trajectories such as</span>
+<span class="sd">    CN-stable, CN-to-MCI converter, MCI-to-AD converter, etc.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    dx_list : list of str</span>
+<span class="sd">        Ordered list of cross-sectional diagnosis labels (one per visit),</span>
+<span class="sd">        as accepted by :func:`get_dx`.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    int</span>
+<span class="sd">        Longitudinal diagnosis code as defined in :data:`DX_DICT`.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">dx_list</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">get_dx</span><span class="p">(</span><span class="n">dx_list</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+
+    <span class="n">dx_bl</span> <span class="o">=</span> <span class="n">get_dx</span><span class="p">(</span><span class="n">dx_list</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+    <span class="n">dx_last</span> <span class="o">=</span> <span class="n">get_dx</span><span class="p">(</span><span class="n">dx_list</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+
+
+    <span class="k">if</span> <span class="n">dx_bl</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span> <span class="ow">or</span> <span class="n">dx_last</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">:</span>
+        <span class="n">dx_flag</span> <span class="o">=</span> <span class="p">[</span><span class="n">get_dx</span><span class="p">(</span><span class="n">d</span><span class="p">)</span> <span class="o">!=</span> <span class="o">-</span><span class="mi">1</span> <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">dx_list</span><span class="p">]</span>
+
+        <span class="k">if</span> <span class="nb">sum</span><span class="p">(</span><span class="n">dx_flag</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="o">-</span><span class="mi">1</span>
+
+        <span class="k">elif</span> <span class="nb">sum</span><span class="p">(</span><span class="n">dx_flag</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">idx</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">dx_flag</span><span class="p">)</span><span class="o">==</span><span class="mi">1</span><span class="p">)[</span><span class="mi">0</span><span class="p">])</span>
+            <span class="k">return</span> <span class="n">get_dx</span><span class="p">(</span><span class="n">dx_list</span><span class="p">[</span><span class="n">idx</span><span class="p">])</span>
+
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">dx_flag</span><span class="p">)</span><span class="o">==</span><span class="mi">1</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="n">idx_min</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">idx</span><span class="p">))</span>
+            <span class="n">idx_max</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">idx</span><span class="p">))</span>
+            <span class="n">dx_bl</span> <span class="o">=</span> <span class="n">get_dx</span><span class="p">(</span><span class="n">dx_list</span><span class="p">[</span><span class="n">idx_min</span><span class="p">])</span>
+            <span class="n">dx_last</span> <span class="o">=</span> <span class="n">get_dx</span><span class="p">(</span><span class="n">dx_list</span><span class="p">[</span><span class="n">idx_max</span><span class="p">])</span>
+
+    <span class="k">if</span> <span class="n">dx_bl</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">dx_last</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">dx</span> <span class="o">=</span> <span class="mi">3</span><span class="c1"># CN stable</span>
+        <span class="k">elif</span> <span class="n">dx_last</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">dx</span> <span class="o">=</span> <span class="mi">4</span><span class="c1"># CN-MCI converter</span>
+        <span class="k">elif</span> <span class="n">dx_last</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="n">dx</span> <span class="o">=</span> <span class="mi">5</span><span class="c1"># CN-AD converter</span>
+        <span class="k">elif</span> <span class="n">dx_last</span> <span class="o">==</span> <span class="mi">3</span><span class="p">:</span>
+            <span class="n">dx</span> <span class="o">=</span> <span class="mi">11</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">dx</span> <span class="o">=</span> <span class="mi">9</span>
+    <span class="k">elif</span> <span class="n">dx_bl</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">dx_last</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">dx</span> <span class="o">=</span> <span class="mi">6</span><span class="c1"># MCI_stable</span>
+        <span class="k">elif</span> <span class="n">dx_last</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="n">dx</span> <span class="o">=</span> <span class="mi">7</span><span class="c1"># MCI-AD converter</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">dx</span> <span class="o">=</span> <span class="mi">9</span>
+    <span class="k">elif</span> <span class="n">dx_bl</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">dx_last</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="n">dx</span> <span class="o">=</span> <span class="mi">8</span><span class="c1"># AD stable</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">dx</span> <span class="o">=</span> <span class="mi">9</span>
+    <span class="k">elif</span> <span class="n">dx_bl</span> <span class="o">==</span> <span class="mi">3</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">dx_last</span> <span class="o">==</span> <span class="mi">3</span><span class="p">:</span>
+            <span class="n">dx</span> <span class="o">=</span> <span class="mi">10</span><span class="c1"># AD stable</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">dx</span> <span class="o">=</span> <span class="mi">9</span>
+    <span class="k">elif</span> <span class="n">dx_bl</span> <span class="o">==</span> <span class="mi">4</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">dx_last</span> <span class="o">==</span> <span class="mi">4</span><span class="p">:</span>
+            <span class="n">dx</span> <span class="o">=</span> <span class="mi">12</span>  <span class="c1"># GENFI</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">dx</span> <span class="o">=</span> <span class="mi">9</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">dx</span> <span class="o">=</span> <span class="mi">9</span><span class="c1"># Reversed diagnosis</span>
+
+    <span class="k">return</span> <span class="n">dx</span></div>
+
+
+<span class="n">DX_DICT</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="o">-</span><span class="mi">1</span><span class="p">:</span> <span class="s1">&#39;Unknown&#39;</span><span class="p">,</span>
+    <span class="mi">0</span><span class="p">:</span> <span class="s1">&#39;CN_cross&#39;</span><span class="p">,</span>
+    <span class="mi">1</span><span class="p">:</span> <span class="s1">&#39;MCI_cross&#39;</span><span class="p">,</span>
+    <span class="mi">2</span><span class="p">:</span> <span class="s1">&#39;Dementia_cross&#39;</span><span class="p">,</span>
+    <span class="mi">3</span><span class="p">:</span> <span class="s1">&#39;CN_stable&#39;</span><span class="p">,</span>
+    <span class="mi">4</span><span class="p">:</span> <span class="s1">&#39;CN_MCI_converter&#39;</span><span class="p">,</span>
+    <span class="mi">5</span><span class="p">:</span> <span class="s1">&#39;CN_AD_converter&#39;</span><span class="p">,</span>
+    <span class="mi">6</span><span class="p">:</span> <span class="s1">&#39;MCI_stable&#39;</span><span class="p">,</span>
+    <span class="mi">7</span><span class="p">:</span> <span class="s1">&#39;MCI_AD_converter&#39;</span><span class="p">,</span>
+    <span class="mi">8</span><span class="p">:</span> <span class="s1">&#39;AD_stable&#39;</span><span class="p">,</span>
+    <span class="mi">9</span><span class="p">:</span> <span class="s1">&#39;Reversed_diagnosis/Unknown&#39;</span><span class="p">,</span>
+    <span class="mi">10</span><span class="p">:</span> <span class="s1">&#39;FTD_stable&#39;</span><span class="p">,</span>
+    <span class="mi">11</span><span class="p">:</span> <span class="s1">&#39;FTD_converter&#39;</span><span class="p">,</span>
+    <span class="mi">12</span><span class="p">:</span> <span class="s1">&#39;GENFI&#39;</span><span class="p">,</span>
+
+<span class="p">}</span>
+
+<div class="viewcode-block" id="read_FS_volumes">
+<a class="viewcode-back" href="../../api/utils.html#utils.io_utils.read_FS_volumes">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">read_FS_volumes</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="n">labs</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Parse regional volumes and eTIV from a FreeSurfer stats file.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    file : str</span>
+<span class="sd">        Path to a FreeSurfer ``aseg.stats`` (or similar) file.</span>
+<span class="sd">    labs : dict, optional</span>
+<span class="sd">        Reserved for future use. Currently unused.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    fs_vols : dict</span>
+<span class="sd">        Mapping of structure name → volume (mm³) as a ``float``.</span>
+<span class="sd">    etiv : float</span>
+<span class="sd">        Estimated total intra-cranial volume in mm³.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">etiv</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">fs_vols</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">start</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="s1">&#39;r&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">csvfile</span><span class="p">:</span>
+        <span class="n">csvreader</span> <span class="o">=</span> <span class="n">csv</span><span class="o">.</span><span class="n">reader</span><span class="p">(</span><span class="n">csvfile</span><span class="p">,</span> <span class="n">delimiter</span><span class="o">=</span><span class="s1">&#39; &#39;</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">csvreader</span><span class="p">:</span>
+            <span class="n">row_cool</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">filter</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span> <span class="o">!=</span> <span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="n">row</span><span class="p">))</span>
+            <span class="k">if</span> <span class="n">start</span> <span class="ow">is</span> <span class="kc">True</span><span class="p">:</span>
+                <span class="n">fs_vols</span><span class="p">[</span><span class="n">row_cool</span><span class="p">[</span><span class="mi">1</span><span class="p">]]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">row_cool</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+
+            <span class="k">if</span> <span class="s1">&#39;ColHeaders&#39;</span> <span class="ow">in</span> <span class="n">row_cool</span> <span class="ow">and</span> <span class="n">start</span> <span class="ow">is</span> <span class="kc">False</span><span class="p">:</span>
+                <span class="n">start</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="k">elif</span> <span class="s1">&#39;EstimatedTotalIntraCranialVol,&#39;</span> <span class="ow">in</span> <span class="n">row_cool</span><span class="p">:</span>
+                <span class="n">etiv</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">row_cool</span><span class="p">[</span><span class="o">-</span><span class="mi">2</span><span class="p">]</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;,&#39;</span><span class="p">)[</span><span class="mi">0</span><span class="p">])</span>
+
+    <span class="c1"># vols = {**{lab: float(fs_vols[lab_str]) for lab, lab_str in labs.items() if &#39;Thalamus&#39; not in lab_str},</span>
+    <span class="c1">#         **{lab: float(fs_vols[lab_str + &#39;-Proper&#39;]) for lab, lab_str in labs.items() if &#39;Thalamus&#39; in lab_str}}</span>
+
+    <span class="k">return</span> <span class="n">fs_vols</span><span class="p">,</span> <span class="n">etiv</span></div>
+
+
+<div class="viewcode-block" id="get_float_vol">
+<a class="viewcode-back" href="../../api/utils.html#utils.io_utils.get_float_vol">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">get_float_vol</span><span class="p">(</span><span class="n">v</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Safely cast a value to float, returning ``-4`` on failure.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    v : any</span>
+<span class="sd">        Value to cast.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    float</span>
+<span class="sd">        Parsed float, or ``-4.0`` if conversion raises an exception.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">v</span><span class="p">)</span>
+    <span class="k">except</span><span class="p">:</span>
+        <span class="k">return</span> <span class="o">-</span><span class="mi">4</span></div>
+
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Adrià Casamitjana, Agustín Cartaya Lathulerie, Clara Lisazo, Rachika E. Hamadache.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

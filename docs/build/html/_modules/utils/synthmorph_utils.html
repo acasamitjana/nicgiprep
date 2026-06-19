@@ -1,0 +1,321 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>utils.synthmorph_utils &mdash; nicgiprep  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../index.html" class="icon icon-home">
+            nicgiprep
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting Started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../getting_started/installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../getting_started/quickstart.html">Quickstart</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">API Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../api/pipelines.html">Pipelines</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../api/callbacks.html">Callbacks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../api/models.html">Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../api/utils.html">Utils</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">nicgiprep</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">utils.synthmorph_utils</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for utils.synthmorph_utils</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span><span class="w"> </span><span class="nn">pdb</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">tensorflow</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">tf</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">h5py</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">neurite</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">ne</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">voxelmorph</span><span class="w"> </span><span class="kn">import</span> <span class="n">layers</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">voxelmorph</span><span class="w"> </span><span class="kn">import</span> <span class="n">utils</span> <span class="k">as</span> <span class="n">vxm_utils</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">voxelmorph</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">vxm</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">nibabel</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">nib</span>
+
+<span class="n">SpatialTransformer</span> <span class="o">=</span> <span class="n">layers</span><span class="o">.</span><span class="n">SpatialTransformer</span>
+<span class="n">compose_transforms</span> <span class="o">=</span> <span class="n">vxm_utils</span><span class="o">.</span><span class="n">compose</span>
+<span class="n">constant_layer</span> <span class="o">=</span> <span class="n">ne</span><span class="o">.</span><span class="n">layers</span><span class="o">.</span><span class="n">Constant</span>
+
+
+<div class="viewcode-block" id="load_weights">
+<a class="viewcode-back" href="../../api/utils.html#utils.synthmorph_utils.load_weights">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">load_weights</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">weights</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Load weights into model or submodel.</span>
+
+<span class="sd">    Attempts to load (all) weights into a model or one of its submodels. If</span>
+<span class="sd">    that fails, `model` may be a submodel of what we got weights for, and we</span>
+<span class="sd">    attempt to load the weights of a submodel (layer) into `model`.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    model : TensorFlow model</span>
+<span class="sd">        Model to initialize.</span>
+<span class="sd">    weights : str or pathlib.Path</span>
+<span class="sd">        Path to weights file.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If unsuccessful at loading any weights.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Extract submodels.</span>
+    <span class="n">models</span> <span class="o">=</span> <span class="p">[</span><span class="n">model</span><span class="p">]</span>
+    <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="k">while</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">models</span><span class="p">):</span>
+        <span class="n">layers</span> <span class="o">=</span> <span class="p">[</span><span class="n">f</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">models</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">layers</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">f</span><span class="p">,</span> <span class="n">tf</span><span class="o">.</span><span class="n">keras</span><span class="o">.</span><span class="n">Model</span><span class="p">)]</span>
+        <span class="n">models</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">layers</span><span class="p">)</span>
+        <span class="n">i</span> <span class="o">+=</span> <span class="mi">1</span>
+
+    <span class="c1"># Add models wrapping a single model in case this was done in training.</span>
+    <span class="c1"># Requires list expansion or Python will get stuck.</span>
+    <span class="n">models</span><span class="o">.</span><span class="n">extend</span><span class="p">([</span><span class="n">tf</span><span class="o">.</span><span class="n">keras</span><span class="o">.</span><span class="n">Model</span><span class="p">(</span><span class="n">m</span><span class="o">.</span><span class="n">inputs</span><span class="p">,</span> <span class="n">m</span><span class="p">(</span><span class="n">m</span><span class="o">.</span><span class="n">inputs</span><span class="p">))</span> <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">models</span><span class="p">])</span>
+
+    <span class="c1"># Attempt to load all weights into one of the models.</span>
+    <span class="k">for</span> <span class="n">mod</span> <span class="ow">in</span> <span class="n">models</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">mod</span><span class="o">.</span><span class="n">load_weights</span><span class="p">(</span><span class="n">weights</span><span class="p">)</span>
+            <span class="k">return</span>
+        <span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="k">pass</span>
+
+    <span class="c1"># Assume `model` is a submodel of what we got weights for.</span>
+    <span class="k">with</span> <span class="n">h5py</span><span class="o">.</span><span class="n">File</span><span class="p">(</span><span class="n">weights</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s1">&#39;r&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">h5</span><span class="p">:</span>
+        <span class="n">layers</span> <span class="o">=</span> <span class="n">h5</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s1">&#39;layer_names&#39;</span><span class="p">]</span>
+        <span class="n">weights</span> <span class="o">=</span> <span class="p">[</span><span class="nb">list</span><span class="p">(</span><span class="n">h5</span><span class="p">[</span><span class="n">lay</span><span class="p">]</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s1">&#39;weight_names&#39;</span><span class="p">])</span> <span class="k">for</span> <span class="n">lay</span> <span class="ow">in</span> <span class="n">layers</span><span class="p">]</span>
+
+        <span class="c1"># Layers with weights. Attempt loading.</span>
+        <span class="n">layers</span><span class="p">,</span> <span class="n">weights</span> <span class="o">=</span> <span class="nb">zip</span><span class="p">(</span><span class="o">*</span><span class="nb">filter</span><span class="p">(</span><span class="k">lambda</span> <span class="n">f</span><span class="p">:</span> <span class="n">f</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="nb">zip</span><span class="p">(</span><span class="n">layers</span><span class="p">,</span> <span class="n">weights</span><span class="p">)))</span>
+        <span class="k">for</span> <span class="n">lay</span><span class="p">,</span> <span class="n">wei</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">layers</span><span class="p">,</span> <span class="n">weights</span><span class="p">):</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">model</span><span class="o">.</span><span class="n">set_weights</span><span class="p">([</span><span class="n">h5</span><span class="p">[</span><span class="n">lay</span><span class="p">][</span><span class="n">w</span><span class="p">]</span> <span class="k">for</span> <span class="n">w</span> <span class="ow">in</span> <span class="n">wei</span><span class="p">])</span>
+                <span class="k">return</span>
+            <span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">lay</span> <span class="ow">is</span> <span class="n">layers</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]:</span>
+                    <span class="k">raise</span> <span class="n">e</span></div>
+
+
+<div class="viewcode-block" id="warp">
+<a class="viewcode-back" href="../../api/utils.html#utils.synthmorph_utils.warp">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">warp</span><span class="p">(</span><span class="n">arr_flo</span><span class="p">,</span> <span class="n">arr_def</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Apply a dense displacement field to a 3D volume using TensorFlow.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    arr_flo : np.ndarray</span>
+<span class="sd">        Floating (moving) image, shape ``(X, Y, Z)`` or ``(X, Y, Z, C)``.</span>
+<span class="sd">    arr_def : np.ndarray</span>
+<span class="sd">        Dense displacement field, shape ``(X, Y, Z, 3)``.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    np.ndarray</span>
+<span class="sd">        Warped image with the same spatial shape as ``arr_def``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">arr_flo</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">==</span> <span class="mi">3</span><span class="p">:</span>
+        <span class="n">arr_flo</span> <span class="o">=</span> <span class="n">arr_flo</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">newaxis</span><span class="p">]</span>
+        
+    <span class="n">tf_arr_flo</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">cast</span><span class="p">(</span><span class="n">arr_flo</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">newaxis</span><span class="p">],</span> <span class="n">tf</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+    <span class="n">tf_arr_def</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">cast</span><span class="p">(</span><span class="n">arr_def</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">newaxis</span><span class="p">],</span> <span class="n">tf</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+
+    <span class="n">prop</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">shift_center</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">fill_value</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="n">tf_arr_def</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">:</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+    <span class="n">mov_1</span> <span class="o">=</span> <span class="n">SpatialTransformer</span><span class="p">(</span><span class="o">**</span><span class="n">prop</span><span class="p">)((</span><span class="n">tf_arr_flo</span><span class="p">,</span> <span class="n">tf_arr_def</span><span class="p">))</span>
+
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">mov_1</span><span class="p">))</span></div>
+
+
+<div class="viewcode-block" id="integrate_svf">
+<a class="viewcode-back" href="../../api/utils.html#utils.synthmorph_utils.integrate_svf">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">integrate_svf</span><span class="p">(</span><span class="n">svf</span><span class="p">,</span> <span class="n">orig_shape</span><span class="p">,</span> <span class="n">scaling_factor</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">int_steps</span><span class="o">=</span><span class="mi">7</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Integrate a stationary velocity field (SVF) via scaling and squaring.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    svf : np.ndarray</span>
+<span class="sd">        Stationary velocity field, shape ``(X, Y, Z, 3)``.</span>
+<span class="sd">    orig_shape : tuple of int</span>
+<span class="sd">        Spatial shape of the target image space, used to compose a</span>
+<span class="sd">        downsampling affine after integration.</span>
+<span class="sd">    scaling_factor : int, optional</span>
+<span class="sd">        Up-scaling factor applied before integration. Default is 2.</span>
+<span class="sd">    int_steps : int, optional</span>
+<span class="sd">        Number of scaling-and-squaring steps. Default is 7.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    np.ndarray</span>
+<span class="sd">        Dense displacement field, shape ``(X, Y, Z, 3)``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">num_dim</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">svf</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">scale</span><span class="p">(</span><span class="n">fact</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return a constant isotropic scaling affine layer with factor ``fact``.&quot;&quot;&quot;</span>
+        <span class="n">mat</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">diag</span><span class="p">((</span><span class="o">*</span><span class="p">[</span><span class="n">fact</span><span class="p">]</span> <span class="o">*</span> <span class="n">num_dim</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">ne</span><span class="o">.</span><span class="n">layers</span><span class="o">.</span><span class="n">Constant</span><span class="p">(</span><span class="n">mat</span><span class="p">)([])</span>
+
+    <span class="n">aff_1</span> <span class="o">=</span> <span class="n">scale</span><span class="p">(</span><span class="n">scaling_factor</span><span class="p">)</span>
+    <span class="n">fw_def</span> <span class="o">=</span> <span class="n">layers</span><span class="o">.</span><span class="n">VecInt</span><span class="p">(</span><span class="n">method</span><span class="o">=</span><span class="s1">&#39;ss&#39;</span><span class="p">,</span> <span class="n">int_steps</span><span class="o">=</span><span class="n">int_steps</span><span class="p">)(</span><span class="n">svf</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">newaxis</span><span class="p">])</span>
+    <span class="n">fw_def</span> <span class="o">=</span> <span class="p">(</span><span class="n">aff_1</span><span class="p">,</span> <span class="n">fw_def</span><span class="p">,</span> <span class="n">scale</span><span class="p">(</span><span class="mi">1</span> <span class="o">/</span> <span class="n">scaling_factor</span><span class="p">),</span> <span class="n">aff_1</span><span class="p">)</span>
+    <span class="n">fw_def</span> <span class="o">=</span> <span class="n">layers</span><span class="o">.</span><span class="n">ComposeTransform</span><span class="p">(</span><span class="n">shift_center</span><span class="o">=</span><span class="kc">False</span><span class="p">)(</span><span class="n">fw_def</span><span class="p">)</span>
+
+    <span class="n">down</span> <span class="o">=</span> <span class="n">layers</span><span class="o">.</span><span class="n">AffineToDenseShift</span><span class="p">(</span><span class="n">orig_shape</span><span class="p">,</span> <span class="n">shift_center</span><span class="o">=</span><span class="kc">False</span><span class="p">)(</span><span class="n">scale</span><span class="p">(</span><span class="mi">1</span> <span class="o">/</span> <span class="n">scaling_factor</span><span class="p">))</span>
+    <span class="n">fw_def</span> <span class="o">=</span> <span class="n">layers</span><span class="o">.</span><span class="n">ComposeTransform</span><span class="p">()((</span><span class="n">fw_def</span><span class="p">,</span> <span class="n">down</span><span class="p">))</span>
+
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">fw_def</span><span class="p">))</span></div>
+
+
+
+<div class="viewcode-block" id="synthmorph_register">
+<a class="viewcode-back" href="../../api/utils.html#utils.synthmorph_utils.synthmorph_register">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">synthmorph_register</span><span class="p">(</span><span class="n">imageref_file</span><span class="p">,</span> <span class="n">imageflo_file</span><span class="p">,</span> <span class="n">reg_param</span><span class="o">=</span><span class="mf">0.5</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Register a floating image to a reference using SynthMorph deformable registration.</span>
+
+<span class="sd">    Loads the SynthMorph model from</span>
+<span class="sd">    ``$FREESURFER_HOME/models/synthmorph.deform.3.h5`` and returns the</span>
+<span class="sd">    forward stationary velocity field (SVF).</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    imageref_file : str, nibabel.Nifti1Image, or file-like</span>
+<span class="sd">        Reference (fixed) image. Accepts a file path, a ``Nifti1Image``</span>
+<span class="sd">        object, or an object with a ``.path`` attribute.</span>
+<span class="sd">    imageflo_file : str, nibabel.Nifti1Image, or file-like</span>
+<span class="sd">        Floating (moving) image. Same format options as ``imageref_file``.</span>
+<span class="sd">    reg_param : float, optional</span>
+<span class="sd">        Regularisation hyper-parameter for the HyperVxmJoint model.</span>
+<span class="sd">        Higher values produce smoother deformations. Default is 0.5.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    np.ndarray</span>
+<span class="sd">        Forward SVF in the reference image voxel space, shape ``(X, Y, Z, 3)``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># subprocess.call(</span>
+    <span class="c1">#     [&#39;mri_synthmorph&#39;, &#39;register&#39;, &#39;-m&#39;, &#39;deform&#39;, &#39;-t&#39;, &#39;prova_sm_def.nii.gz&#39;, &#39;-o&#39;, &#39;prova_sm_mov.nii.gz&#39;, imageflo_file.path,</span>
+    <span class="c1">#      imageref_file.path], stdout=subprocess.DEVNULL)</span>
+    <span class="c1">#</span>
+    <span class="c1"># pdb.set_trace()</span>
+
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">imageref_file</span><span class="p">,</span> <span class="n">nib</span><span class="o">.</span><span class="n">Nifti1Image</span><span class="p">):</span>
+        <span class="n">proxyref</span> <span class="o">=</span> <span class="n">imageref_file</span>
+    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">imageref_file</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="n">proxyref</span> <span class="o">=</span> <span class="n">nib</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">imageref_file</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">proxyref</span> <span class="o">=</span> <span class="n">nib</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">imageref_file</span><span class="o">.</span><span class="n">path</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">imageflo_file</span><span class="p">,</span> <span class="n">nib</span><span class="o">.</span><span class="n">Nifti1Image</span><span class="p">):</span>
+        <span class="n">proxyflo</span> <span class="o">=</span> <span class="n">imageflo_file</span>
+    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">imageflo_file</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="n">proxyflo</span> <span class="o">=</span> <span class="n">nib</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">imageflo_file</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">proxyflo</span> <span class="o">=</span> <span class="n">nib</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">imageflo_file</span><span class="o">.</span><span class="n">path</span><span class="p">)</span>
+
+    <span class="n">ref_image</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">proxyref</span><span class="o">.</span><span class="n">dataobj</span><span class="p">)</span>
+    <span class="n">flo_image</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">proxyflo</span><span class="o">.</span><span class="n">dataobj</span><span class="p">)</span>
+
+    <span class="n">prop</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">in_shape</span><span class="o">=</span><span class="n">ref_image</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">bidir</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">int_steps</span><span class="o">=</span><span class="mi">7</span><span class="p">,</span> <span class="n">skip_affine</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">return_svf</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">model</span> <span class="o">=</span> <span class="n">vxm</span><span class="o">.</span><span class="n">networks</span><span class="o">.</span><span class="n">HyperVxmJoint</span><span class="p">(</span><span class="o">**</span><span class="n">prop</span><span class="p">)</span>
+
+    <span class="n">ref_image</span> <span class="o">-=</span> <span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">ref_image</span><span class="p">)</span>
+    <span class="n">ref_image</span> <span class="o">/=</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">ref_image</span><span class="p">)</span>
+    <span class="n">ref_image</span> <span class="o">=</span> <span class="n">ref_image</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">newaxis</span><span class="p">,</span> <span class="o">...</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">newaxis</span><span class="p">]</span>
+
+    <span class="n">flo_image</span> <span class="o">-=</span> <span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">flo_image</span><span class="p">)</span>
+    <span class="n">flo_image</span> <span class="o">/=</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">flo_image</span><span class="p">)</span>
+    <span class="n">flo_image</span> <span class="o">=</span> <span class="n">flo_image</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">newaxis</span><span class="p">,</span> <span class="o">...</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">newaxis</span><span class="p">]</span>
+
+    <span class="n">inputs</span> <span class="o">=</span> <span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">constant</span><span class="p">([</span><span class="n">reg_param</span><span class="p">]),</span> <span class="n">tf</span><span class="o">.</span><span class="n">cast</span><span class="p">(</span><span class="n">flo_image</span><span class="p">,</span> <span class="n">tf</span><span class="o">.</span><span class="n">float32</span><span class="p">),</span> <span class="n">tf</span><span class="o">.</span><span class="n">cast</span><span class="p">(</span><span class="n">ref_image</span><span class="p">,</span> <span class="n">tf</span><span class="o">.</span><span class="n">float32</span><span class="p">))</span>
+    <span class="n">load_weights</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">weights</span><span class="o">=</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;FREESURFER_HOME&#39;</span><span class="p">),</span> <span class="s1">&#39;models&#39;</span><span class="p">,</span> <span class="s1">&#39;synthmorph.deform.3.h5&#39;</span><span class="p">))</span>
+
+    <span class="n">_</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">fw_svf</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">squeeze</span><span class="p">,</span> <span class="n">model</span><span class="p">(</span><span class="n">inputs</span><span class="p">)))</span>
+
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">fw_svf</span><span class="p">))</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Adrià Casamitjana, Agustín Cartaya Lathulerie, Clara Lisazo, Rachika E. Hamadache.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
