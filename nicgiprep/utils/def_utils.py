@@ -10,6 +10,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from nicgiprep.utils.fn_utils import compute_centroids_ras
+from scipy.ndimage import gaussian_filter
+
+
 def fast_3D_interp_torch(X, II, JJ, KK, mode):
     """Interpolate a 3D scalar volume at arbitrary coordinates using PyTorch.
 
@@ -1071,4 +1075,36 @@ class SpatialTransformer(nn.Module):
             new_locs = new_locs[..., [2, 1, 0]]
 
         return F.grid_sample(src, new_locs, mode=mode, padding_mode=padding_mode, align_corners=True)
+
+
+
+def register_to_MNI(im_filepath, seg_filepath, save_path, MNI_TEMPLATE_SEG, MNI_TEMPLATE, labels_registration):
+   
+    centroid_ref, ok_ref = compute_centroids_ras(
+        MNI_TEMPLATE_SEG, labels_registration
+    )
+    centroid_flo, ok_flo = compute_centroids_ras(
+        seg_filepath, labels_registration
+    )
+
+    aff_MNI = getM(
+        centroid_ref[:, ok_ref > 0], centroid_flo[:, ok_ref > 0], use_L1=False
+    )
+    np.save(save_path.replace('.nii.gz', 'aff.npy'), aff_MNI)
+
+    mni_proxy = nib.load(MNI_TEMPLATE)
+    im_proxy = nib.load(im_filepath)
+    voxsize = np.sqrt(np.sum(im_proxy.affine * im_proxy.affine, axis=0))[:-1]
+    voxsize_new = np.sqrt(np.sum(mni_proxy.affine * mni_proxy.affine, axis=0))[:-1]
+    factor = voxsize / voxsize_new
+    sigmas = 0.25 / factor
+    sigmas[factor > 1] = 0  # don't blur if upsampling
+
+    im_array = np.array(im_proxy.dataobj)
+    im_array = gaussian_filter(im_array, sigmas)
+    im_proxy = nib.Nifti1Image(im_array, np.linalg.inv(aff_MNI) @ im_proxy.affine)
+    im_proxy = vol_resample_fast(mni_proxy, im_proxy)
+    nib.save(im_proxy, save_path)
+ 
+
 

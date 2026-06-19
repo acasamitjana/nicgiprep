@@ -12,7 +12,7 @@ import numpy as np
 
 from setup import *
 from nicgiprep.utils.log_utils import LogBIDSLoader
-from nicgiprep.utils.label_utils import SYNTHSEG_APARC_LUT, SYNTHSEG_APARC_DICT, SYNTHSEG_LUT, CLUSTER_DICT
+from nicgiprep.utils.label_utils import SYNTHSEG_APARC_LUT, SYNTHSEG_APARC_DICT
 from nicgiprep.utils.io_utils import create_dir, remove_dir
 
 
@@ -86,8 +86,9 @@ class Processor(object):
         self.tmp_dir = kwargs.get('tmp_dir', TMP_DIR)
         create_dir(self.tmp_dir)
 
-        self.seg_entities = {'scope': 'preproc', 'extension': 'nii.gz', 'suffix': ['T1wdseg', 'dseg']}
-        self.bf_entities = {'scope': 'preproc', 'extension': 'nii.gz', 'suffix': 'T1w', 'acquisition': [None, 'orig']}
+        self.seg_entities = {'scope': 'nicgiprep-cross', 'extension': 'nii.gz', 'suffix': ['T1wdseg', 'dseg']}
+        self.synthseg_entities = {'scope': 'nicgiprep-cross', 'extension': 'nii.gz', 'suffix': ['T1wsynthseg', 'synthseg']}  ## Adding this for the BF
+        self.bf_entities = {'scope': 'nicgiprep-cross', 'extension': 'nii.gz', 'suffix': 'T1w', 'acquisition': [None, 'orig']}
 
         self.labels_lut = SYNTHSEG_APARC_LUT
         self.labels_dict = SYNTHSEG_APARC_DICT
@@ -150,12 +151,12 @@ class Processor(object):
         """
         subjects = self.bids_loader.get_subjects()
         if uslr:
-            subjects = list(filter(lambda s: len(self._get_data(**{'subject': s, **self.seg_entities},
-                                                                ignore_check=True)) > 0 is not None, subjects))
+            # subjects = list(filter(lambda s: len(self._get_data(**{'subject': s, **self.seg_entities}, ignore_check=True)) > 0 is not None, subjects))
+            subjects = list(filter(lambda s: len(self._get_data(**{'subject': s, **self.seg_entities}, ignore_check=True)) > 0, subjects))
 
         return subjects
 
-    def _get_timepoints(self, subject, uslr=True):
+    def _get_sessions(self, subject, uslr=True):
         """Return the session IDs available for a given subject.
 
         Parameters
@@ -171,12 +172,12 @@ class Processor(object):
         list of str
             Session IDs as returned by ``BIDSLayout.get_session``.
         """
-        timepoints = self.bids_loader.get_session(subject=subject)
+        sessions = self.bids_loader.get_session(subject=subject)
         if uslr:
-            timepoints = list(filter(lambda tp: self._get_data(**{
-                'session': tp, 'subject': subject, **self.seg_entities}, verbose=False) is not None, timepoints))
+            sessions = list(filter(lambda sess: self._get_data(**{
+                'session': sess, 'subject': subject, **self.seg_entities}, verbose=False) is not None, sessions))
 
-        return timepoints
+        return sessions
 
     def _get_data(self, ignore_check=False, curr_len=None, verbose=True, **kwargs):
         """Query the BIDS layout for a single file matching the given entities.

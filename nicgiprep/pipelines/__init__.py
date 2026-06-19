@@ -1,5 +1,5 @@
 from .base import Processor
-from .cross_sectional import CrossSectionalProcessor, SynthSegProcessor, BiasCorrectionProcessor
+from .cross_sectional import CrossSectionalProcessor, SynthSegProcessor, BiasCorrectionProcessor, MNIRegistrationProcessor
 from .longitudinal import LongitudinalProcessor
 from .multimodal import MultiMRIProcessor
 

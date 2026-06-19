@@ -9,10 +9,10 @@ if 'NEURITE_BACKEND' not in os.environ:
 
 import subprocess
 
-filename_entities = ['subject', 'session', 'run', 'acquisition', 'suffix', 'extension', 'task', 'tracer', 'reconstruction', 'desc', 'space']
+filename_entities = ['subject', 'session', 'run', 'acquisition', 'suffix', 'extension', 'task', 'tracer', 'reconstruction', 'desc', 'space', 'datatype']  #HACK: adding datatype to get /anat/ and /utils/ options
 BIDS_PATH_PATTERN = [
-    "sub-{subject}[/ses-{session}]/{datatype<anat>|anat}/sub-{subject}[_ses-{session}][_space-{space}][_task-{task}][_acq-{acquisition}][_ce-{ceagent}][_rec-{reconstruction}][_run-{run}][_part-{part}][_desc-{desc}]_{suffix<aff|v2r>}{extension<.txt|.npy>|.npy}",
-    "sub-{subject}[/ses-{session}]/{datatype<anat>|anat}/sub-{subject}[_ses-{session}][_space-{space}][_task-{task}][_acq-{acquisition}][_ce-{ceagent}][_rec-{reconstruction}][_run-{run}][_part-{part}][_desc-{desc}]_{suffix<T1w|T2w|T2star|T2starw|FLAIR|FLASH|PD|PDw|PDT2|inplaneT[12]|angio|dseg|posteriors|svf|jac|def|T1wpost|T1wstats|T1wstd|T1wmask|T1wdseg|T2wmask|T2wdseg|FLAIRmask|FLAIRdseg|mask|space>}{extension<.nii|.nii.gz|.json|.txt|.npy>|.nii.gz}",
+    "sub-{subject}[/ses-{session}]/{datatype<anat|utils>|anat}/sub-{subject}[_ses-{session}][_space-{space}][_task-{task}][_acq-{acquisition}][_ce-{ceagent}][_rec-{reconstruction}][_run-{run}][_part-{part}][_desc-{desc}]_{suffix<aff|v2r>}{extension<.txt|.npy>|.npy}",
+    "sub-{subject}[/ses-{session}]/{datatype<anat|utils>|anat}/sub-{subject}[_ses-{session}][_space-{space}][_task-{task}][_acq-{acquisition}][_ce-{ceagent}][_rec-{reconstruction}][_run-{run}][_part-{part}][_desc-{desc}]_{suffix<T1w|T2w|T2star|T2starw|FLAIR|FLASH|PD|PDw|PDT2|inplaneT[12]|angio|dseg|posteriors|svf|jac|def|T1wpost|T1wstats|T1wstd|T1wmask|T1wdseg|T2wmask|T2wdseg|FLAIRmask|FLAIRdseg|mask|space>}{extension<.nii|.nii.gz|.json|.txt|.npy>|.nii.gz}",
     "sub-{subject}[/ses-{session}]/{datatype<func>|func}/sub-{subject}[_ses-{session}][_space-{space}][_task-{task}][_acq-{acquisition}][_ce-{ceagent}][_rec-{reconstruction}][_run-{run}][_part-{part}][_desc-{desc}]_{suffix<bold|cbv|sbref>}{extension<.nii|.nii.gz|.json|.txt|.npy>|.nii.gz}",
     "sub-{subject}[/ses-{session}]/{datatype<pet>|pet}/sub-{subject}[_ses-{session}][_space-{space}][_task-{task}][_acq-{acquisition}][_trc-{tracer}][_rec-{reconstruction}][_run-{run}][_part-{part}][_desc-{desc}]_{suffix<pet>}{extension<.nii|.nii.gz|.json|.txt|.npy>|.nii.gz}",
 ]
@@ -59,14 +59,14 @@ if not os.path.exists(LOGS_DIR): os.makedirs(LOGS_DIR)
 if not os.path.exists(TMP_DIR): os.makedirs(TMP_DIR)
 
 DIR_PIPELINES = {
-    'preproc': os.path.join(DERIVATIVES_DIR, 'preproc'),
+    'nicgiprep-cross': os.path.join(DERIVATIVES_DIR, 'nicgiprep-cross'),
     'uslr-lin': os.path.join(DERIVATIVES_DIR, 'uslr-lin'),
     'uslr': os.path.join(DERIVATIVES_DIR, 'uslr'),
     'uslr-mni': os.path.join(DERIVATIVES_DIR, 'uslr-mni'),
 }
 
 DESC_PIPELINES = {
-    'preproc': 'USLR preprocessing files in subject space',
+    'nicgiprep-cross': 'USLR preprocessing files in subject space',
     'uslr-lin': 'USLR preprocessing (linear) files in subject space',
     'uslr': 'USLR preprocessing (nonlinear) files in subject space',
     'uslr-mni': 'USRL preprocessing files in MNI',

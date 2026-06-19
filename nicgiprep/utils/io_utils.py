@@ -1044,3 +1044,23 @@ def get_float_vol(v):
     except:
         return -4
 
+
+
+
+def remove_duplicates_csv(csv_file):
+    """ Read a csv file and removes duplicated lines.
+
+    Parameters
+    ----------
+    csv_file : str
+        Path to the csv file.
+
+    """
+    if os.path.exists(csv_file):
+        with open(csv_file, "r") as f:
+            lines = f.readlines()
+        unique_lines = list(dict.fromkeys(line.strip() for line in lines if line.strip()))
+        with open(csv_file, "w") as f:
+            for line in unique_lines:
+                f.write(line + "\n")
+

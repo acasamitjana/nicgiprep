@@ -75,7 +75,7 @@ SYNTHSEG_APARC_LUT = {k: it_k for it_k, k in enumerate(np.unique(np.concatenate(
 ASEG_APARC_LUT = {k: it_k for it_k, k in enumerate(np.unique(np.concatenate((aseg_labels, ctx_labels), axis=0)))}
 
 
-CLUSTER_DICT = {
+SYNTHSEG_GMM_ONTOLOGY = {
     'Gray': [53, 17, 51, 12, 54, 18, 50, 11, 58, 26, 42, 3],
     'CSF': [4, 5, 43, 44, 15, 14, 24],
     'Thalaumus': [49, 10],
