@@ -1,4 +1,5 @@
 from typing import Optional, Union, Sequence
+from pathlib import Path
 import nibabel as nib
 
 import numpy as np
@@ -1216,8 +1217,50 @@ class SpatialTransformer(nn.Module):
 
 
 
-def register_to_MNI(im_filepath, seg_filepath, save_path, MNI_TEMPLATE_SEG, MNI_TEMPLATE, labels_registration):
-   
+def register_to_MNI(
+    im_filepath: str | Path,
+    seg_filepath: str | Path,
+    save_path: str | Path,
+    MNI_TEMPLATE_SEG: str | Path,
+    MNI_TEMPLATE: str | Path,
+    labels_registration: np.ndarray,
+) -> None:
+    """
+    Register a subject image to MNI space using centroid-based affine alignment.
+
+    Computes an affine transform by matching label centroids between the subject
+    segmentation and the MNI template segmentation, applies optional Gaussian
+    smoothing to account for resolution differences, resamples the image into
+    MNI space, and saves the result.
+
+    Parameters
+    ----------
+    im_filepath : str or Path
+        Path to the subject's input image (.nii.gz).
+    seg_filepath : str or Path
+        Path to the subject's SynthSeg segmentation file (.nii.gz), used for centroid
+        computation.
+    save_path : str or Path
+        Path where the MNI-registered image will be saved (.nii.gz). The affine
+        matrix is also saved alongside it with the suffix 'aff.npy'.
+    MNI_TEMPLATE_SEG : str or Path
+        Path to the MNI template segmentation, used as the registration reference
+        for centroid computation.
+    MNI_TEMPLATE : str or Path
+        Path to the MNI template image, used to define the target voxel grid and
+        resolution for resampling.
+    labels_registration : array-like
+        List or array of label indices to use for centroid matching between the
+        subject and MNI segmentations.
+
+    Returns
+    -------
+    None
+        Saves two files to disk:
+        - Registered image at `save_path`
+        - Affine matrix at `save_path.replace('.nii.gz', 'aff.npy')`
+
+    """
     centroid_ref, ok_ref = compute_centroids_ras(
         MNI_TEMPLATE_SEG, labels_registration
     )
