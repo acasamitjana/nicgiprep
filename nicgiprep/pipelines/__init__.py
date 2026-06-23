@@ -15,6 +15,7 @@ __all__ = [
     "CrossSectionalProcessor",
     "SynthSegProcessor",
     "BiasCorrectionProcessor",
+    "MNIRegistrationProcessor",
     "LongitudinalProcessor",
     "MMProcessor",
     "MultiModalSynthSegProcessor",

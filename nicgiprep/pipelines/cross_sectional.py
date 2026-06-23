@@ -1,19 +1,31 @@
-from os.path import join, dirname, basename, exists, isdir
+
+"""
+Processing pipeline classes for cross-sectional T1w MRI data in BIDS format.
+
+This involves running SuperSynth and SynthSeg to get label maps, followed by 
+Bias Field correction and MNI registration.
+
+"""
+
 from os import listdir
+from os.path import join, dirname, basename, exists, isdir
+from typing import Dict, List, Optional, Sequence, Tuple
+from bids.layout import BIDSFile
 import warnings
 
 import shutil
 import pandas as pd
 import nibabel as nib
+import subprocess
 from skimage.morphology import ball, binary_dilation
 
 from setup import *
-from nicgiprep.pipelines import Processor
+from nicgiprep.pipelines.base import Processor
 from nicgiprep.utils.preprocessing_utils import *
 from nicgiprep.utils.fn_utils import one_hot_encoding, rescale_voxel_size
-from nicgiprep.utils.label_utils import SYNTHSEG_LUT, CSF_LABELS, SYNTHSEG_GMM_ONTOLOGY
-from nicgiprep.utils.def_utils import vol_resample_fast, register_to_MNI
 from nicgiprep.utils.io_utils import save_volume, remove_duplicates_csv
+from nicgiprep.utils.def_utils import vol_resample_fast, register_to_MNI
+from nicgiprep.utils.label_utils import SYNTHSEG_LUT, CSF_LABELS, SYNTHSEG_GMM_ONTOLOGY
 
 
 class CrossSectionalProcessor(Processor):
@@ -44,7 +56,7 @@ class SynthSegProcessor(CrossSectionalProcessor):
 
     def _name(self):
         """Return the display name of this pipeline."""
-        return "SynthSegSegmentation"
+        return "SuperSynthSegSegmentation"
 
     def _check_file(self, proxy):
         """Check whether a NIfTI image is suitable for SynthSeg.
@@ -95,7 +107,7 @@ class SynthSegProcessor(CrossSectionalProcessor):
                 "exit_message": "File excluded due to an error reading the file or computing image shape and resolution.",
             }
 
-    def _select_image(self, subject, sess):
+    def _select_image(self, subject: str, sess: str) -> Optional[BIDSFile]:
         """Select a single T1w image for a given subject and session.
 
         Parameters
@@ -113,9 +125,9 @@ class SynthSegProcessor(CrossSectionalProcessor):
         # Select a single T1w image per session
         t1w_list = self._get_data(
             subject=subject,
-            extension=["nii", "nii.gz"],
-            suffix="T1w",
             session=sess,
+            suffix="T1w",
+            extension=["nii", "nii.gz"],
             acquisition=["orig", None],
             scope="raw",
             ignore_check=True,
@@ -129,13 +141,10 @@ class SynthSegProcessor(CrossSectionalProcessor):
                 t1w_list_r = list(
                     filter(lambda x: "acquisition" not in x.entities.keys(), t1w_list)
                 )
-
             elif any(["run" in f.entities.keys() for f in t1w_list]):
                 t1w_list_r = list(filter(lambda x: x.entities["run"] == "01", t1w_list))
-
             else:
                 t1w_list_r = t1w_list
-
             t1w_i = t1w_list_r[0]
 
         else:
@@ -143,7 +152,7 @@ class SynthSegProcessor(CrossSectionalProcessor):
 
         return t1w_i
 
-    def process_parallel(self, num_cores, **kwargs):
+    def process_parallel(self, num_cores, **kwargs):  #TODO: Fix this or remove it
         """Sequential fallback — SynthSeg cannot be parallelised.
 
         Emits a warning and delegates to :meth:`process`.
@@ -155,7 +164,11 @@ class SynthSegProcessor(CrossSectionalProcessor):
 
         return self.process(**kwargs)
 
-    def process(self, prefix="", gpu_flag=False, threads=16, **kwargs):
+    def process(self,
+                prefix: str="",
+                gpu_flag: bool=False,
+                threads: int=16,
+                **kwargs):
         """Collect all input/output paths and invoke SynthSeg in one batch call.
 
         Parameters
@@ -227,12 +240,13 @@ class SynthSegProcessor(CrossSectionalProcessor):
                 ]
                 + gpu_cmd
             )
-
+        
         if len(supersynth_files) >= 1:
             ## Run SuperSynth
+            os.environ["FREESURFER_HOME"] = "/home/Code/freesurfer-supersynth/"  #ERROR: temporary fix until the latest FS is installed
             subprocess.call(
                 [
-                    "/home/Code/freesurfer-supersynth/bin/mri_super_synth",  # ERROR: temporarly using full path to supersynth
+                    "/home/Code/freesurfer-supersynth/bin/mri_super_synth",  # ERROR: temporary fix using full path to supersynth
                     "--i",
                     join(TMP_DIR, "files_to_process_supersynth.csv"),
                     "--threads",
@@ -245,9 +259,7 @@ class SynthSegProcessor(CrossSectionalProcessor):
             ## Checking if some cases were skipped due to CUDA OOM
             failed_lines = []
             cpu_csv = join(TMP_DIR, "files_to_process_supersynth_cpu.csv")
-            if exists(
-                cpu_csv
-            ):  # Removing existing csv file to ensure it has the updated subjects
+            if exists(cpu_csv):  # Removing existing csv file to ensure it has the updated subjects
                 os.remove(cpu_csv)
             with open(join(TMP_DIR, "files_to_process_supersynth.csv"), "r") as f:
                 for line in f:
@@ -266,7 +278,7 @@ class SynthSegProcessor(CrossSectionalProcessor):
                 ## Running again SuperSynth using cpu
                 subprocess.call(
                     [
-                        "/home/Code/freesurfer-supersynth/bin/mri_super_synth",  # ERROR: temporarly using full path to supersynth
+                        "/home/Code/freesurfer-supersynth/bin/mri_super_synth",  # ERROR: temporary fix using full path to supersynth
                         "--i",
                         cpu_csv,
                         "--threads",
@@ -276,6 +288,7 @@ class SynthSegProcessor(CrossSectionalProcessor):
                     ]
                 )
 
+            #TODO: Find a better approach to get the files to convert
             with open(join(TMP_DIR, "files_to_process_supersynth.csv"), "r") as f:
                 for line in f:
                     input_file, output_dir, _ = line.strip().split(",")
@@ -420,19 +433,30 @@ class SynthSegProcessor(CrossSectionalProcessor):
 
         self._update_full_layout()
 
-    def process_subject(self, subject, force_flag=False, check_seg=None, **kwargs):
+    def process_subject(self,
+                        subject: str,
+                        session_list: Optional[List[str]] = None,
+                        force_flag: bool = False,
+                        check_seg: str = None,
+                        **kwargs
+                        ) -> Tuple[List, List, List, List, List]:
         """Collect SynthSeg I/O paths for all sessions of one subject.
 
         Parameters
         ----------
         subject : str
             Subject ID.
+        session_list : list of str, optional
+            Restrict processing to these session IDs. If ``None``, all
+            sessions for the subject are processed.
         force_flag : bool, optional
             If ``True``, re-queue sessions even when segmentations exist.
             Default is ``False``.
         check_seg : str, optional
             Directory to copy pre-existing segmentations from. Defaults to
             ``'/'`` (no pre-existing results).
+        **kwargs
+            Ignored; present for API compatibility.
 
         Returns
         -------
@@ -443,7 +467,6 @@ class SynthSegProcessor(CrossSectionalProcessor):
         if check_seg is None:
             check_seg = "/"
 
-        # input_files, res_files, output_files, vol_files, discarded_files, supersynth_files = [], [], [], [], [], []
         input_files, res_files, output_files, discarded_files, supersynth_files = (
             [],
             [],
@@ -452,27 +475,32 @@ class SynthSegProcessor(CrossSectionalProcessor):
             [],
         )
 
-        sessions = self.bids_loader.get_session(
-            subject=subject
-        )  # HACK: Renamed from timepoints to sessions
+        sessions = self.bids_loader.get_session(subject=subject)
+        if session_list is not None:
+            sessions = [s for s in sessions if s in session_list]
+
         for sess in sessions:
-            # Check if segmentation already exists
-            preproc_dirname = join(
+            proc_anat_dir = join(
+                DIR_PIPELINES["nicgiprep-cross"],
+                "sub-" + subject,
+                "ses-" + sess,
+                "anat",
+            )
+            proc_utils_dir = join(
                 DIR_PIPELINES["nicgiprep-cross"],
                 "sub-" + subject,
                 "ses-" + sess,
                 "utils",
-            )  # HACK: Renaming these to /utils and not /anat
-            preproc_main_dirname = preproc_dirname.replace("utils", "anat")
+            )
 
             t1w_file = self._select_image(subject, sess)
             if t1w_file is None:
                 continue
 
-            if not exists(preproc_dirname):
-                os.makedirs(preproc_dirname)
-            if not exists(preproc_main_dirname):
-                os.makedirs(preproc_main_dirname)
+            if not exists(proc_anat_dir):
+                os.makedirs(proc_anat_dir)
+            if not exists(proc_utils_dir):
+                os.makedirs(proc_utils_dir)
 
             raw_dirname = t1w_file.dirname
             t1w_entities = {
@@ -481,13 +509,13 @@ class SynthSegProcessor(CrossSectionalProcessor):
                 if k in filename_entities
             }
             t1w_entities["acquisition"] = "1"
+            synthseg_entities = {**t1w_entities, "suffix": "T1wsynthseg"}
 
             anat_res = basename(self.build_path(t1w_entities))
-            anat_seg = anat_res.replace("T1w", "T1wsynthseg")
+            anat_seg = basename(self.build_path(synthseg_entities))
 
-            if exists(
-                join(check_seg, "sub-" + subject, "ses-" + sess, "utils", anat_seg)
-            ):  # HACK: Deleted the vol-related parts
+            # Check if segmentation already exists
+            if exists(join(check_seg, "sub-" + subject, "ses-" + sess, "utils", anat_seg)):
                 subprocess.call(
                     [
                         "cp",
@@ -498,31 +526,31 @@ class SynthSegProcessor(CrossSectionalProcessor):
                             "utils",
                             anat_seg,
                         ),
-                        join(preproc_dirname, anat_seg),
+                        join(proc_utils_dir, anat_seg),
                     ]
                 )
 
-            if not exists(join(preproc_dirname, anat_seg)) or force_flag:
+            if not exists(join(proc_utils_dir, anat_seg)) or force_flag:
                 proxy = nib.load(join(raw_dirname, t1w_file.filename))
                 run_code = self._check_file(proxy)
                 if run_code["run_flag"]:
                     input_files += [join(raw_dirname, t1w_file.filename)]
-                    res_files += [join(preproc_dirname, anat_res)]
-                    output_files += [join(preproc_dirname, anat_seg)]
+                    res_files += [join(proc_utils_dir, anat_res)]
+                    output_files += [join(proc_utils_dir, anat_seg)]
 
                 else:
-                    with open(join(preproc_dirname, "excluded_file.txt"), "w") as f:
+                    with open(join(proc_utils_dir, "excluded_file.txt"), "w") as f:
                         f.write(run_code["exit_message"])
 
             csv_file = join(
                 TMP_DIR, "files_to_process_supersynth.csv"
-            )  ## CSV file for SuperSynth batch processing
+            )  # CSV file for SuperSynth batch processing
             os.makedirs(
                 join(
                     TMP_DIR,
                     "supersynth_process",
-                    t1w_file.filename.split("_")[0],
-                    t1w_file.filename.split("_")[1],
+                    "sub-" + subject,
+                    "ses-" + sess,
                 ),
                 exist_ok=True,
             )
@@ -530,21 +558,20 @@ class SynthSegProcessor(CrossSectionalProcessor):
                 join(
                     TMP_DIR,
                     "supersynth_process",
-                    t1w_file.filename.split("_")[0],
-                    t1w_file.filename.split("_")[1],
+                    "sub-" + subject,
+                    "ses-" + sess,
                     "segmentation.mgz",
                 )
             ):
-                with open(csv_file, "a") as f:  ## Adding the files in the CSV
+                with open(csv_file, "a") as f:
                     f.write(
-                        f"{join(raw_dirname, t1w_file.filename)},{join(TMP_DIR, 'supersynth_process', t1w_file.filename.split('_')[0], t1w_file.filename.split('_')[1])},invivo\n"
+                        f"{join(raw_dirname, t1w_file.filename)},{join(TMP_DIR, "supersynth_process", "sub-"+subject, "ses-"+sess)},invivo\n"
                     )
                 supersynth_files += [join(raw_dirname, t1w_file.filename)]
 
             # Removing duplicates in case the files are repeated
             remove_duplicates_csv(csv_file)
 
-        # return input_files, res_files, output_files, vol_files, discarded_files, supersynth_files
         return input_files, res_files, output_files, discarded_files, supersynth_files
 
 
@@ -577,11 +604,11 @@ class BiasCorrectionProcessor(CrossSectionalProcessor):
             on success; ``exit_code=-1`` with ``'message'`` on failure.
         """
         resampled_file = self._get_data(**resampled_entities, ignore_check=True)
+
         if not resampled_file:
             resampled_filepath = join(
                 DIR_PIPELINES["nicgiprep-cross"], self.build_path(resampled_entities)
             )
-
             proxyraw = nib.load(raw_file.path)
             pixdim = np.sqrt(np.sum(proxyraw.affine * proxyraw.affine, axis=0))[:-1]
             if all([np.abs(p - 1) < 0.01 for p in pixdim]):
@@ -601,8 +628,8 @@ class BiasCorrectionProcessor(CrossSectionalProcessor):
                     np.array(proxyraw.dataobj), proxyraw.affine, [1, 1, 1]
                 )
                 save_volume(
-                    v, aff, proxyraw.header, resampled_filepath, res=[1, 1, 1]
-                )  # HACK: change to save_volume()
+                    volume=v, aff=aff, header=proxyraw.header, path=resampled_filepath, res=[1, 1, 1]
+                )
 
         else:
             resampled_filepath = resampled_file[0].path
@@ -688,7 +715,8 @@ class BiasCorrectionProcessor(CrossSectionalProcessor):
         """
         print("\nSubject: " + subject)
 
-        sessions = self._get_sessions(subject=subject, uslr=True)
+        sessions = self._get_sessions(subject=subject)
+
         for sess_id in sessions:
             print("\n* Session: " + sess_id, end=": ", flush=True)
 
@@ -703,6 +731,7 @@ class BiasCorrectionProcessor(CrossSectionalProcessor):
 
             # input segs
             synthseg_entities = copy.copy(self.seg_entities)
+            synthseg_entities["scope"] = ["nicgiprep-cross"]
             synthseg_entities["suffix"] = ["T1wsynthseg", "synthseg"]
             seg_file = self._get_data(
                 **{"session": sess_id, "subject": subject, **synthseg_entities}
@@ -735,7 +764,7 @@ class BiasCorrectionProcessor(CrossSectionalProcessor):
             )  ## Saving the final result in /anat
             output_mask_filepath = join(
                 preproc_dirname, seg_file.filename.replace("synthseg", "mask")
-            )  # HACK:
+            )
 
             if (
                 exists(output_filepath)
@@ -753,6 +782,7 @@ class BiasCorrectionProcessor(CrossSectionalProcessor):
             #      Computing masks     #
             # ------------------------ #
             # print('computing masks from dseg files; ', end='', flush=True)
+
             if not exists(output_mask_filepath):
                 seg = np.array(proxyseg.dataobj)
                 mask = seg > 0
@@ -760,12 +790,13 @@ class BiasCorrectionProcessor(CrossSectionalProcessor):
                     mask[seg == lab] = 0
 
                 save_volume(
-                    mask.astype("uint8"),
-                    proxyseg.affine,
-                    proxyseg.header,
-                    output_mask_filepath,
+                    volume=mask.astype("uint8"),
+                    aff=proxyseg.affine,
+                    header=proxyseg.header,
+                    path=output_mask_filepath,
                 )
-
+            
+            
             resampled_flag = self._check_resampled_file(raw_file, resampled_entities)
             if resampled_flag["exit_code"] == -1:
                 print(resampled_flag["message"], end="", flush=True)
@@ -856,10 +887,10 @@ class BiasCorrectionProcessor(CrossSectionalProcessor):
                     mri_acq_corr *= mask_dilated
 
                     save_volume(
-                        np.clip(mri_acq_corr, 0, 255).astype("uint8"),
-                        proxyres.affine,
-                        proxyres.header,
-                        output_filepath,
+                        volume=np.clip(mri_acq_corr, 0, 255).astype("uint8"),
+                        aff=proxyres.affine,
+                        header=proxyres.header,
+                        path=output_filepath,
                     )
 
                 else:
@@ -888,13 +919,13 @@ class BiasCorrectionProcessor(CrossSectionalProcessor):
                     m = np.mean(mri_acq_orig_corr[wm_mask_resize])
                     mri_acq_orig_corr = 110 * mri_acq_orig_corr / m
                     # mask_dilated = binary_dilation(mask_resize, ball(3))
-                    # mri_acq_orig_corr[mask_dilated == 0] = 0  # HACK: Removing the skull-stripped step
+                    # mri_acq_orig_corr[mask_dilated == 0] = 0  # Removing the skull-stripped step
 
                     save_volume(
-                        np.clip(mri_acq_orig_corr, 0, 255).astype("uint8"),
-                        proxyraw.affine,
-                        proxyraw.header,
-                        output_filepath,
+                        volume=np.clip(mri_acq_orig_corr, 0, 255).astype("uint8"),
+                        aff=proxyraw.affine,
+                        header=proxyraw.header,
+                        path=output_filepath,
                     )
 
                     del (
@@ -905,9 +936,9 @@ class BiasCorrectionProcessor(CrossSectionalProcessor):
                     )  # , mask_dilated
 
         return {
-            "exit": 1,
+            "exit_code": 1,
             "message": "success",
-        }  # modified the exit to match with the Base success
+        }
 
 
 class MNIRegistrationProcessor(CrossSectionalProcessor):
@@ -937,7 +968,7 @@ class MNIRegistrationProcessor(CrossSectionalProcessor):
         """
         print("\nSubject: " + subject)
 
-        sessions = self._get_sessions(subject=subject, uslr=True)
+        sessions = self._get_sessions(subject=subject)
         for sess_id in sessions:
             print("\n* Session: " + sess_id, end=": \n", flush=True)
 
@@ -952,6 +983,7 @@ class MNIRegistrationProcessor(CrossSectionalProcessor):
 
             # input segs
             synthseg_entities = copy.copy(self.seg_entities)
+            synthseg_entities["scope"] = ["nicgiprep-cross"]
             synthseg_entities["suffix"] = ["T1wsynthseg", "synthseg"]
             seg_file = self._get_data(
                 **{"session": sess_id, "subject": subject, **synthseg_entities}
@@ -982,7 +1014,7 @@ class MNIRegistrationProcessor(CrossSectionalProcessor):
             res_seg_filepath = join(
                 preproc_dirname.replace("anat", "utils"),
                 seg_file.filename.replace("synthseg", "synthsegres"),
-            )  # HACK:
+            )
 
             if exists(output_filepath) and not force_flag:
                 print("image already registered to MNI.")
@@ -1021,6 +1053,6 @@ class MNIRegistrationProcessor(CrossSectionalProcessor):
                 )
 
         return {
-            "exit": 1,
+            "exit_code": 1,
             "message": "success",
-        }  # modified the exit to match with the Base success
+        }
