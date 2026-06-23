@@ -1,15 +1,14 @@
-
 """
 Processing pipeline classes for cross-sectional T1w MRI data in BIDS format.
 
-This involves running SuperSynth and SynthSeg to get label maps, followed by 
+This involves running SuperSynth and SynthSeg to get label maps, followed by
 Bias Field correction and MNI registration.
 
 """
 
 from os import listdir
 from os.path import join, dirname, basename, exists, isdir
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import List, Optional, Tuple
 from bids.layout import BIDSFile
 import warnings
 
@@ -152,7 +151,7 @@ class SynthSegProcessor(CrossSectionalProcessor):
 
         return t1w_i
 
-    def process_parallel(self, num_cores, **kwargs):  #TODO: Fix this or remove it
+    def process_parallel(self, num_cores, **kwargs):  # TODO: Fix this or remove it
         """Sequential fallback — SynthSeg cannot be parallelised.
 
         Emits a warning and delegates to :meth:`process`.
@@ -164,11 +163,9 @@ class SynthSegProcessor(CrossSectionalProcessor):
 
         return self.process(**kwargs)
 
-    def process(self,
-                prefix: str="",
-                gpu_flag: bool=False,
-                threads: int=16,
-                **kwargs):
+    def process(
+        self, prefix: str = "", gpu_flag: bool = False, threads: int = 16, **kwargs
+    ):
         """Collect all input/output paths and invoke SynthSeg in one batch call.
 
         Parameters
@@ -191,8 +188,7 @@ class SynthSegProcessor(CrossSectionalProcessor):
         if exists(csv_file):
             os.remove(csv_file)
 
-        input_files, res_files, output_files, discarded_files, supersynth_files = (
-            [],
+        input_files, res_files, output_files, supersynth_files = (
             [],
             [],
             [],
@@ -203,8 +199,7 @@ class SynthSegProcessor(CrossSectionalProcessor):
             input_files.extend(output[0])
             res_files.extend(output[1])
             output_files.extend(output[2])
-            discarded_files.extend(output[3])
-            supersynth_files.extend(output[4])
+            supersynth_files.extend(output[3])
 
         with open(join(TMP_DIR, prefix + "_input_files.txt"), "w") as f:
             for i_f in input_files:
@@ -240,10 +235,12 @@ class SynthSegProcessor(CrossSectionalProcessor):
                 ]
                 + gpu_cmd
             )
-        
+
         if len(supersynth_files) >= 1:
             ## Run SuperSynth
-            os.environ["FREESURFER_HOME"] = "/home/Code/freesurfer-supersynth/"  #ERROR: temporary fix until the latest FS is installed
+            os.environ["FREESURFER_HOME"] = (
+                "/home/Code/freesurfer-supersynth/"  # ERROR: temporary fix until the latest FS is installed
+            )
             subprocess.call(
                 [
                     "/home/Code/freesurfer-supersynth/bin/mri_super_synth",  # ERROR: temporary fix using full path to supersynth
@@ -259,7 +256,9 @@ class SynthSegProcessor(CrossSectionalProcessor):
             ## Checking if some cases were skipped due to CUDA OOM
             failed_lines = []
             cpu_csv = join(TMP_DIR, "files_to_process_supersynth_cpu.csv")
-            if exists(cpu_csv):  # Removing existing csv file to ensure it has the updated subjects
+            if exists(
+                cpu_csv
+            ):  # Removing existing csv file to ensure it has the updated subjects
                 os.remove(cpu_csv)
             with open(join(TMP_DIR, "files_to_process_supersynth.csv"), "r") as f:
                 for line in f:
@@ -288,7 +287,7 @@ class SynthSegProcessor(CrossSectionalProcessor):
                     ]
                 )
 
-            #TODO: Find a better approach to get the files to convert
+            # TODO: Find a better approach to get the files to convert
             with open(join(TMP_DIR, "files_to_process_supersynth.csv"), "r") as f:
                 for line in f:
                     input_file, output_dir, _ = line.strip().split(",")
@@ -433,13 +432,14 @@ class SynthSegProcessor(CrossSectionalProcessor):
 
         self._update_full_layout()
 
-    def process_subject(self,
-                        subject: str,
-                        session_list: Optional[List[str]] = None,
-                        force_flag: bool = False,
-                        check_seg: str = None,
-                        **kwargs
-                        ) -> Tuple[List, List, List, List, List]:
+    def process_subject(
+        self,
+        subject: str,
+        force_flag: bool = False,
+        session_list: Optional[List[str]] = None,
+        check_seg: Optional[str] = None,
+        **kwargs,
+    ) -> Tuple[List, List, List, List]:
         """Collect SynthSeg I/O paths for all sessions of one subject.
 
         Parameters
@@ -462,13 +462,12 @@ class SynthSegProcessor(CrossSectionalProcessor):
         -------
         tuple of list
             ``(input_files, res_files, output_files, vol_files,
-            discarded_files)`` — one entry per session queued.
+            )`` — one entry per session queued.
         """
         if check_seg is None:
             check_seg = "/"
 
-        input_files, res_files, output_files, discarded_files, supersynth_files = (
-            [],
+        input_files, res_files, output_files, supersynth_files = (
             [],
             [],
             [],
@@ -515,7 +514,9 @@ class SynthSegProcessor(CrossSectionalProcessor):
             anat_seg = basename(self.build_path(synthseg_entities))
 
             # Check if segmentation already exists
-            if exists(join(check_seg, "sub-" + subject, "ses-" + sess, "utils", anat_seg)):
+            if exists(
+                join(check_seg, "sub-" + subject, "ses-" + sess, "utils", anat_seg)
+            ):
                 subprocess.call(
                     [
                         "cp",
@@ -565,14 +566,14 @@ class SynthSegProcessor(CrossSectionalProcessor):
             ):
                 with open(csv_file, "a") as f:
                     f.write(
-                        f"{join(raw_dirname, t1w_file.filename)},{join(TMP_DIR, "supersynth_process", "sub-"+subject, "ses-"+sess)},invivo\n"
+                        f"{join(raw_dirname, t1w_file.filename)},{join(TMP_DIR, 'supersynth_process', 'sub-' + subject, 'ses-' + sess)},invivo\n"
                     )
                 supersynth_files += [join(raw_dirname, t1w_file.filename)]
 
             # Removing duplicates in case the files are repeated
             remove_duplicates_csv(csv_file)
 
-        return input_files, res_files, output_files, discarded_files, supersynth_files
+        return input_files, res_files, output_files, supersynth_files
 
 
 class BiasCorrectionProcessor(CrossSectionalProcessor):
@@ -628,7 +629,11 @@ class BiasCorrectionProcessor(CrossSectionalProcessor):
                     np.array(proxyraw.dataobj), proxyraw.affine, [1, 1, 1]
                 )
                 save_volume(
-                    volume=v, aff=aff, header=proxyraw.header, path=resampled_filepath, res=[1, 1, 1]
+                    volume=v,
+                    aff=aff,
+                    header=proxyraw.header,
+                    path=resampled_filepath,
+                    res=[1, 1, 1],
                 )
 
         else:
@@ -795,8 +800,7 @@ class BiasCorrectionProcessor(CrossSectionalProcessor):
                     header=proxyseg.header,
                     path=output_mask_filepath,
                 )
-            
-            
+
             resampled_flag = self._check_resampled_file(raw_file, resampled_entities)
             if resampled_flag["exit_code"] == -1:
                 print(resampled_flag["message"], end="", flush=True)
