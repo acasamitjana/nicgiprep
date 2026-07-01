@@ -21,6 +21,7 @@ filename_entities = [
     "reconstruction",
     "desc",
     "space",
+    "datatype",
 ]
 BIDS_PATH_PATTERN = [
     "sub-{subject}[/ses-{session}]/{datatype<anat|utils>|anat}/sub-{subject}[_ses-{session}][_space-{space}][_task-{task}][_acq-{acquisition}][_ce-{ceagent}][_rec-{reconstruction}][_run-{run}][_part-{part}][_desc-{desc}]_{suffix<aff|v2r>}{extension<.txt|.npy>|.npy}",
