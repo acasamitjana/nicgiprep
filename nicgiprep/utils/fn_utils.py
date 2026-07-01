@@ -372,6 +372,7 @@ def one_hot_encoding(
     target: np.ndarray,
     num_classes: Optional[int] = None,
     categories: Optional[Union[dict, list, np.ndarray]] = None,
+    return_lut: bool = False,
 ) -> np.ndarray:
     """Convert an integer label map to a one-hot encoded array.
 
@@ -388,6 +389,9 @@ def one_hot_encoding(
         - If a list or array, converted to ``{label: i}`` by enumeration.
         - If ``None`` and ``num_classes`` is also ``None``, inferred from
           ``np.unique(target)``.
+    return_lut: bool.
+        Return the look-up-table used for one_hot_encoding. It is useful to convert back to the oringinal labels,
+        specially if no categories nor num_classes is used. By default, False.
 
     Returns
     -------
@@ -418,7 +422,11 @@ def one_hot_encoding(
         labels[idx] = 1
 
     # return np.transpose(labels, axes=(1, 2, 3, 0))
-    return np.moveaxis(labels, 0, -1)  # to allow for any number of dimensions
+    if return_lut:
+        return np.moveaxis(labels, 0, -1), categories
+
+    else:
+        return np.moveaxis(labels, 0, -1)  # to allow for any number of dimensions
 
 
 def label_log_odds(
