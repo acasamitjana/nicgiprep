@@ -328,7 +328,7 @@ class MRISegmentationProcessor(CrossSectionalProcessor):
                 qc_df = pd.read_csv(qc_file, dtype=str)
                 qc_df = qc_df.add_prefix('qc_')
                 qc_df.columns.str.replace(" ", "_")
-                
+
                 summary_df = pd.concat([vols_df, qc_df], axis=1)
                 summary_df.insert(loc=0, column='session', value=sess_id)
 
@@ -366,77 +366,6 @@ class MRISegmentationProcessor(CrossSectionalProcessor):
 
                 # remove supersynth directory
                 subprocess.call(['rm', '-rf', output_dir])
-
-
-        ## Gather all info/summary for all sessions (1 .tsv file per subject) for volume+qc
-        for subject in listdir(DIR_PIPELINES["nicgiprep-cross"]):
-            if not isdir(join(DIR_PIPELINES["nicgiprep-cross"], subject)):
-                continue
-
-            df_new = None
-
-            for sess in listdir(join(DIR_PIPELINES["nicgiprep-cross"], subject)):
-                utils_dir = join(
-                    DIR_PIPELINES["nicgiprep-cross"], subject, sess, "utils"
-                )
-                if not exists(utils_dir):
-                    continue
-
-                vol_files = list(
-                    filter(
-                        lambda x: "volumes.csv" in x or "volumes.tsv" in x,
-                        listdir(utils_dir),
-                    )
-                )
-
-                qc_files = list(
-                    filter(lambda x: "qc.csv" in x or "qc.tsv" in x, listdir(utils_dir))
-                )
-
-                if len(vol_files) == 0:
-                    continue
-
-                # Read volumes
-                vol_path = join(utils_dir, vol_files[0])
-                df_vol = pd.read_csv(vol_path, dtype=str)
-                if len(df_vol.columns) == 1:
-                    df_vol = pd.read_csv(vol_path, sep="\t", dtype=str)
-
-                # Read QC if present
-                if len(qc_files) > 0:
-                    qc_path = join(utils_dir, qc_files[0])
-                    df_qc = pd.read_csv(qc_path, dtype=str)
-                    if len(df_qc.columns) == 1:
-                        df_qc = pd.read_csv(qc_path, sep="\t", dtype=str)
-
-                    # Merge horizontally (same row)
-                    df = pd.concat([df_vol, df_qc], axis=1)
-
-                else:
-                    df = df_vol
-
-                df["session"] = sess
-
-                if df_new is None:
-                    df_new = pd.DataFrame(
-                        columns=["session"] + [c for c in df.columns if c != "session"]
-                    )
-
-                df_new = pd.concat([df_new, df], ignore_index=True)
-
-            if df_new is not None and len(df_new) > 0:
-                cols = ["session"] + [c for c in df_new.columns if c != "session"]
-                df_new = df_new[cols]
-
-                df_new.to_csv(
-                    join(
-                        DIR_PIPELINES["nicgiprep-cross"],
-                        subject,
-                        subject + "_volqc.tsv",
-                    ),
-                    sep="\t",
-                    index=False,
-                )
 
         self._update_full_layout()
 
@@ -964,73 +893,61 @@ class MNIRegistrationProcessor(CrossSectionalProcessor):
             # input segs
             synthseg_entities = copy.copy(self.seg_entities)
             synthseg_entities["scope"] = ["nicgiprep-cross"]
+            synthseg_entities["datatype"] = ["utils"]
             synthseg_entities["suffix"] = ["T1wsynthseg", "synthseg"]
-            seg_file = self._get_data(
+            seg_files = self._get_data(
                 **{"session": sess_id, "subject": subject, **synthseg_entities}
             )
-            if seg_file is None:
+            if seg_files is None:
                 continue
 
-            # get entities
-            seg_entities = self._get_entities(seg_file)
-            seg_entities["extension"] = "nii.gz"
-            raw_entities = {
-                k: str(v) for k, v in seg_entities.items() if k != "acquisition"
-            }
-            raw_entities["suffix"] = "T1w"
-            raw_entities["scope"] = "nicgiprep-cross"
-            raw_entities["datatype"] = "anat"
-            raw_entities["acquisition"] = None
+            for seg_file in seg_files:
+                # get entities
+                seg_entities = self._get_entities(seg_file)
+                seg_entities["extension"] = "nii.gz"
 
-            # raw image
-            raw_file = self._get_data(**raw_entities)
-            if raw_file is None:
-                continue
+                raw_entities = copy.deepcopy(seg_entities)
+                raw_entities["suffix"] = "T1w"
+                raw_entities["datatype"] = "anat"
+                raw_entities["acquisition"] = None
 
-            # build output paths
-            output_filepath = join(
-                preproc_dirname, basename(raw_file).replace(".nii.gz", "mni.nii.gz")
-            )  ## Saving the final result in /anat
-            res_seg_filepath = join(
-                preproc_dirname.replace("anat", "utils"),
-                seg_file.filename.replace("synthseg", "synthsegres"),
-            )
+                # raw image
+                raw_file = self._get_data(**raw_entities, curr_len=1)
+                if raw_file is None:
+                    continue
+                else:
+                    raw_file = raw_file[0]
 
-            if exists(output_filepath) and not force_flag:
-                print("image already registered to MNI.")
-                continue
+                # build output paths
+                output_entities = copy.deepcopy(raw_entities)
+                output_entities['desc'] = 'affine'
+                output_entities['space'] = 'MNI'
+                output_filename = self.build_path(output_entities)
+                output_filepath = join(preproc_dirname, output_filename)  ## Saving the final result in /anat
+                output_entities['suffix'] = 'aff'
+                output_entities['desc'] = None
+                output_entities['extension'] = '.npy'
+                output_aff_filename = self.build_path(output_entities)
+                output_aff_filepath = join(preproc_dirname, output_aff_filename)  ## Saving the final result in /anat
 
-            # ---------------------------------- #
-            #     Resampling SynthSeg masks      #
-            # ---------------------------------- #
-            if not exists(res_seg_filepath):
-                subprocess.call(
-                    [
-                        "mri_convert",
-                        seg_file.path,
-                        res_seg_filepath,
-                        "-rl",
-                        raw_file.path,
-                        "-rt",
-                        "nearest",
-                        "-odt",
-                        "float",
-                        "--no-rescale-dicom",
-                    ]
-                )
+                if exists(output_filepath) and not force_flag:
+                    print("image already registered to MNI.")
+                    continue
 
-            # ------------------------ #
-            #   Registration to MNI    #
-            # ------------------------ #
-            if not exists(output_filepath) or force_flag:
-                register_to_MNI(
+                # ------------------------ #
+                #   Registration to MNI    #
+                # ------------------------ #
+
+                im_MNI_proxy, aff_MNI_arr = register_to_MNI(
                     raw_file.path,
-                    res_seg_filepath,
-                    output_filepath,
+                    seg_file.path,
                     MNI_TEMPLATE_SEG,
                     MNI_TEMPLATE,
                     labels_registration,
                 )
+
+                nib.save(im_MNI_proxy, output_filepath)
+                np.save(output_aff_filepath, aff_MNI_arr)
 
         return {
             "exit_code": 1,
