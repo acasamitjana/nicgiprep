@@ -45,7 +45,7 @@ class CrossSectionalProcessor(Processor):
         super()._build_processor(**kwargs)
 
 
-class SynthSegProcessor(CrossSectionalProcessor):
+class MRISegmentationProcessor(CrossSectionalProcessor):
     """Run SuperSynth and SynthSeg parcellation on all T1w images in a BIDS dataset.
 
     Collects input/output paths across subjects and sessions, invokes
@@ -182,13 +182,11 @@ class SynthSegProcessor(CrossSectionalProcessor):
         """
         self._on_pipeline_init()
 
-        csv_file = join(
-            TMP_DIR, "files_to_process_supersynth.csv"
-        )  ## CSV file for SuperSynth batch processing
+        csv_file = join(TMP_DIR, "files_to_process_supersynth.csv")  ## CSV file for SuperSynth batch processing
         if exists(csv_file):
             os.remove(csv_file)
 
-        input_files, res_files, output_files, supersynth_files = (
+        input_files, res_files, synthseg_files, supersynth_files = (
             [],
             [],
             [],
@@ -198,7 +196,7 @@ class SynthSegProcessor(CrossSectionalProcessor):
             output = self.process_subject(subject, **kwargs)
             input_files.extend(output[0])
             res_files.extend(output[1])
-            output_files.extend(output[2])
+            synthseg_files.extend(output[2])
             supersynth_files.extend(output[3])
 
         with open(join(TMP_DIR, prefix + "_input_files.txt"), "w") as f:
@@ -211,12 +209,17 @@ class SynthSegProcessor(CrossSectionalProcessor):
                 f.write(i_f)
                 f.write("\n")
 
-        with open(join(TMP_DIR, prefix + "_output_files.txt"), "w") as f:
-            for i_f in output_files:
+        with open(join(TMP_DIR, prefix + "_synthseg_files.txt"), "w") as f:
+            for i_f in synthseg_files:
                 f.write(i_f)
                 f.write("\n")
 
-        if len(output_files) >= 1:
+        with open(join(TMP_DIR, prefix + "_supersynth_files.txt"), "w") as f:
+            for i_f in supersynth_files:
+                f.write(i_f)
+                f.write("\n")
+
+        if len(synthseg_files) >= 1:
             gpu_cmd = [] if gpu_flag else ["--cpu"]
             ## Run SynthSeg
             subprocess.call(
@@ -225,7 +228,7 @@ class SynthSegProcessor(CrossSectionalProcessor):
                     "--i",
                     join(TMP_DIR, prefix + "_input_files.txt"),
                     "--o",
-                    join(TMP_DIR, prefix + "_output_files.txt"),
+                    join(TMP_DIR, prefix + "_synthseg_files.txt"),
                     "--resample",
                     join(TMP_DIR, prefix + "_res_files.txt"),
                     "--threads",
@@ -237,15 +240,11 @@ class SynthSegProcessor(CrossSectionalProcessor):
             )
 
         if len(supersynth_files) >= 1:
-            ## Run SuperSynth
-            os.environ["FREESURFER_HOME"] = (
-                "/home/Code/freesurfer-supersynth/"  # ERROR: temporary fix until the latest FS is installed
-            )
             subprocess.call(
                 [
-                    "/home/Code/freesurfer-supersynth/bin/mri_super_synth",  # ERROR: temporary fix using full path to supersynth
+                    "mri_super_synth",  # ERROR: temporary fix using full path to supersynth
                     "--i",
-                    join(TMP_DIR, "files_to_process_supersynth.csv"),
+                    join(TMP_DIR, prefix + "_supersynth_files.txt"),
                     "--threads",
                     str(threads),
                     "--device",
@@ -255,17 +254,16 @@ class SynthSegProcessor(CrossSectionalProcessor):
 
             ## Checking if some cases were skipped due to CUDA OOM
             failed_lines = []
-            cpu_csv = join(TMP_DIR, "files_to_process_supersynth_cpu.csv")
-            if exists(
-                cpu_csv
-            ):  # Removing existing csv file to ensure it has the updated subjects
+            cpu_csv = join(TMP_DIR, prefix + "_supersynth_files_cpu.txt")
+            if exists(cpu_csv):  # Removing existing csv file to ensure it has the updated subjects
                 os.remove(cpu_csv)
-            with open(join(TMP_DIR, "files_to_process_supersynth.csv"), "r") as f:
+
+            with open(join(TMP_DIR, prefix + "_supersynth_files.txt"), "r") as f:
                 for line in f:
                     line = line.strip()
                     if not line:
                         continue
-                    input_file, out_dir, _ = line.split(",")
+                    _, _, _, out_dir, _ = line.split(",")
                     if not exists(join(out_dir, "segmentation.mgz")):
                         failed_lines.append(line)
 
@@ -274,10 +272,11 @@ class SynthSegProcessor(CrossSectionalProcessor):
                     for line in failed_lines:
                         f.write(line + "\n")
                 remove_duplicates_csv(cpu_csv)  # Removing any duplicates
+
                 ## Running again SuperSynth using cpu
                 subprocess.call(
                     [
-                        "/home/Code/freesurfer-supersynth/bin/mri_super_synth",  # ERROR: temporary fix using full path to supersynth
+                        "mri_super_synth",  # ERROR: temporary fix using full path to supersynth
                         "--i",
                         cpu_csv,
                         "--threads",
@@ -287,78 +286,87 @@ class SynthSegProcessor(CrossSectionalProcessor):
                     ]
                 )
 
-            # TODO: Find a better approach to get the files to convert
-            with open(join(TMP_DIR, "files_to_process_supersynth.csv"), "r") as f:
-                for line in f:
-                    input_file, output_dir, _ = line.strip().split(",")
-                    subject = basename(dirname(output_dir))
-                    sess = basename(output_dir)
-                    fname = basename(input_file)
+        # From all supersynth outputs, keep only the segmentation and resample it back to the original resolution.
+        # Keep the 1x1x1 in the utils files
+        with open(join(TMP_DIR, prefix + "_supersynth_files.txt"), "r") as f:
+            for line in f:
+                subject_id, sess_id, input_file, output_dir, _ = line.strip().split(",")
+                im_fname = basename(input_file)
+                seg_fname = im_fname.replace(".nii.gz", "dseg.nii.gz")
+                vol_fname = 'sub-' + subject_id + '_summary.tsv'
 
-                    ## Convert .mgz files to .nii.gz + copy the rest to utils + copy the segmentation to '/anat'
-                    for file in listdir(
-                        join(TMP_DIR, "supersynth_process", subject, sess)
-                    ):
-                        if file == "segmentation.mgz":
-                            subprocess.call(
-                                [
-                                    "mri_convert",
-                                    join(
-                                        TMP_DIR,
-                                        "supersynth_process",
-                                        subject,
-                                        sess,
-                                        file,
-                                    ),
-                                    join(
-                                        DIR_PIPELINES["nicgiprep-cross"],
-                                        subject,
-                                        sess,
-                                        "anat",
-                                        fname.replace(".nii.gz", "dseg.nii.gz"),
-                                    ),
-                                    "-rl",
-                                    input_file,
-                                    "-rt",
-                                    "nearest",
-                                    "-odt",
-                                    "float",
-                                    "--no-rescale-dicom",
-                                ]
-                            )
-                        elif file.startswith("Synth") and file.endswith(".mgz"):
-                            subprocess.call(
-                                [
-                                    "mri_convert",
-                                    join(
-                                        TMP_DIR,
-                                        "supersynth_process",
-                                        subject,
-                                        sess,
-                                        file,
-                                    ),
-                                    join(
-                                        DIR_PIPELINES["nicgiprep-cross"],
-                                        subject,
-                                        sess,
-                                        "utils",
-                                        file.replace(".mgz", ".nii.gz"),
-                                    ),
-                                ]
-                            )
-                        elif file.endswith(".csv"):
-                            shutil.copy(
-                                join(
-                                    TMP_DIR, "supersynth_process", subject, sess, file
-                                ),
-                                join(
-                                    DIR_PIPELINES["nicgiprep-cross"],
-                                    subject,
-                                    sess,
-                                    "utils",
-                                    file,
-                                ),
-                            )
+
+                proc_sess_dir = join(
+                    DIR_PIPELINES["nicgiprep-cross"],
+                    "sub-" + subject_id,
+                )
+
+                proc_anat_dir = join(
+                    proc_sess_dir,
+                    "ses-" + sess_id,
+                    "anat",
+                )
+
+                proc_utils_dir = join(
+                    proc_sess_dir,
+                    "ses-" + sess_id,
+                    "utils",
+                )
+
+                if not exists(proc_anat_dir):
+                    os.makedirs(proc_anat_dir)
+
+                seg_file = join(output_dir, "segmentation.mgz")
+                csv_file = join(output_dir, "volumes.csv")
+                qc_file = join(output_dir, "qc.csv")
+
+                if not exists(seg_file) or not exists(csv_file) or not exists(qc_file): #supersynth failed for whatever reason
+                    continue
+
+                # copy the volumes and qc data
+                vols_df = pd.read_csv(csv_file, dtype=str)
+                qc_df = pd.read_csv(qc_file, dtype=str)
+                qc_df = qc_df.add_prefix('qc_')
+                qc_df.columns.str.replace(" ", "_")
+                
+                summary_df = pd.concat([vols_df, qc_df], axis=1)
+                summary_df.insert(loc=0, column='session', value=sess_id)
+
+                if exists(join(proc_sess_dir, vol_fname)):
+                    existing_summary_df = pd.read_csv(join(proc_sess_dir, vol_fname), dtype=str)
+                    summary_df  = pd.concat([existing_summary_df, summary_df], axis=1)
+
+                summary_df.to_csv(join(proc_sess_dir, vol_fname), sep='\t', index=False)
+
+                # read data
+                im_proxy = nib.load(input_file)
+                seg_proxy = nib.load(seg_file)
+                seg_arr = np.array(seg_proxy.dataobj)
+
+                # resample labelmaps to original resolution
+                onehot_arr, onehot_lut = one_hot_encoding(seg_arr, return_lut=True).astype(
+                    "float"
+                )
+                onehot_proxy = nib.Nifti1Image(
+                    onehot_arr, seg_proxy.affine
+                )
+                onehot_proxy = vol_resample_fast(
+                    im_proxy, onehot_proxy,
+                )
+
+                onehot_res_arr = np.array(onehot_proxy.dataobj)
+                seg_argmax_res_arr = np.argmax(onehot_res_arr, axis=-1)
+                seg_res_arr = np.zeros_like(seg_argmax_res_arr)
+                for ul, it_ul in onehot_lut.items():
+                    seg_res_arr[seg_argmax_res_arr == it_ul] = ul
+
+                # save anat and utils files
+                seg_proxy = nib.Nifti1Image(seg_res_arr, onehot_proxy.affine)
+                nib.save(seg_proxy, join(proc_utils_dir, seg_fname))
+
+                # remove supersynth directory
+                subprocess.call(['rm', '-rf', output_dir])
+
 
         ## Gather all info/summary for all sessions (1 .tsv file per subject) for volume+qc
         for subject in listdir(DIR_PIPELINES["nicgiprep-cross"]):
@@ -464,9 +472,6 @@ class SynthSegProcessor(CrossSectionalProcessor):
             ``(input_files, res_files, output_files, vol_files,
             )`` — one entry per session queued.
         """
-        if check_seg is None:
-            check_seg = "/"
-
         input_files, res_files, output_files, supersynth_files = (
             [],
             [],
@@ -478,28 +483,18 @@ class SynthSegProcessor(CrossSectionalProcessor):
         if session_list is not None:
             sessions = [s for s in sessions if s in session_list]
 
-        for sess in sessions:
-            proc_anat_dir = join(
-                DIR_PIPELINES["nicgiprep-cross"],
-                "sub-" + subject,
-                "ses-" + sess,
-                "anat",
-            )
-            proc_utils_dir = join(
-                DIR_PIPELINES["nicgiprep-cross"],
-                "sub-" + subject,
-                "ses-" + sess,
-                "utils",
-            )
+        for sess_id in sessions:
 
-            t1w_file = self._select_image(subject, sess)
+            t1w_file = self._select_image(subject, sess_id)
             if t1w_file is None:
                 continue
 
-            if not exists(proc_anat_dir):
-                os.makedirs(proc_anat_dir)
-            if not exists(proc_utils_dir):
-                os.makedirs(proc_utils_dir)
+            proc_utils_dir = join(
+                DIR_PIPELINES["nicgiprep-cross"],
+                "sub-" + subject,
+                "ses-" + sess_id,
+                "utils",
+            )
 
             raw_dirname = t1w_file.dirname
             t1w_entities = {
@@ -514,16 +509,16 @@ class SynthSegProcessor(CrossSectionalProcessor):
             anat_seg = basename(self.build_path(synthseg_entities))
 
             # Check if segmentation already exists
-            if exists(
-                join(check_seg, "sub-" + subject, "ses-" + sess, "utils", anat_seg)
-            ):
+            if (check_seg is not None and
+                    exists(join(check_seg, "sub-" + subject, "ses-" + sess_id, "utils", anat_seg))):
+
                 subprocess.call(
                     [
                         "cp",
                         join(
                             check_seg,
                             "sub-" + subject,
-                            "ses-" + sess,
+                            "ses-" + sess_id,
                             "utils",
                             anat_seg,
                         ),
@@ -532,6 +527,7 @@ class SynthSegProcessor(CrossSectionalProcessor):
                 )
 
             if not exists(join(proc_utils_dir, anat_seg)) or force_flag:
+
                 proxy = nib.load(join(raw_dirname, t1w_file.filename))
                 run_code = self._check_file(proxy)
                 if run_code["run_flag"]:
@@ -543,35 +539,15 @@ class SynthSegProcessor(CrossSectionalProcessor):
                     with open(join(proc_utils_dir, "excluded_file.txt"), "w") as f:
                         f.write(run_code["exit_message"])
 
-            csv_file = join(
-                TMP_DIR, "files_to_process_supersynth.csv"
-            )  # CSV file for SuperSynth batch processing
-            os.makedirs(
-                join(
-                    TMP_DIR,
-                    "supersynth_process",
-                    "sub-" + subject,
-                    "ses-" + sess,
-                ),
-                exist_ok=True,
-            )
-            if not exists(
-                join(
-                    TMP_DIR,
-                    "supersynth_process",
-                    "sub-" + subject,
-                    "ses-" + sess,
-                    "segmentation.mgz",
-                )
-            ):
-                with open(csv_file, "a") as f:
-                    f.write(
-                        f"{join(raw_dirname, t1w_file.filename)},{join(TMP_DIR, 'supersynth_process', 'sub-' + subject, 'ses-' + sess)},invivo\n"
-                    )
-                supersynth_files += [join(raw_dirname, t1w_file.filename)]
-
-            # Removing duplicates in case the files are repeated
-            remove_duplicates_csv(csv_file)
+            supersynth_dir = join(TMP_DIR, "supersynth_process", "sub-" + subject, "ses-" + sess_id)
+            if not exists(join(supersynth_dir, "segmentation.mgz")):
+                os.makedirs(supersynth_dir, exist_ok=True)
+                supersynth_files.append([
+                    subject,
+                    sess_id,
+                    f"{join(raw_dirname, t1w_file.filename)},",
+                    f"{join(TMP_DIR, 'supersynth_process', 'sub-' + subject, 'ses-' + sess_id)},"
+                    f"invivo"])
 
         return input_files, res_files, output_files, supersynth_files
 
