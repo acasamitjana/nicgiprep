@@ -21,14 +21,11 @@ import bids
 
 from os.path import exists, join, dirname
 from argparse import ArgumentParser
-from pathlib import Path
-import sys
 
-sys.path.append(str(Path(__file__).resolve().parent.parent))
 from setup import *
 
 from nicgiprep.pipelines import (
-    SynthSegProcessor,
+    MRISegmentationProcessor,
     BiasCorrectionProcessor,
     MNIRegistrationProcessor,
 )
@@ -98,7 +95,7 @@ os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_num)
 
 # ── Step 1: SynthSeg and SuperSynth for T1w modality ──────────────────────
 print("\n=== Step 1: SynthSeg and SuperSynth for T1w modality ===")
-processing_seg = SynthSegProcessor(bids_loader=bids_loader, subject_list=args.subjects)
+processing_seg = MRISegmentationProcessor(bids_loader=bids_loader, subject_list=args.subjects)
 
 processing_seg.process(
     force_flag=args.force,

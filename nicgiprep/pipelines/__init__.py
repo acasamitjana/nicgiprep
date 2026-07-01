@@ -6,14 +6,14 @@ cross-sectional, longitudinal, and multimodal data processing.
 """
 
 from .base import Processor
-from .cross_sectional import CrossSectionalProcessor, SynthSegProcessor, BiasCorrectionProcessor, MNIRegistrationProcessor
+from .cross_sectional import CrossSectionalProcessor, MRISegmentationProcessor, BiasCorrectionProcessor, MNIRegistrationProcessor
 from .longitudinal import LongitudinalProcessor
 from .multimodal import MMProcessor, MultiModalSynthSegProcessor, MultiModalBiasCorrectionProcessor, MultiMRIProcessor
 
 __all__ = [
     "Processor",
     "CrossSectionalProcessor",
-    "SynthSegProcessor",
+    "MRISegmentationProcessor",
     "BiasCorrectionProcessor",
     "MNIRegistrationProcessor",
     "LongitudinalProcessor",
