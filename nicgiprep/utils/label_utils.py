@@ -22,14 +22,14 @@ import numpy as np
 from importlib.resources import files
 
 # --- SuperSYNTH --- #
-path = files("nicgiprep.data.labels_classes_priors").joinpath(  #HACK: removed nicgiprep.
+path = files("data.labels_classes_priors").joinpath(  #HACK: removed nicgiprep.
     "supersynth_segmentation_labels.npy"
 )
 supersynth_labels = np.load(path)
 SUPERSYNTH_LUT = {k: it_k for it_k, k in enumerate(np.unique(supersynth_labels))}
 
 # --- SynthSeg --- #
-path = files("nicgiprep.data.labels_classes_priors").joinpath(
+path = files("data.labels_classes_priors").joinpath(
     "synthseg_parcellation_labels.npy"
 )
 ctx_labels = np.load(path)

@@ -5,17 +5,17 @@ This involves running SuperSynth and SynthSeg to get label maps, followed by
 Bias Field correction and MNI registration.
 
 """
-
+import pdb
 from os import listdir
 from os.path import join, dirname, basename, exists, isdir
-from typing import List, Optional, Tuple
-from bids.layout import BIDSFile
+from typing import List, Optional, Tuple, Dict
 import warnings
+import subprocess
 
-import shutil
+import tqdm
+from bids.layout import BIDSFile, parse_file_entities
 import pandas as pd
 import nibabel as nib
-import subprocess
 from skimage.morphology import ball, binary_dilation
 
 from setup import *
@@ -106,7 +106,7 @@ class MRISegmentationProcessor(CrossSectionalProcessor):
                 "exit_message": "File excluded due to an error reading the file or computing image shape and resolution.",
             }
 
-    def _select_image(self, subject: str, sess: str) -> Optional[BIDSFile]:
+    def _select_images(self, subject: str, sess: str, num: Optional[int] = None,) -> Optional[BIDSFile|List[BIDSFile]]:
         """Select a single T1w image for a given subject and session.
 
         Parameters
@@ -115,6 +115,8 @@ class MRISegmentationProcessor(CrossSectionalProcessor):
             Subject ID.
         sess : str
             Session ID.
+        num : int, optional
+            Number of retrieved images. If None, all images are returned, otherwise, we randomly select min(image, num)
 
         Returns
         -------
@@ -126,11 +128,14 @@ class MRISegmentationProcessor(CrossSectionalProcessor):
             subject=subject,
             session=sess,
             suffix="T1w",
-            extension=["nii", "nii.gz"],
+            extension=[".nii", ".nii.gz"],
             acquisition=["orig", None],
             scope="raw",
             ignore_check=True,
         )
+
+        if num is None:
+            return t1w_list
 
         if len(t1w_list) == 0:
             return None
@@ -182,6 +187,7 @@ class MRISegmentationProcessor(CrossSectionalProcessor):
         """
         self._on_pipeline_init()
 
+        # self.bids_loader.get(**{"session": sess_id, "subject": subject, 'suffix': ['T1wsynthseg', 'synthseg']})
         csv_file = join(TMP_DIR, "files_to_process_supersynth.csv")  ## CSV file for SuperSynth batch processing
         if exists(csv_file):
             os.remove(csv_file)
@@ -190,14 +196,20 @@ class MRISegmentationProcessor(CrossSectionalProcessor):
             [],
             [],
             [],
-            [],
+            {'subject': [], 'session': [], 'input_file': [], 'output_fname': [], 'mode': [], 'tmp_dir': [], 'run': []},
         )
         for subject in self.subject_list:
             output = self.process_subject(subject, **kwargs)
             input_files.extend(output[0])
             res_files.extend(output[1])
             synthseg_files.extend(output[2])
-            supersynth_files.extend(output[3])
+            supersynth_files['subject'].extend(output[3]['subject'])
+            supersynth_files['session'].extend(output[3]['session'])
+            supersynth_files['input_file'].extend(output[3]['input_file'])
+            supersynth_files['output_fname'].extend(output[3]['output_fname'])
+            supersynth_files['mode'].extend(output[3]['mode'])
+            supersynth_files['tmp_dir'].extend(output[3]['tmp_dir'])
+            supersynth_files['run'].extend(output[3]['run'])
 
         with open(join(TMP_DIR, prefix + "_input_files.txt"), "w") as f:
             for i_f in input_files:
@@ -214,10 +226,10 @@ class MRISegmentationProcessor(CrossSectionalProcessor):
                 f.write(i_f)
                 f.write("\n")
 
-        with open(join(TMP_DIR, prefix + "_supersynth_files.txt"), "w") as f:
-            for i_f in supersynth_files:
-                f.write(i_f)
-                f.write("\n")
+        supersynth_df = pd.DataFrame(supersynth_files)
+
+        run_df = copy.deepcopy(supersynth_df)
+        run_df = run_df[run_df['run']]
 
         if len(synthseg_files) >= 1:
             gpu_cmd = [] if gpu_flag else ["--cpu"]
@@ -239,12 +251,15 @@ class MRISegmentationProcessor(CrossSectionalProcessor):
                 + gpu_cmd
             )
 
-        if len(supersynth_files) >= 1:
+        if len(run_df) >= 1:
+            run_df = run_df[['input_file', 'tmp_dir', 'mode']]
+            run_df.to_csv(join(TMP_DIR, prefix + "_supersynth_files.csv"), header=False, index=False)
+
             subprocess.call(
                 [
-                    "mri_super_synth",  # ERROR: temporary fix using full path to supersynth
+                    "mri_super_synth",
                     "--i",
-                    join(TMP_DIR, prefix + "_supersynth_files.txt"),
+                    join(TMP_DIR, prefix + "_supersynth_files.csv"),
                     "--threads",
                     str(threads),
                     "--device",
@@ -253,32 +268,20 @@ class MRISegmentationProcessor(CrossSectionalProcessor):
             )
 
             ## Checking if some cases were skipped due to CUDA OOM
-            failed_lines = []
-            cpu_csv = join(TMP_DIR, prefix + "_supersynth_files_cpu.txt")
-            if exists(cpu_csv):  # Removing existing csv file to ensure it has the updated subjects
-                os.remove(cpu_csv)
+            run_df = pd.DataFrame()
+            for _, row in supersynth_df.iterrows():
+                if row['run'] and not exists(join(row['tmp_dir'], "segmentation.mgz")):
+                    run_df = pd.concat([run_df, row.to_frame().T])
 
-            with open(join(TMP_DIR, prefix + "_supersynth_files.txt"), "r") as f:
-                for line in f:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    _, _, _, out_dir, _ = line.split(",")
-                    if not exists(join(out_dir, "segmentation.mgz")):
-                        failed_lines.append(line)
-
-            if len(failed_lines) > 0:
-                with open(cpu_csv, "a") as f:
-                    for line in failed_lines:
-                        f.write(line + "\n")
-                remove_duplicates_csv(cpu_csv)  # Removing any duplicates
-
+            if len(run_df) > 0:
                 ## Running again SuperSynth using cpu
+                run_df = run_df[['input_file', 'tmp_dir', 'mode']]
+                run_df.to_csv(join(TMP_DIR, prefix + "_supersynth_files.csv"), header=False, index=False, mode='w')
                 subprocess.call(
                     [
                         "mri_super_synth",  # ERROR: temporary fix using full path to supersynth
                         "--i",
-                        cpu_csv,
+                        join(TMP_DIR, prefix + "_supersynth_files.csv"),
                         "--threads",
                         str(threads),
                         "--device",
@@ -288,86 +291,101 @@ class MRISegmentationProcessor(CrossSectionalProcessor):
 
         # From all supersynth outputs, keep only the segmentation and resample it back to the original resolution.
         # Keep the 1x1x1 in the utils files
-        with open(join(TMP_DIR, prefix + "_supersynth_files.txt"), "r") as f:
-            for line in f:
-                subject_id, sess_id, input_file, output_dir, _ = line.strip().split(",")
-                im_fname = basename(input_file)
-                seg_fname = im_fname.replace(".nii.gz", "dseg.nii.gz")
-                vol_fname = 'sub-' + subject_id + '_summary.tsv'
+        supersynth_failed = []
+        for _, row in supersynth_df.iterrows():
+            subject_id, sess_id = row['subject'], row['session']
+            input_file, tmp_dir =  row['input_file'], row['tmp_dir']
+
+            proc_sess_dir = join(
+                DIR_PIPELINES["nicgiprep-cross"],
+                "sub-" + str(subject_id),
+            )
+
+            proc_anat_dir = join(
+                proc_sess_dir,
+                "ses-" + str(sess_id),
+                "anat",
+            )
+
+            if not exists(proc_anat_dir):
+                os.makedirs(proc_anat_dir)
+
+            t1w_entities = self._get_entities(input_file)
+            seg_entities = copy.deepcopy(t1w_entities)
+            seg_entities['suffix'] += 'dseg'
+            seg_fname = self.build_path(seg_entities)
+            seg_entities['acquisition'] = '1'
+            seg_entities['datatype'] = 'utils'
+            seg_1x1x1_fname = self.build_path(seg_entities)
+            vol_fname = 'sub-' + subject_id + '_summary.tsv'
+
+            seg_file = join(tmp_dir, "segmentation.mgz")
+            csv_file = join(tmp_dir, "volumes.csv")
+            qc_file = join(tmp_dir, "qc.csv")
 
 
-                proc_sess_dir = join(
-                    DIR_PIPELINES["nicgiprep-cross"],
-                    "sub-" + subject_id,
-                )
+            if not exists(seg_file) or not exists(csv_file) or not exists(qc_file):
+                #supersynth failed for whatever reason and continue
+                supersynth_failed.append(input_file)
+                continue
 
-                proc_anat_dir = join(
-                    proc_sess_dir,
-                    "ses-" + sess_id,
-                    "anat",
-                )
+            # save original SuperSynth in the utils
+            if not exists(join(DIR_PIPELINES["nicgiprep-cross"], seg_1x1x1_fname)):
+                subprocess.call(['cp', seg_file, join(DIR_PIPELINES["nicgiprep-cross"], seg_1x1x1_fname)])
 
-                proc_utils_dir = join(
-                    proc_sess_dir,
-                    "ses-" + sess_id,
-                    "utils",
-                )
+            # copy the volumes and qc data
+            vols_df = pd.read_csv(csv_file, dtype=str)
+            qc_df = pd.read_csv(qc_file, dtype=str)
+            qc_df = qc_df.add_prefix('qc_')
+            qc_df.columns.str.replace(" ", "_")
 
-                if not exists(proc_anat_dir):
-                    os.makedirs(proc_anat_dir)
+            summary_df = pd.concat([vols_df, qc_df], axis=1)
+            summary_df.insert(loc=0, column='session', value=sess_id)
 
-                seg_file = join(output_dir, "segmentation.mgz")
-                csv_file = join(output_dir, "volumes.csv")
-                qc_file = join(output_dir, "qc.csv")
+            if exists(join(proc_sess_dir, vol_fname)):
+                existing_summary_df = pd.read_csv(join(proc_sess_dir, vol_fname), dtype=str, sep='\t')
+                summary_df  = pd.concat([existing_summary_df, summary_df], axis=0)
 
-                if not exists(seg_file) or not exists(csv_file) or not exists(qc_file): #supersynth failed for whatever reason
-                    continue
+            summary_df.drop_duplicates(inplace=True)
+            summary_df.to_csv(join(proc_sess_dir, vol_fname), sep='\t', index=False)
 
-                # copy the volumes and qc data
-                vols_df = pd.read_csv(csv_file, dtype=str)
-                qc_df = pd.read_csv(qc_file, dtype=str)
-                qc_df = qc_df.add_prefix('qc_')
-                qc_df.columns.str.replace(" ", "_")
+            # read data
+            im_proxy = nib.load(input_file)
+            seg_proxy = nib.load(seg_file)
+            seg_arr = np.array(seg_proxy.dataobj)
 
-                summary_df = pd.concat([vols_df, qc_df], axis=1)
-                summary_df.insert(loc=0, column='session', value=sess_id)
+            # resample labelmaps to original resolution
+            onehot_arr, onehot_lut = one_hot_encoding(seg_arr, return_lut=True)
+            onehot_proxy = nib.Nifti1Image(
+                onehot_arr.astype('float'), seg_proxy.affine
+            )
+            onehot_proxy = vol_resample_fast(
+                im_proxy, onehot_proxy,
+            )
 
-                if exists(join(proc_sess_dir, vol_fname)):
-                    existing_summary_df = pd.read_csv(join(proc_sess_dir, vol_fname), dtype=str)
-                    summary_df  = pd.concat([existing_summary_df, summary_df], axis=1)
+            onehot_res_arr = np.array(onehot_proxy.dataobj)
+            seg_argmax_res_arr = np.argmax(onehot_res_arr, axis=-1)
+            seg_res_arr = np.zeros_like(seg_argmax_res_arr, dtype='int32')
+            for ul, it_ul in onehot_lut.items():
+                seg_res_arr[seg_argmax_res_arr == it_ul] = ul
 
-                summary_df.to_csv(join(proc_sess_dir, vol_fname), sep='\t', index=False)
+            # save anat and utils files
+            save_volume(seg_res_arr, aff=onehot_proxy.affine, path=join(DIR_PIPELINES['nicgiprep-cross'], seg_fname))
 
-                # read data
-                im_proxy = nib.load(input_file)
-                seg_proxy = nib.load(seg_file)
-                seg_arr = np.array(seg_proxy.dataobj)
-
-                # resample labelmaps to original resolution
-                onehot_arr, onehot_lut = one_hot_encoding(seg_arr, return_lut=True).astype(
-                    "float"
-                )
-                onehot_proxy = nib.Nifti1Image(
-                    onehot_arr, seg_proxy.affine
-                )
-                onehot_proxy = vol_resample_fast(
-                    im_proxy, onehot_proxy,
-                )
-
-                onehot_res_arr = np.array(onehot_proxy.dataobj)
-                seg_argmax_res_arr = np.argmax(onehot_res_arr, axis=-1)
-                seg_res_arr = np.zeros_like(seg_argmax_res_arr)
-                for ul, it_ul in onehot_lut.items():
-                    seg_res_arr[seg_argmax_res_arr == it_ul] = ul
-
-                # save anat and utils files
-                seg_proxy = nib.Nifti1Image(seg_res_arr, onehot_proxy.affine)
-                nib.save(seg_proxy, join(proc_utils_dir, seg_fname))
-
-                # remove supersynth directory
-                subprocess.call(['rm', '-rf', output_dir])
+            # remove supersynth directory
+            # subprocess.call(['rm', '-rf', tmp_dir])
 
         self._update_full_layout()
+
+        print('\n')
+        print("=" * 40)
+        print("-" * 15 + "  SUMMARY  " + "-" * 14)
+        print("=" * 40)
+        print(f"Total Number of images processed: {len(supersynth_df)}")
+        print(f"SUCCESS:                  {len(supersynth_df) - len(supersynth_failed)}/{len(supersynth_df)}")
+        print(f"FAILED:                   {len(supersynth_failed)}/{len(supersynth_df)}")
+        print("-" * 40)
+
 
     def process_subject(
         self,
@@ -376,7 +394,7 @@ class MRISegmentationProcessor(CrossSectionalProcessor):
         session_list: Optional[List[str]] = None,
         check_seg: Optional[str] = None,
         **kwargs,
-    ) -> Tuple[List, List, List, List]:
+    ) -> Tuple[List, List, List, Dict]:
         """Collect SynthSeg I/O paths for all sessions of one subject.
 
         Parameters
@@ -405,7 +423,7 @@ class MRISegmentationProcessor(CrossSectionalProcessor):
             [],
             [],
             [],
-            [],
+            {'subject': [], 'session': [], 'input_file': [], 'output_fname': [], 'mode': [], 'tmp_dir': [], 'run': []},
         )
 
         sessions = self.bids_loader.get_session(subject=subject)
@@ -413,10 +431,25 @@ class MRISegmentationProcessor(CrossSectionalProcessor):
             sessions = [s for s in sessions if s in session_list]
 
         for sess_id in sessions:
-
-            t1w_file = self._select_image(subject, sess_id)
-            if t1w_file is None:
+            t1w_files = self._select_images(subject, sess_id)
+            if t1w_files is None:
                 continue
+
+            if isinstance(t1w_files, BIDSFile):
+                t1w_files = [t1w_files]
+
+            tmp_dir = join(
+                TMP_DIR,
+                "supersynth_process",
+                "sub-" + subject,
+                "ses-" + sess_id)
+
+            proc_anat_dir = join(
+                DIR_PIPELINES["nicgiprep-cross"],
+                "sub-" + str(subject),
+                "ses-" + str(sess_id),
+                "anat",
+            )
 
             proc_utils_dir = join(
                 DIR_PIPELINES["nicgiprep-cross"],
@@ -425,58 +458,60 @@ class MRISegmentationProcessor(CrossSectionalProcessor):
                 "utils",
             )
 
-            raw_dirname = t1w_file.dirname
-            t1w_entities = {
-                k: str(v)
-                for k, v in t1w_file.entities.items()
-                if k in filename_entities
-            }
-            t1w_entities["acquisition"] = "1"
-            synthseg_entities = {**t1w_entities, "suffix": "T1wsynthseg"}
+            for t1w_file in t1w_files:
+                raw_dirname = t1w_file.dirname
+                t1w_entities = dict(t1w_file.entities)
+                t1w_entities["acquisition"] = "1"
+                synthseg_entities = {**t1w_entities, "suffix": "T1wsynthseg"}
 
-            anat_res = basename(self.build_path(t1w_entities))
-            anat_seg = basename(self.build_path(synthseg_entities))
+                anat_res = basename(self.build_path(t1w_entities))
+                anat_seg = basename(self.build_path(synthseg_entities))
 
-            # Check if segmentation already exists
-            if (check_seg is not None and
-                    exists(join(check_seg, "sub-" + subject, "ses-" + sess_id, "utils", anat_seg))):
+                # Check if segmentation already exists
+                if (check_seg is not None and
+                        exists(join(check_seg, "sub-" + subject, "ses-" + sess_id, "utils", anat_seg))):
 
-                subprocess.call(
-                    [
-                        "cp",
-                        join(
-                            check_seg,
-                            "sub-" + subject,
-                            "ses-" + sess_id,
-                            "utils",
-                            anat_seg,
-                        ),
-                        join(proc_utils_dir, anat_seg),
-                    ]
-                )
+                    subprocess.call(
+                        [
+                            "cp",
+                            join(
+                                check_seg,
+                                "sub-" + subject,
+                                "ses-" + sess_id,
+                                "utils",
+                                anat_seg,
+                            ),
+                            join(proc_utils_dir, anat_seg),
+                        ]
+                    )
 
-            if not exists(join(proc_utils_dir, anat_seg)) or force_flag:
+                if not exists(join(proc_utils_dir, anat_seg)) or force_flag:
 
-                proxy = nib.load(join(raw_dirname, t1w_file.filename))
-                run_code = self._check_file(proxy)
-                if run_code["run_flag"]:
-                    input_files += [join(raw_dirname, t1w_file.filename)]
-                    res_files += [join(proc_utils_dir, anat_res)]
-                    output_files += [join(proc_utils_dir, anat_seg)]
+                    proxy = nib.load(join(raw_dirname, t1w_file.filename))
+                    run_code = self._check_file(proxy)
+                    if run_code["run_flag"]:
+                        input_files += [join(raw_dirname, t1w_file.filename)]
+                        res_files += [join(proc_utils_dir, anat_res)]
+                        output_files += [join(proc_utils_dir, anat_seg)]
 
-                else:
-                    with open(join(proc_utils_dir, "excluded_file.txt"), "w") as f:
-                        f.write(run_code["exit_message"])
+                    else:
+                        with open(join(proc_utils_dir, "excluded_file.txt"), "w") as f:
+                            f.write(run_code["exit_message"])
 
-            supersynth_dir = join(TMP_DIR, "supersynth_process", "sub-" + subject, "ses-" + sess_id)
-            if not exists(join(supersynth_dir, "segmentation.mgz")):
-                os.makedirs(supersynth_dir, exist_ok=True)
-                supersynth_files.append([
-                    subject,
-                    sess_id,
-                    f"{join(raw_dirname, t1w_file.filename)},",
-                    f"{join(TMP_DIR, 'supersynth_process', 'sub-' + subject, 'ses-' + sess_id)},"
-                    f"invivo"])
+                seg_fname = t1w_file.filename.replace(".nii.gz", "dseg.nii.gz")
+
+                if not exists(join(proc_anat_dir, seg_fname)):
+                    os.makedirs(tmp_dir, exist_ok=True)
+                    supersynth_files['subject'] += [subject]
+                    supersynth_files['session'] += [sess_id]
+                    supersynth_files['input_file'] += [f"{join(raw_dirname, t1w_file.filename)}"]
+                    supersynth_files['tmp_dir'] += [tmp_dir]
+                    supersynth_files['mode'] += ["invivo"]
+                    supersynth_files['output_fname'] += [join(proc_anat_dir, seg_fname)]
+                    if not exists(join(tmp_dir, "segmentation.mgz")):
+                        supersynth_files['run'] += [True]
+                    else:
+                        supersynth_files['run'] += [False]
 
         return input_files, res_files, output_files, supersynth_files
 
@@ -544,7 +579,7 @@ class BiasCorrectionProcessor(CrossSectionalProcessor):
         else:
             resampled_filepath = resampled_file[0].path
 
-        return {"exit_code": 0, "filepath": resampled_filepath}
+        return {"exit_code": 1, "filepath": resampled_filepath, "message": "success"}
 
     def _posterior2generative_labelmap(self, seg, lut=SYNTHSEG_LUT):
         """Convert soft posterior segmentation to a hemisphere-unified label space.
@@ -607,7 +642,218 @@ class BiasCorrectionProcessor(CrossSectionalProcessor):
 
         return out_seg
 
-    def process_subject(self, subject, force_flag=False, remove_wrong=True, **kwargs):
+    def process_image(self, seg_file: BIDSFile, force_flag: bool=False):
+        """Run bias-field correction for a given image.
+
+        Parameters
+        ----------
+        seg_file : BIDSFile
+            File to process. It should be a BIDSFile so that we can get the entities to build the outputs.
+        force_flag : bool, optional
+            If ``True``, reprocess sessions even when outputs already exist.
+            Default is ``False``.
+
+        Returns
+        -------
+        dict
+            Result dict with keys:
+              - ``exit_code`` (int): ``0`` on success / already processed, ``-1`` on failure.
+              - ``message`` (str): human-readable description of the outcome.
+        """
+
+        subject = seg_file.entities['subject']
+        sess_id = seg_file.entities['session']
+
+        preproc_dirname = join(
+            DIR_PIPELINES["nicgiprep-cross"],
+            "sub-" + subject,
+            "ses-" + sess_id,
+            "utils",
+        )
+
+        # get entities
+        seg_entities = self._get_entities(seg_file)
+        seg_entities["extension"] = ".nii.gz"
+
+        # build T1w rawdata entities
+        raw_entities = copy.deepcopy(seg_entities)
+        raw_entities["suffix"] = "T1w"
+        raw_entities["scope"] = "raw"
+        raw_entities["acquisition"] = [None, "orig"]
+        raw_entities.pop("datatype", None)
+        if 'run' not in raw_entities: raw_entities['run'] = None
+
+        # build T1w corrected and resampled entities
+        resampled_entities = copy.copy(raw_entities)
+        resampled_entities["acquisition"] = "1"
+        resampled_entities["scope"] = "nicgiprep-cross"
+        resampled_entities["datatype"] = "utils"
+
+        # raw image
+        raw_file = self._get_data(**raw_entities)
+        if raw_file is None:
+            return
+
+        # build output paths
+        output_filepath = join(
+            preproc_dirname.replace("utils", "anat"), basename(raw_file)
+        )  ## Saving the final result in /anat
+        output_mask_filepath = join(
+            preproc_dirname, seg_file.filename.replace("synthseg", "mask")
+        )
+
+        if (
+                exists(output_filepath)
+                and exists(output_mask_filepath)
+                and not force_flag
+        ):
+            return {
+                "exit_code": 0,
+                "message": "image already processed.",
+            }
+
+        # read images
+        proxyraw = nib.load(raw_file.path)
+        proxyseg = nib.load(seg_file.path)
+
+        # ------------------------ #
+        #      Computing masks     #
+        # ------------------------ #
+        # print('computing masks from dseg files; ', end='', flush=True)
+
+        if not exists(output_mask_filepath):
+            seg = np.array(proxyseg.dataobj)
+            mask = seg > 0
+            for lab in CSF_LABELS:
+                mask[seg == lab] = 0
+
+            save_volume(
+                volume=mask.astype("uint8"),
+                aff=proxyseg.affine,
+                header=proxyseg.header,
+                path=output_mask_filepath,
+            )
+
+        resampled_flag = self._check_resampled_file(raw_file, resampled_entities)
+        if resampled_flag["exit_code"] == -1:
+            return resampled_flag
+
+        proxyres = nib.load(resampled_flag["filepath"])
+
+        # ------------------------ #
+        # Bias field correction    #
+        # ------------------------ #
+        # print('correcting for inhomogeneities and normalisation (min/max); ', end='', flush=True)
+        if not exists(output_filepath) or force_flag:
+            vox2ras0 = proxyres.affine
+            mri_acq = np.asarray(proxyres.dataobj)
+            mri_acq[np.isnan(mri_acq)] = 0
+
+            pixdimim = np.sqrt(np.sum(proxyres.affine * proxyres.affine, axis=0))[
+                :-1
+            ]
+            pixdimseg = np.sqrt(np.sum(proxyseg.affine * proxyseg.affine, axis=0))[
+                :-1
+            ]
+            if any([np.abs(p1 - p2) > 0.01 for p1, p2 in zip(pixdimseg, pixdimim)]):
+                proxyseg = vol_resample_fast(proxyres, proxyseg, mode="nearest")
+
+            seg = np.array(proxyseg.dataobj)
+            soft_seg = one_hot_encoding(seg, categories=SYNTHSEG_LUT)
+            soft_seg = self._posterior2generative_labelmap(
+                soft_seg, lut=SYNTHSEG_LUT
+            )
+            try:
+                mri_acq_corr, bias_field = bias_field_corr(
+                    mri_acq,
+                    soft_seg,
+                    penalty=1,
+                    VERBOSE=False,
+                    filter_exceptions=True,
+                )
+            except:
+                return {
+                    "exit_code": -1,
+                    "message": "bias field cannot be computed.",
+                }
+
+            del soft_seg
+
+            mask = seg > 0
+            wm_mask = (seg == 2) | (seg == 41)
+
+            del seg
+
+            vox2ras0_orig = proxyraw.affine
+            mri_acq_orig = np.asarray(proxyraw.dataobj)
+            mri_acq_orig[np.isnan(mri_acq_orig)] = 0
+            if len(mri_acq_orig.shape) > 3:
+                mri_acq_orig = mri_acq_orig[..., 0]
+
+            new_vox_size = np.linalg.norm(vox2ras0_orig, 2, 0)[:3]
+            vox_size = np.linalg.norm(vox2ras0, 2, 0)[:3]
+
+            if all([v1 == v2 for v1, v2 in zip(vox_size, new_vox_size)]):
+                mask_dilated = binary_dilation(mask, ball(3))
+                m = np.mean(mri_acq_corr[wm_mask])
+                mri_acq_corr = 110 * mri_acq_corr / m
+                mri_acq_corr *= mask_dilated
+
+                save_volume(
+                    volume=np.clip(mri_acq_corr, 0, 255).astype("uint8"),
+                    aff=proxyres.affine,
+                    header=proxyres.header,
+                    path=output_filepath,
+                )
+
+            else:
+                bias_proxy = nib.Nifti1Image(bias_field, proxyres.affine)
+                bias_field_resize = vol_resample_fast(
+                    proxyraw, bias_proxy, return_np=True
+                )
+                #
+                mask_proxy = nib.Nifti1Image(mask.astype("float"), proxyres.affine)
+                mask_resize = (
+                        vol_resample_fast(proxyraw, mask_proxy, return_np=True) > 0.5
+                )
+                #
+                wm_mask_proxy = nib.Nifti1Image(
+                    wm_mask.astype("float"), proxyres.affine
+                )
+                wm_mask_resize = (
+                        vol_resample_fast(proxyraw, wm_mask_proxy, return_np=True) > 0.5
+                )
+
+                mri_acq_orig_corr = copy.copy(mri_acq_orig.astype("float32"))
+                mri_acq_orig_corr[mask_resize] = (
+                        mri_acq_orig_corr[mask_resize] / bias_field_resize[mask_resize]
+                )
+
+                m = np.mean(mri_acq_orig_corr[wm_mask_resize])
+                mri_acq_orig_corr = 110 * mri_acq_orig_corr / m
+                # mask_dilated = binary_dilation(mask_resize, ball(3))
+                # mri_acq_orig_corr[mask_dilated == 0] = 0  # Removing the skull-stripped step
+
+                save_volume(
+                    volume=np.clip(mri_acq_orig_corr, 0, 255).astype("uint8"),
+                    aff=proxyraw.affine,
+                    header=proxyraw.header,
+                    path=output_filepath,
+                )
+
+                del (
+                    bias_field,
+                    bias_field_resize,
+                    mri_acq_orig,
+                    mri_acq_orig_corr,
+                )  # , mask_dilated
+
+            return {
+                "exit_code": 0,
+                "message": "success",
+            }
+
+    def process_subject(self, subject: str, force_flag: bool=False, **kwargs):
         """Run bias-field correction for all sessions of one subject.
 
         Parameters
@@ -617,237 +863,51 @@ class BiasCorrectionProcessor(CrossSectionalProcessor):
         force_flag : bool, optional
             If ``True``, reprocess sessions even when outputs already exist.
             Default is ``False``.
-        remove_wrong : bool, optional
-            If ``True``, delete the session directory when bias-field
-            correction fails. Default is ``True``.
         **kwargs
             Ignored; present for API compatibility.
+
+        Returns
+        -------
+        dict
+            Result dict with keys:
+            - ``exit_code`` (int): ``0`` on success / already processed, ``-1`` on failure.
+            - ``message`` (str): human-readable description of the outcome.
+            - ``images_processed`` (int): number of images successfully processed for this subject.
+            - ``images_failed`` (int): number of images that failed processing for this subject. This may have
+                                       numerous causes, among them, wrong segmentation or poor quality
         """
-        print("\nSubject: " + subject)
+        print("\nSubject: " + subject, end='\n')
 
         sessions = self._get_sessions(subject=subject)
 
-        for sess_id in sessions:
-            print("\n* Session: " + sess_id, end=": ", flush=True)
-
-            preproc_dirname = join(
-                DIR_PIPELINES["nicgiprep-cross"],
-                "sub-" + subject,
-                "ses-" + sess_id,
-                "utils",
-            )
-            if not exists(preproc_dirname):
-                os.makedirs(preproc_dirname)
-
+        exit_dict = {"images_processed": [], "images_failed": [], "exit_code": 0, "message": ""}
+        for sess_id in tqdm.tqdm(sessions, leave=False):
             # input segs
             synthseg_entities = copy.copy(self.seg_entities)
             synthseg_entities["scope"] = ["nicgiprep-cross"]
             synthseg_entities["suffix"] = ["T1wsynthseg", "synthseg"]
-            seg_file = self._get_data(
-                **{"session": sess_id, "subject": subject, **synthseg_entities}
+            synthseg_entities["datatype"] = ["utils"]
+            seg_files = self._get_data(
+                **{"session": sess_id, "subject": subject, **synthseg_entities}, ignore_check=True
             )
-            if seg_file is None:
+            if seg_files is None:
                 continue
 
-            # get entities
-            seg_entities = self._get_entities(seg_file)
-            seg_entities["extension"] = "nii.gz"
-            raw_entities = {
-                k: str(v) for k, v in seg_entities.items() if k != "acquisition"
-            }
-            raw_entities["suffix"] = "T1w"
-            raw_entities["scope"] = "raw"
-            raw_entities["acquisition"] = [None, "orig"]
-            resampled_entities = copy.copy(raw_entities)
-            resampled_entities["acquisition"] = "1"
-            resampled_entities["scope"] = "nicgiprep-cross"
-            resampled_entities["datatype"] = "utils"
-
-            # raw image
-            raw_file = self._get_data(**raw_entities)
-            if raw_file is None:
-                continue
-
-            # build output paths
-            output_filepath = join(
-                preproc_dirname.replace("utils", "anat"), basename(raw_file)
-            )  ## Saving the final result in /anat
-            output_mask_filepath = join(
-                preproc_dirname, seg_file.filename.replace("synthseg", "mask")
-            )
-
-            if (
-                exists(output_filepath)
-                and exists(output_mask_filepath)
-                and not force_flag
-            ):
-                print("image already processed.")
-                continue
-
-            # read images
-            proxyraw = nib.load(raw_file.path)
-            proxyseg = nib.load(seg_file.path)
-
-            # ------------------------ #
-            #      Computing masks     #
-            # ------------------------ #
-            # print('computing masks from dseg files; ', end='', flush=True)
-
-            if not exists(output_mask_filepath):
-                seg = np.array(proxyseg.dataobj)
-                mask = seg > 0
-                for lab in CSF_LABELS:
-                    mask[seg == lab] = 0
-
-                save_volume(
-                    volume=mask.astype("uint8"),
-                    aff=proxyseg.affine,
-                    header=proxyseg.header,
-                    path=output_mask_filepath,
-                )
-
-            resampled_flag = self._check_resampled_file(raw_file, resampled_entities)
-            if resampled_flag["exit_code"] == -1:
-                print(resampled_flag["message"], end="", flush=True)
-                continue
-
-            proxyres = nib.load(resampled_flag["filepath"])
-
-            # ------------------------ #
-            # Bias field correction    #
-            # ------------------------ #
-            # print('correcting for inhomogeneities and normalisation (min/max); ', end='', flush=True)
-            if not exists(output_filepath) or force_flag:
-                vox2ras0 = proxyres.affine
-                mri_acq = np.asarray(proxyres.dataobj)
-                mri_acq[np.isnan(mri_acq)] = 0
-
-                pixdimim = np.sqrt(np.sum(proxyres.affine * proxyres.affine, axis=0))[
-                    :-1
-                ]
-                pixdimseg = np.sqrt(np.sum(proxyseg.affine * proxyseg.affine, axis=0))[
-                    :-1
-                ]
-                if any([np.abs(p1 - p2) > 0.01 for p1, p2 in zip(pixdimseg, pixdimim)]):
-                    proxyseg = vol_resample_fast(proxyres, proxyseg, mode="nearest")
-
-                seg = np.array(proxyseg.dataobj)
-                soft_seg = one_hot_encoding(seg, categories=SYNTHSEG_LUT)
-                soft_seg = self._posterior2generative_labelmap(
-                    soft_seg, lut=SYNTHSEG_LUT
-                )
-                try:
-                    mri_acq_corr, bias_field = bias_field_corr(
-                        mri_acq,
-                        soft_seg,
-                        penalty=1,
-                        VERBOSE=False,
-                        filter_exceptions=True,
-                    )
-                except:
-                    mri_acq_corr = None
-
-                if mri_acq_corr is None:
-                    if not remove_wrong:
-                        print(
-                            "[error] bias field cannot be computed -- removing segmentation related files and "
-                            "exiting: " + seg_file.path,
-                            end="\n",
-                        )
-                        subprocess.call(
-                            [
-                                "rm",
-                                "-rf",
-                                join(
-                                    DIR_PIPELINES["nicgiprep-cross"],
-                                    "sub-" + subject,
-                                    "ses-" + sess_id,
-                                ),
-                            ]
-                        )
-
-                    else:
-                        print(
-                            "[error] bias field cannot be computed.", end="", flush=True
-                        )
-
-                    continue
-
-                del soft_seg
-
-                mask = seg > 0
-                wm_mask = (seg == 2) | (seg == 41)
-
-                del seg
-
-                vox2ras0_orig = proxyraw.affine
-                mri_acq_orig = np.asarray(proxyraw.dataobj)
-                mri_acq_orig[np.isnan(mri_acq_orig)] = 0
-                if len(mri_acq_orig.shape) > 3:
-                    mri_acq_orig = mri_acq_orig[..., 0]
-
-                new_vox_size = np.linalg.norm(vox2ras0_orig, 2, 0)[:3]
-                vox_size = np.linalg.norm(vox2ras0, 2, 0)[:3]
-
-                if all([v1 == v2 for v1, v2 in zip(vox_size, new_vox_size)]):
-                    mask_dilated = binary_dilation(mask, ball(3))
-                    m = np.mean(mri_acq_corr[wm_mask])
-                    mri_acq_corr = 110 * mri_acq_corr / m
-                    mri_acq_corr *= mask_dilated
-
-                    save_volume(
-                        volume=np.clip(mri_acq_corr, 0, 255).astype("uint8"),
-                        aff=proxyres.affine,
-                        header=proxyres.header,
-                        path=output_filepath,
-                    )
-
+            for seg_file in seg_files:
+                ret_code = self.process_image(seg_file=seg_file, force_flag=force_flag)
+                if ret_code['exit_code'] == 0:
+                    exit_dict['images_processed'] += [seg_file.path]
                 else:
-                    bias_proxy = nib.Nifti1Image(bias_field, proxyres.affine)
-                    bias_field_resize = vol_resample_fast(
-                        proxyraw, bias_proxy, return_np=True
-                    )
-                    #
-                    mask_proxy = nib.Nifti1Image(mask.astype("float"), proxyres.affine)
-                    mask_resize = (
-                        vol_resample_fast(proxyraw, mask_proxy, return_np=True) > 0.5
-                    )
-                    #
-                    wm_mask_proxy = nib.Nifti1Image(
-                        wm_mask.astype("float"), proxyres.affine
-                    )
-                    wm_mask_resize = (
-                        vol_resample_fast(proxyraw, wm_mask_proxy, return_np=True) > 0.5
-                    )
+                    exit_dict['images_failed'] += [seg_file.path]
+                    exit_dict['exit_code'] = 1
 
-                    mri_acq_orig_corr = copy.copy(mri_acq_orig.astype("float32"))
-                    mri_acq_orig_corr[mask_resize] = (
-                        mri_acq_orig_corr[mask_resize] / bias_field_resize[mask_resize]
-                    )
-
-                    m = np.mean(mri_acq_orig_corr[wm_mask_resize])
-                    mri_acq_orig_corr = 110 * mri_acq_orig_corr / m
-                    # mask_dilated = binary_dilation(mask_resize, ball(3))
-                    # mri_acq_orig_corr[mask_dilated == 0] = 0  # Removing the skull-stripped step
-
-                    save_volume(
-                        volume=np.clip(mri_acq_orig_corr, 0, 255).astype("uint8"),
-                        aff=proxyraw.affine,
-                        header=proxyraw.header,
-                        path=output_filepath,
-                    )
-
-                    del (
-                        bias_field,
-                        bias_field_resize,
-                        mri_acq_orig,
-                        mri_acq_orig_corr,
-                    )  # , mask_dilated
-
-        return {
-            "exit_code": 1,
-            "message": "success",
-        }
+        exit_dict['total_images'] = len(exit_dict['images_processed']) + len(exit_dict['images_failed'])
+        exit_dict['message'] = (str(len(exit_dict['images_processed'])) + "/" +
+                                str(exit_dict['total_images']) +
+                                " of images were successfully processed.")
+        print(' o ' + exit_dict['message'])
+        print("\n")
+        return exit_dict
 
 
 class MNIRegistrationProcessor(CrossSectionalProcessor):
@@ -862,7 +922,7 @@ class MNIRegistrationProcessor(CrossSectionalProcessor):
         """Return the display name of this pipeline."""
         return "MNIRegistration"
 
-    def process_subject(self, subject, force_flag=False, **kwargs):
+    def process_subject(self, subject: str, force_flag: bool=False, **kwargs):
         """Run mni-registration for all sessions of one subject.
 
         Parameters
@@ -874,21 +934,28 @@ class MNIRegistrationProcessor(CrossSectionalProcessor):
             Default is ``False``.
         **kwargs
             Ignored; present for API compatibility.
+
+        Returns
+        -------
+        dict
+            Result dict with keys:
+            - ``exit_code`` (int): ``0`` on success / already processed, ``-1`` on failure.
+            - ``message`` (str): human-readable description of the outcome.
         """
         print("\nSubject: " + subject)
 
         sessions = self._get_sessions(subject=subject)
-        for sess_id in sessions:
-            print("\n* Session: " + sess_id, end=": \n", flush=True)
+        exit_dict = {"images_processed": [], "images_failed": [], "exit_code": 0, "message": ""}
+        for sess_id in tqdm.tqdm(sessions, leave=False):
 
-            preproc_dirname = join(
-                DIR_PIPELINES["nicgiprep-cross"],
-                "sub-" + subject,
-                "ses-" + sess_id,
-                "anat",
-            )
-            if not exists(preproc_dirname):
-                os.makedirs(preproc_dirname)
+            # preproc_dirname = join(
+            #     DIR_PIPELINES["nicgiprep-cross"],
+            #     "sub-" + subject,
+            #     "ses-" + sess_id,
+            #     "anat",
+            # )
+            # if not exists(preproc_dirname):
+            #     os.makedirs(preproc_dirname)
 
             # input segs
             synthseg_entities = copy.copy(self.seg_entities)
@@ -896,7 +963,7 @@ class MNIRegistrationProcessor(CrossSectionalProcessor):
             synthseg_entities["datatype"] = ["utils"]
             synthseg_entities["suffix"] = ["T1wsynthseg", "synthseg"]
             seg_files = self._get_data(
-                **{"session": sess_id, "subject": subject, **synthseg_entities}
+                **{"session": sess_id, "subject": subject, **synthseg_entities}, ignore_check=True
             )
             if seg_files is None:
                 continue
@@ -904,40 +971,44 @@ class MNIRegistrationProcessor(CrossSectionalProcessor):
             for seg_file in seg_files:
                 # get entities
                 seg_entities = self._get_entities(seg_file)
-                seg_entities["extension"] = "nii.gz"
+                seg_entities["extension"] = ".nii.gz"
 
                 raw_entities = copy.deepcopy(seg_entities)
                 raw_entities["suffix"] = "T1w"
                 raw_entities["datatype"] = "anat"
-                raw_entities["acquisition"] = None
+                raw_entities["acquisition"] = [None, 'orig']
+                raw_entities["scope"] = "nicgiprep-cross"
+                raw_entities["space"] = [None, 'subject']
+                raw_entities.pop("datatype", None)
+                if 'run' not in raw_entities: raw_entities['run'] = None
 
                 # raw image
                 raw_file = self._get_data(**raw_entities, curr_len=1)
                 if raw_file is None:
+                    exit_dict['images_failed'] += [seg_file.path]
                     continue
-                else:
-                    raw_file = raw_file[0]
 
                 # build output paths
                 output_entities = copy.deepcopy(raw_entities)
                 output_entities['desc'] = 'affine'
                 output_entities['space'] = 'MNI'
+                output_entities['acquisition'] = None
                 output_filename = self.build_path(output_entities)
-                output_filepath = join(preproc_dirname, output_filename)  ## Saving the final result in /anat
+                output_filepath = join(DIR_PIPELINES["nicgiprep-cross"], output_filename)  ## Saving the final result in /anat
+
                 output_entities['suffix'] = 'aff'
                 output_entities['desc'] = None
                 output_entities['extension'] = '.npy'
                 output_aff_filename = self.build_path(output_entities)
-                output_aff_filepath = join(preproc_dirname, output_aff_filename)  ## Saving the final result in /anat
+                output_aff_filepath = join(DIR_PIPELINES["nicgiprep-cross"], output_aff_filename)  ## Saving the final result in /anat
 
                 if exists(output_filepath) and not force_flag:
-                    print("image already registered to MNI.")
+                    exit_dict['images_processed'] += [seg_file.path]
                     continue
 
                 # ------------------------ #
                 #   Registration to MNI    #
                 # ------------------------ #
-
                 im_MNI_proxy, aff_MNI_arr = register_to_MNI(
                     raw_file.path,
                     seg_file.path,
@@ -948,8 +1019,12 @@ class MNIRegistrationProcessor(CrossSectionalProcessor):
 
                 nib.save(im_MNI_proxy, output_filepath)
                 np.save(output_aff_filepath, aff_MNI_arr)
+                exit_dict['images_processed'] += [seg_file.path]
 
-        return {
-            "exit_code": 1,
-            "message": "success",
-        }
+        exit_dict['total_images'] = len(exit_dict['images_processed']) + len(exit_dict['images_failed'])
+        exit_dict['message'] = (str(len(exit_dict['images_processed'])) + "/" +
+                                str(exit_dict['total_images']) +
+                                " of images were successfully processed.")
+        print(' o ' + exit_dict['message'])
+        print("\n")
+        return exit_dict

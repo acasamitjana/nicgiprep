@@ -17,13 +17,13 @@ Required environment variables:
 """
 
 import os
-import bids
-
 from os.path import exists, join, dirname
+import pdb
 from argparse import ArgumentParser
 
-from setup import *
+import bids
 
+from setup import *
 from nicgiprep.pipelines import (
     MRISegmentationProcessor,
     BiasCorrectionProcessor,
@@ -67,17 +67,18 @@ args = parser.parse_args()
 
 
 # ── BIDS layout ───────────────────────────────────────────────────────────────
+print("\n\n")
 print("LOADING Dataset ...", end=" ", flush=True)
 db_file = join(dirname(args.bids), "BIDS-raw.db")
 if not exists(db_file):
-    bids_loader = bids.layout.BIDSLayout(root=args.bids, validate=False)
+    bids_loader = bids.layout.BIDSLayout(root=args.bids, validate=False, config='nicgiprep_bids')
     bids_loader.save(db_file)
 else:
     bids_loader = bids.layout.BIDSLayout(
-        root=args.bids, validate=False, database_path=db_file
+        root=args.bids, validate=False, database_path=db_file, config='nicgiprep_bids'
     )
 
-bids_loader.add_derivatives(DIR_PIPELINES["nicgiprep-cross"])
+bids_loader.add_derivatives(DIR_PIPELINES["nicgiprep-cross"], config='nicgiprep_bids')
 
 if args.subjects is None:
     print(
@@ -88,10 +89,10 @@ if args.subjects is None:
 else:
     print("Total subjects found: N=" + str(len(args.subjects)), end=" ", flush=True)
 
+print('\n\n')
 
 # ── GPU init ───────────────────────────────────────────────────────────────
 os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_num)
-
 
 # ── Step 1: SynthSeg and SuperSynth for T1w modality ──────────────────────
 print("\n=== Step 1: SynthSeg and SuperSynth for T1w modality ===")

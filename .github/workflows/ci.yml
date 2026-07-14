@@ -122,13 +122,20 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.10"
-
       - name: Install test dependencies
-        run: pip install pytest numpy nibabel scikit-image torch surfa munkres 
-
+        run: |
+          pip install codecov==2.1.11
+          pip install pytest numpy nibabel scikit-image torch surfa munkres
       - name: Run tests
-        run: pytest -q tests/
+        run: |
+          pytest -q tests/
+        timeout-minutes: 20
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v1
+        if: ${{ matrix.os == 'ubuntu-latest' && matrix.python-version == '3.10' }}
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          file: ./coverage.xml

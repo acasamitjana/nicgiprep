@@ -3,13 +3,13 @@ Base Processing pipeline schematic for neuroimage preprocessing.
 
 Provides base classe that implements basic and necessary functions
 """
-
+import pdb
 import traceback
 from typing import Optional, Union
 
 import numpy as np
 import pandas as pd
-from bids.layout import BIDSLayout, BIDSLayoutIndexer, BIDSFile
+from bids.layout import BIDSLayout, BIDSLayoutIndexer, BIDSFile, parse_file_entities
 
 from setup import *
 from nicgiprep.utils.log_utils import LogBIDSLoader
@@ -95,7 +95,7 @@ class Processor(object):
 
         self.seg_entities = {
             "scope": "nicgiprep-base",
-            "extension": "nii.gz",
+            "extension": ".nii.gz",
             "suffix": ["T1wdseg", "dseg"],
         }
         self.labels_lut = SUPERSYNTH_LUT
@@ -141,7 +141,7 @@ class Processor(object):
             entities,
             scope=scope,
             absolute_paths=absolute_paths,
-            path_patterns=BIDS_PATH_PATTERN,
+            # path_patterns=BIDS_PATH_PATTERN,
             strict=strict,
             validate=validate,
         )
@@ -245,7 +245,7 @@ class Processor(object):
 
         return raw_file
 
-    def _get_entities(self, file: BIDSFile) -> dict:
+    def _get_entities(self, file: BIDSFile | str) -> dict:
         """Extract the subset of BIDS entities relevant to filename construction.
 
         Parameters
@@ -258,7 +258,10 @@ class Processor(object):
         dict
             Entity key/value pairs filtered to those in ``filename_entities``.
         """
-        return {k: v for k, v in file.entities.items() if k in filename_entities}
+        if isinstance(file, BIDSFile):
+            return {k: v for k, v in file.entities.items() if k in filename_entities}
+        else:
+            return parse_file_entities(file)
 
     def _on_pipeline_init(self) -> None:
         """Mark the pipeline as initialised and print a console banner.
@@ -294,9 +297,9 @@ class Processor(object):
         )
         bids_kwargs = {"validate": False, "indexer": indexer}
 
-        bids_loader = BIDSLayout(root=rawdir, **bids_kwargs)
+        bids_loader = BIDSLayout(root=rawdir, **bids_kwargs, config=BIDS_CONFIG_PATH)
         bids_loader.add_derivatives(
-            [DIR_PIPELINES[d] for d in derivatives], **bids_kwargs
+            [DIR_PIPELINES[d] for d in derivatives], **bids_kwargs, config=BIDS_CONFIG_PATH
         )
 
         self.bids_loader = bids_loader
@@ -307,15 +310,16 @@ class Processor(object):
         Replaces ``self.bids_loader`` with a full dataset layout after
         per-subject processing is complete.
         """
+
         rawdir = self.bids_loader.root
         derivatives = self.bids_loader.derivatives.keys()
 
         indexer = BIDSLayoutIndexer(validate=False, index_metadata=False)
         bids_kwargs = {"validate": False, "indexer": indexer}
 
-        bids_loader = BIDSLayout(root=rawdir, **bids_kwargs)
+        bids_loader = BIDSLayout(root=rawdir, **bids_kwargs, config=BIDS_CONFIG_PATH)
         bids_loader.add_derivatives(
-            [DIR_PIPELINES[d] for d in derivatives], **bids_kwargs
+            [DIR_PIPELINES[d] for d in derivatives], **bids_kwargs, config=BIDS_CONFIG_PATH
         )
 
         self.bids_loader = bids_loader
@@ -482,7 +486,7 @@ class Processor(object):
             self._update_subject_layout(subject)
             try:
                 retcode = self.process_subject(subject, **kwargs)
-                if retcode is None or retcode["exit_code"] != 1:
+                if retcode is None or retcode["exit_code"] != 0:
                     subjects_failed.append(subject)
 
             except Exception:
@@ -491,5 +495,15 @@ class Processor(object):
                 subjects_failed += [subject]
 
         self._update_full_layout()
-        print("Subjects that failed: ")
+
+        print("=" * 40)
+        print("-" * 15 + "  SUMMARY  " + "-" * 14)
+        print("=" * 40)
+        print(f"Total Subjects Processed: {len(self.subject_list)}")
+        print(f"SUCCESS:                  {len(self.subject_list) - len(subjects_failed)}/{len(self.subject_list)}")
+        print(f"FAILED:                   {len(subjects_failed)}/{len(self.subject_list)}")
+        print("-" * 40)
+
+
+        print("\nSubjects that failed: ")
         print("\n".join(subjects_failed))
