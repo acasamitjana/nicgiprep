@@ -127,7 +127,7 @@ jobs:
           python-version: "3.10"
       - name: Install test dependencies
         run: |
-          pip install codecov==2.1.11
+          pip install codecov==2.1.13
           pip install pytest numpy nibabel scikit-image torch surfa munkres
       - name: Run tests
         run: |
