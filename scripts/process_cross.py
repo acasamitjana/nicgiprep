@@ -17,18 +17,15 @@ Required environment variables:
 """
 
 import os
+from os.path import exists, join, dirname
+import pdb
+from argparse import ArgumentParser
+
 import bids
 
-from os.path import exists, join, dirname
-from argparse import ArgumentParser
-from pathlib import Path
-import sys
-
-sys.path.append(str(Path(__file__).resolve().parent.parent))
 from setup import *
-
 from nicgiprep.pipelines import (
-    SynthSegProcessor,
+    MRISegmentationProcessor,
     BiasCorrectionProcessor,
     MNIRegistrationProcessor,
 )
@@ -70,17 +67,18 @@ args = parser.parse_args()
 
 
 # ── BIDS layout ───────────────────────────────────────────────────────────────
+print("\n\n")
 print("LOADING Dataset ...", end=" ", flush=True)
 db_file = join(dirname(args.bids), "BIDS-raw.db")
 if not exists(db_file):
-    bids_loader = bids.layout.BIDSLayout(root=args.bids, validate=False)
+    bids_loader = bids.layout.BIDSLayout(root=args.bids, validate=False, config='nicgiprep_bids')
     bids_loader.save(db_file)
 else:
     bids_loader = bids.layout.BIDSLayout(
-        root=args.bids, validate=False, database_path=db_file
+        root=args.bids, validate=False, database_path=db_file, config='nicgiprep_bids'
     )
 
-bids_loader.add_derivatives(DIR_PIPELINES["nicgiprep-cross"])
+bids_loader.add_derivatives(DIR_PIPELINES["nicgiprep-cross"], config='nicgiprep_bids')
 
 if args.subjects is None:
     print(
@@ -91,14 +89,14 @@ if args.subjects is None:
 else:
     print("Total subjects found: N=" + str(len(args.subjects)), end=" ", flush=True)
 
+print('\n\n')
 
 # ── GPU init ───────────────────────────────────────────────────────────────
 os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_num)
 
-
 # ── Step 1: SynthSeg and SuperSynth for T1w modality ──────────────────────
 print("\n=== Step 1: SynthSeg and SuperSynth for T1w modality ===")
-processing_seg = SynthSegProcessor(bids_loader=bids_loader, subject_list=args.subjects)
+processing_seg = MRISegmentationProcessor(bids_loader=bids_loader, subject_list=args.subjects)
 
 processing_seg.process(
     force_flag=args.force,

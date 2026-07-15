@@ -1,6 +1,9 @@
 import os
 import json
 import pdb
+from importlib.resources import files
+
+from bids.layout import add_config_paths
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
@@ -23,13 +26,19 @@ filename_entities = [
     "space",
     "datatype",
 ]
-BIDS_PATH_PATTERN = [
-    "sub-{subject}[/ses-{session}]/{datatype<anat|utils>|anat}/sub-{subject}[_ses-{session}][_space-{space}][_task-{task}][_acq-{acquisition}][_ce-{ceagent}][_rec-{reconstruction}][_run-{run}][_part-{part}][_desc-{desc}]_{suffix<aff|v2r>}{extension<.txt|.npy>|.npy}",
-    "sub-{subject}[/ses-{session}]/{datatype<anat|utils>|anat}/sub-{subject}[_ses-{session}][_space-{space}][_task-{task}][_acq-{acquisition}][_ce-{ceagent}][_rec-{reconstruction}][_run-{run}][_part-{part}][_desc-{desc}]_{suffix<T1w|T2w|T2star|T2starw|FLAIR|FLASH|PD|PDw|PDT2|inplaneT[12]|angio|dseg|posteriors|svf|jac|def|T1wpost|T1wstats|T1wstd|T1wmask|T1wdseg|T2wmask|T2wdseg|FLAIRmask|FLAIRdseg|PDwmask|PDwdseg|PDmask|PDdseg|T1wsynthseg|T2wsynthseg|FLAIRsynthseg|PDwsynthseg|mask|space>}{extension<.nii|.nii.gz|.json|.txt|.npy>|.nii.gz}",
-    "sub-{subject}[/ses-{session}]/{datatype<func>|func}/sub-{subject}[_ses-{session}][_space-{space}][_task-{task}][_acq-{acquisition}][_ce-{ceagent}][_rec-{reconstruction}][_run-{run}][_part-{part}][_desc-{desc}]_{suffix<bold|cbv|sbref>}{extension<.nii|.nii.gz|.json|.txt|.npy>|.nii.gz}",
-    "sub-{subject}[/ses-{session}]/{datatype<pet>|pet}/sub-{subject}[_ses-{session}][_space-{space}][_task-{task}][_acq-{acquisition}][_trc-{tracer}][_rec-{reconstruction}][_run-{run}][_part-{part}][_desc-{desc}]_{suffix<pet>}{extension<.nii|.nii.gz|.json|.txt|.npy>|.nii.gz}",
-    "sub-{subject}[/ses-{session}]/{datatype<utils>|utils}/sub-{subject}[_ses-{session}][_space-{space}][_task-{task}][_acq-{acquisition}][_ce-{ceagent}][_rec-{reconstruction}][_run-{run}][_part-{part}][_desc-{desc}]_{suffix<svf|aff|empty|v2r|T1wsynthseg>}{extension<.nii|.nii.gz|.npy>|.nii.gz}",
-]
+# BIDS_PATH_PATTERN = [
+#     "sub-{subject}[/ses-{session}]/{datatype<anat|utils>|anat}/sub-{subject}[_ses-{session}][_space-{space}][_task-{task}][_acq-{acquisition}][_ce-{ceagent}][_rec-{reconstruction}][_run-{run}][_part-{part}][_desc-{desc}]_{suffix<aff|v2r>}{extension<.txt|.npy>|.npy}",
+#     "sub-{subject}[/ses-{session}]/{datatype<anat|utils>|anat}/sub-{subject}[_ses-{session}][_space-{space}][_task-{task}][_acq-{acquisition}][_ce-{ceagent}][_rec-{reconstruction}][_run-{run}][_part-{part}][_desc-{desc}]_{suffix<T1w|T2w|T2star|T2starw|FLAIR|FLASH|PD|PDw|PDT2|inplaneT[12]|angio|dseg|posteriors|svf|jac|def|T1wpost|T1wstats|T1wstd|T1wmask|T1wdseg|T2wmask|T2wdseg|FLAIRmask|FLAIRdseg|PDwmask|PDwdseg|PDmask|PDdseg|T1wsynthseg|T2wsynthseg|FLAIRsynthseg|PDwsynthseg|mask|space>}{extension<.nii|.nii.gz|.json|.txt|.npy>|.nii.gz}",
+#     "sub-{subject}[/ses-{session}]/{datatype<func>|func}/sub-{subject}[_ses-{session}][_space-{space}][_task-{task}][_acq-{acquisition}][_ce-{ceagent}][_rec-{reconstruction}][_run-{run}][_part-{part}][_desc-{desc}]_{suffix<bold|cbv|sbref>}{extension<.nii|.nii.gz|.json|.txt|.npy>|.nii.gz}",
+#     "sub-{subject}[/ses-{session}]/{datatype<pet>|pet}/sub-{subject}[_ses-{session}][_space-{space}][_task-{task}][_acq-{acquisition}][_trc-{tracer}][_rec-{reconstruction}][_run-{run}][_part-{part}][_desc-{desc}]_{suffix<pet>}{extension<.nii|.nii.gz|.json|.txt|.npy>|.nii.gz}",
+#     "sub-{subject}[/ses-{session}]/{datatype<utils>|utils}/sub-{subject}[_ses-{session}][_space-{space}][_task-{task}][_acq-{acquisition}][_ce-{ceagent}][_rec-{reconstruction}][_run-{run}][_part-{part}][_desc-{desc}]_{suffix<svf|aff|empty|v2r|T1wsynthseg>}{extension<.nii|.nii.gz|.npy>|.nii.gz}",
+#     "sub-{subject}/sub-{subject}[_desc-{desc}]_{suffix<volumes|sessions|summary>}{extension<.tsv|.npy>|.tsv}",
+# ]
+
+BIDS_CONFIG_PATH = files("data.config").joinpath(
+    "nicgiprep_bids.json"
+)
+add_config_paths(nicgiprep_bids=BIDS_CONFIG_PATH)
 
 # MRI Templates
 if "PYTHONPATH" not in os.environ:
@@ -93,17 +102,13 @@ if not os.path.exists(TMP_DIR):
     os.makedirs(TMP_DIR)
 
 DIR_PIPELINES = {
-    'preproc': os.path.join(DERIVATIVES_DIR, 'preproc'),
     'nicgiprep-long': os.path.join(DERIVATIVES_DIR, 'nicgiprep-long'),
-    'uslr-mni': os.path.join(DERIVATIVES_DIR, 'uslr-mni'),
     "nicgiprep-cross": os.path.join(DERIVATIVES_DIR, "nicgiprep-cross"),
     "nicgiprep-mm": os.path.join(DERIVATIVES_DIR, "nicgiprep-mm"),
 }
 
 DESC_PIPELINES = {
-    'preproc': 'USLR preprocessing files in subject space',
     'nicgiprep-long': 'Longitudinal preprocessing pipeline outcomes',
-    'uslr-mni': 'USRL preprocessing files in MNI',
     'nicgiprep-cross': 'Cross-sectional preprocessing pipeline outcomes',
     'nicgiprep-mm': 'Multimodal preprocessing pipeline outcomes',
 }
@@ -128,22 +133,22 @@ for d, d_str in DESC_PIPELINES.items():
 if "USLR_RUNNING" not in os.environ:
     os.system("cls" if os.name == "nt" else "clear")
     # print('\n')
-    print("          o")
+    print("            o")
     # print('         ooo')
-    print("        ooooo")
+    print("          ooooo")
     # print('       ooooooo')
-    print("      ooooooooo")
+    print("        ooooooooo")
     # print('     ooooooooooo')
-    print("    ooooooooooooo")
+    print("     ooooooooooooooo     ")
     # print('   ooooooooooooooo')
-    print("  ooooooooooooooooo")
+    print("  ooooooooooooooooooooo   ")
     # print(' ooooooooooooooooooo')
-    print("ooooooooooooooooooooo")
+    print("oooooooooooooooooooooooooo")
     print("")
-    print("Running USLR Pipeline")
+    print("Running NicGiPrep Pipeline")
     print("")
-    print("ooooooooooooooooooooo")
-    print("ooooooooooooooooooooo")
+    print("oooooooooooooooooooooooooo")
+    print("oooooooooooooooooooooooooo")
     print("")
 
     if "FREESURFER_SYNTHMORPH_HOME" in os.environ:
@@ -169,6 +174,6 @@ if "USLR_RUNNING" not in os.environ:
     print("- DATASET USED ($BIDS_DIR): " + BIDS_DIR)
     print("- DERIVATIVES DIR: " + DERIVATIVES_DIR)
     print("")
-    print("ooooooooooooooooooooo")
-    print("ooooooooooooooooooooo")
+    print("oooooooooooooooooooooooooo")
+    print("oooooooooooooooooooooooooo")
     print("\n")

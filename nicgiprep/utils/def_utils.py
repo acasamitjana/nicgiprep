@@ -1,4 +1,4 @@
-from typing import Optional, Union, Sequence
+from typing import Optional, Union, Sequence, Tuple
 from pathlib import Path
 import nibabel as nib
 
@@ -1220,11 +1220,10 @@ class SpatialTransformer(nn.Module):
 def register_to_MNI(
     im_filepath: str | Path,
     seg_filepath: str | Path,
-    save_path: str | Path,
     MNI_TEMPLATE_SEG: str | Path,
     MNI_TEMPLATE: str | Path,
     labels_registration: np.ndarray,
-) -> None:
+) -> Tuple[nib.Nifti1Image, np.ndarray]:
     """
     Register a subject image to MNI space using centroid-based affine alignment.
 
@@ -1240,9 +1239,6 @@ def register_to_MNI(
     seg_filepath : str or Path
         Path to the subject's SynthSeg segmentation file (.nii.gz), used for centroid
         computation.
-    save_path : str or Path
-        Path where the MNI-registered image will be saved (.nii.gz). The affine
-        matrix is also saved alongside it with the suffix 'aff.npy'.
     MNI_TEMPLATE_SEG : str or Path
         Path to the MNI template segmentation, used as the registration reference
         for centroid computation.
@@ -1271,7 +1267,7 @@ def register_to_MNI(
     aff_MNI = getM(
         centroid_ref[:, ok_ref > 0], centroid_flo[:, ok_ref > 0], use_L1=False
     )
-    np.save(save_path.replace('.nii.gz', 'aff.npy'), aff_MNI)
+    # np.save(save_path.replace('.nii.gz', 'aff.npy'), aff_MNI)
 
     mni_proxy = nib.load(MNI_TEMPLATE)
     im_proxy = nib.load(im_filepath)
@@ -1284,5 +1280,7 @@ def register_to_MNI(
     im_array = np.array(im_proxy.dataobj)
     im_array = gaussian_filter(im_array, sigmas)
     im_proxy = nib.Nifti1Image(im_array, np.linalg.inv(aff_MNI) @ im_proxy.affine)
-    im_proxy = vol_resample_fast(mni_proxy, im_proxy)
-    nib.save(im_proxy, save_path)
+    im_proxy = vol_resample_fast(mni_proxy, im_proxy, return_np=False)
+    # nib.save(im_proxy, save_path)
+
+    return im_proxy, aff_MNI
