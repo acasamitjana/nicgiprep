@@ -24,7 +24,7 @@ from nicgiprep.utils.preprocessing_utils import *
 from nicgiprep.utils.fn_utils import one_hot_encoding, rescale_voxel_size
 from nicgiprep.utils.io_utils import save_volume, remove_duplicates_csv
 from nicgiprep.utils.def_utils import vol_resample_fast, register_to_MNI
-from nicgiprep.utils.label_utils import SYNTHSEG_LUT, CSF_LABELS, SYNTHSEG_GMM_ONTOLOGY
+from nicgiprep.utils.label_utils import SYNTHSEG_LUT, CSF_LABELS, SYNTHSEG_GMM_ONTOLOGY, labels_registration
 
 
 class CrossSectionalProcessor(Processor):
@@ -940,7 +940,7 @@ class BiasCorrectionProcessor(CrossSectionalProcessor):
                     )  # , mask_dilated
 
         return {
-            "exit_code": 1,
+            "exit_code": 0,
             "message": "success",
         }
 

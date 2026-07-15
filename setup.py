@@ -2,13 +2,13 @@ import os
 import json
 import pdb
 
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
-
-if "NEURITE_BACKEND" not in os.environ:
-    os.environ["NEURITE_BACKEND"] = "tensorflow"
-
 import subprocess
+from importlib.resources import files
 
+
+# ------------- #
+# BIDS features #
+# ------------- #
 filename_entities = [
     "subject",
     "session",
@@ -31,144 +31,123 @@ BIDS_PATH_PATTERN = [
     "sub-{subject}[/ses-{session}]/{datatype<utils>|utils}/sub-{subject}[_ses-{session}][_space-{space}][_task-{task}][_acq-{acquisition}][_ce-{ceagent}][_rec-{reconstruction}][_run-{run}][_part-{part}][_desc-{desc}]_{suffix<svf|aff|empty|v2r|T1wsynthseg>}{extension<.nii|.nii.gz|.npy>|.nii.gz}",
 ]
 
-# MRI Templates
-if "PYTHONPATH" not in os.environ:
-    print("Please, set up PYTHONPATH to the root of this project.")
-    exit()
 
-repo_home = os.environ.get("PYTHONPATH")
-if not repo_home:
-    repo_home = os.getcwd()
+# ------------- #
+# MNI templates #
+# ------------- #
 
-labels_registration = os.path.join(
-    repo_home, "data", "labels_classes_priors", "label_list_registration.npy"
+# MNI Templates
+MNI_TEMPLATE = files("data.atlas").joinpath(  #HACK: removed nicgiprep.
+    "mni_icbm152_t1norm_tal_nlin_sym_09a.nii.gz"
 )
-
-MNI_TEMPLATE = os.path.join(
-    repo_home, "data", "atlas", "mni_icbm152_t1norm_tal_nlin_sym_09a.nii.gz"
+MNI_SM_V2R = files("data.atlas").joinpath(  # HACK: removed nicgiprep.
+    "mni_icbm152_t1norm_tal_nlin_sym_09a.nii.gz"
 )
-MNI_SM_V2R = os.path.join(repo_home, "data", "atlas", "mni_to_synthmorph_space.v2r.npy")
-
-MNI_ATLAS_TEMPLATE = os.path.join(
-    repo_home, "data", "atlas", "mni_reg_to_synthmorph_atlas.nii.gz"
+MNI_ATLAS_TEMPLATE = files("data.atlas").joinpath(  # HACK: removed nicgiprep.
+    "mni_reg_to_synthmorph_atlas.nii.gz"
 )
-MNI_ATLAS_TEMPLATE_SEG = os.path.join(
-    repo_home, "data", "atlas", "mni_reg_to_synthmorph_atlas.seg.nii.gz"
+MNI_ATLAS_TEMPLATE_SEG = files("data.atlas").joinpath(  # HACK: removed nicgiprep.
+    "mni_reg_to_synthmorph_atlas.seg.nii.gz"
 )
-MNI_ATLAS_TEMPLATE_MASK = os.path.join(
-    "data", "atlas", "mni_reg_to_synthmorph_atlas.mask.nii.gz"
+MNI_ATLAS_TEMPLATE_MASK = files("data.atlas").joinpath(  # HACK: removed nicgiprep.
+    "mni_reg_to_synthmorph_atlas.mask.nii.gz"
 )
-
-MNI_TEMPLATE_SEG = os.path.join(
-    repo_home, "data", "atlas", "mni_icbm152_synthseg_tal_nlin_sym_09a.nii.gz"
+MNI_TEMPLATE_SEG = files("data.atlas").joinpath(  # HACK: removed nicgiprep.
+    "mni_icbm152_synthseg_tal_nlin_sym_09a.nii.gz"
 )
-MNI_TEMPLATE_MASK = os.path.join(
-    repo_home, "data", "atlas", "mni_icbm152_mask_tal_nlin_sym_09a.nii.gz"
+MNI_TEMPLATE_MASK = files("data.atlas").joinpath(  # HACK: removed nicgiprep.
+    "mni_icbm152_mask_tal_nlin_sym_09a.nii.gz"
 )
 
 
-# BIDS directories ---- Environment variables.
-BIDS_DIR = os.environ["BIDS_DIR"]
+# ------------ #
+# TF variables #
+# ------------ #
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+if "NEURITE_BACKEND" not in os.environ:
+    os.environ["NEURITE_BACKEND"] = "tensorflow"
+
+
+# ---------------------- #
+# Project data structure #
+# ---------------------- #
+BIDS_DIR = os.environ.get("BIDS_DIR")
 if not BIDS_DIR:
-    raise ValueError("Please, specify environment variable DB")
-if BIDS_DIR[-1] == "/":
-    BIDS_DIR = BIDS_DIR[:-1]
+    raise ValueError("Please, specify --bids or set the BIDS_DIR environment variable.")
+BIDS_DIR = BIDS_DIR.rstrip("/")
+os.environ["BIDS_DIR"] = BIDS_DIR
 ROOT_DIR = os.path.dirname(BIDS_DIR)
 
-if "DERIVATIVES_DIR" in os.environ:
-    DERIVATIVES_DIR = os.environ["DERIVATIVES_DIR"]
-    if DERIVATIVES_DIR[-1] == "/":
-        DERIVATIVES_DIR = DERIVATIVES_DIR[:-1]
+DERIVATIVES_DIR = os.environ.get("DERIVATIVES_DIR")
+if DERIVATIVES_DIR:
+    DERIVATIVES_DIR = DERIVATIVES_DIR.rstrip("/")
 else:
     DERIVATIVES_DIR = os.path.join(ROOT_DIR, "derivatives")
+os.environ["DERIVATIVES_DIR"] = DERIVATIVES_DIR
 
 LOGS_DIR = os.path.join(ROOT_DIR, "logs")
 TMP_DIR = os.path.join(ROOT_DIR, "tmp")
 
-if not os.path.exists(DERIVATIVES_DIR):
-    os.makedirs(DERIVATIVES_DIR)
-if not os.path.exists(LOGS_DIR):
-    os.makedirs(LOGS_DIR)
-if not os.path.exists(TMP_DIR):
-    os.makedirs(TMP_DIR)
+os.makedirs(DERIVATIVES_DIR, exist_ok=True)
+os.makedirs(LOGS_DIR, exist_ok=True)
+os.makedirs(TMP_DIR, exist_ok=True)
 
 DIR_PIPELINES = {
-    'preproc': os.path.join(DERIVATIVES_DIR, 'preproc'),
-    'nicgiprep-long': os.path.join(DERIVATIVES_DIR, 'nicgiprep-long'),
-    'uslr-mni': os.path.join(DERIVATIVES_DIR, 'uslr-mni'),
     "nicgiprep-cross": os.path.join(DERIVATIVES_DIR, "nicgiprep-cross"),
+    'nicgiprep-long': os.path.join(DERIVATIVES_DIR, 'nicgiprep-long'),
     "nicgiprep-mm": os.path.join(DERIVATIVES_DIR, "nicgiprep-mm"),
 }
-
 DESC_PIPELINES = {
-    'preproc': 'USLR preprocessing files in subject space',
-    'nicgiprep-long': 'Longitudinal preprocessing pipeline outcomes',
-    'uslr-mni': 'USRL preprocessing files in MNI',
     'nicgiprep-cross': 'Cross-sectional preprocessing pipeline outcomes',
+    'nicgiprep-long': 'Longitudinal preprocessing pipeline outcomes',
     'nicgiprep-mm': 'Multimodal preprocessing pipeline outcomes',
 }
 
+
 for d, d_str in DESC_PIPELINES.items():
-    if not os.path.exists(DIR_PIPELINES[d]):
-        os.makedirs(DIR_PIPELINES[d])
+    os.makedirs(DIR_PIPELINES[d], exist_ok=True)
     data_descr_path = os.path.join(DIR_PIPELINES[d], "dataset_description.json")
     if not os.path.exists(data_descr_path):
-        data_descr = {}
-        data_descr["Name"] = os.path.basename(d_str)
-        data_descr["BIDSVersion"] = "1.0.2"
-        data_descr["GeneratedBy"] = [{"Name": d}]
-        data_descr["Description"] = d_str
-        data_descr_path = os.path.join(DIR_PIPELINES[d], "dataset_description.json")
-        json_object = json.dumps(data_descr, indent=4)
+        data_descr = {
+            "Name": os.path.basename(d_str),
+            "BIDSVersion": "1.0.2",
+            "GeneratedBy": [{"Name": d}],
+            "Description": d_str,
+        }
         with open(data_descr_path, "w") as outfile:
-            outfile.write(json_object)
+            json.dump(data_descr, outfile, indent=4)
 
-# VERBOSE = os.environ['VERBOSE'] if 'VERBOSE' in os.environ.keys() else False
-# if VERBOSE:
-if "USLR_RUNNING" not in os.environ:
-    os.system("cls" if os.name == "nt" else "clear")
-    # print('\n')
-    print("          o")
-    # print('         ooo')
-    print("        ooooo")
-    # print('       ooooooo')
-    print("      ooooooooo")
-    # print('     ooooooooooo')
-    print("    ooooooooooooo")
-    # print('   ooooooooooooooo')
-    print("  ooooooooooooooooo")
-    # print(' ooooooooooooooooooo')
-    print("ooooooooooooooooooooo")
-    print("")
-    print("Running USLR Pipeline")
-    print("")
-    print("ooooooooooooooooooooo")
-    print("ooooooooooooooooooooo")
-    print("")
 
-    if "FREESURFER_SYNTHMORPH_HOME" in os.environ:
-        subprocess.call(
-            ["bash", "-c", "export FREESURFER_HOME=$FREESURFER_SYNTHMORPH_HOME"]
-        )
-        subprocess.call(["bash", "-c", "source $FREESURFER_HOME/SetUpFreeSurfer.sh"])
-        # subprocess.call(['source', '$FREESURFER_SYNTHMORPH_HOME/SetUpFreeSurfer.sh'])
-        print(
-            "- Freesurfer version for seg/reg is "
-            + os.environ["FREESURFER_SYNTHMORPH_HOME"]
-        )
 
-    elif "FREESURFER_HOME" in os.environ:
-        print("- Freesurfer version for seg/reg is " + os.environ["FREESURFER_HOME"])
+# --------------------- #
+# Initialize sys.stdout #
+# --------------------- #
+os.system("cls" if os.name == "nt" else "clear")
+print("          o")
+print("        ooooo")
+print("      ooooooooo")
+print("    ooooooooooooo")
+print("  ooooooooooooooooo")
+print("ooooooooooooooooooooo")
+print("")
+print("Running NicGiPrep Pipeline")
+print("")
+print("ooooooooooooooooooooo")
+print("ooooooooooooooooooooo")
+print("")
 
-    else:
-        print("Please, source FREESURFER first for registration and segmentation.")
-        exit()
+if "FREESURFER_HOME" in os.environ:
+    subprocess.call(["bash", "-c", "source $FREESURFER_HOME/SetUpFreeSurfer.sh"])
+    print("- Freesurfer version for seg/reg is " + os.environ["FREESURFER_HOME"])
 
-    os.environ["USLR_RUNNING"] = "True"
+else:
+    print("Please, source FREESURFER first for registration and segmentation.")
+    exit()
 
-    print("- DATASET USED ($BIDS_DIR): " + BIDS_DIR)
-    print("- DERIVATIVES DIR: " + DERIVATIVES_DIR)
-    print("")
-    print("ooooooooooooooooooooo")
-    print("ooooooooooooooooooooo")
-    print("\n")
+
+print("- RAWDATA DIRECTORY ($BIDS_DIR or --bids): " + BIDS_DIR)
+print("- DERIVATIVES DIRECTORY: " + DERIVATIVES_DIR)
+print("")
+print("ooooooooooooooooooooo")
+print("ooooooooooooooooooooo")
+print("\n")

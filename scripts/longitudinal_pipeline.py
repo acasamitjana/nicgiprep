@@ -1,4 +1,4 @@
-"""Command-line entry point for the nicgiprep longitudinal (USLR) pipeline.
+"""Command-line entry point for the nicgiprep longitudinal pipeline.
 
 Parses CLI arguments and an optional YAML configuration file, builds the
 PyBIDS layout (adding the cross-sectional and longitudinal derivatives), and
@@ -15,7 +15,7 @@ import yaml
 
 def parse_args():
     """Parse command-line arguments for the longitudinal pipeline."""
-    parser = ArgumentParser(description="Run the nicgiprep longitudinal (USLR) registration pipeline.")
+    parser = ArgumentParser(description="Run the NicGiPrep longitudinal processing pipeline.")
     parser.add_argument("--bids", default=os.environ.get("BIDS_DIR"),
                          help="Path to the BIDS rawdata directory. Defaults to the BIDS_DIR environment variable.")
     parser.add_argument("--derivatives", default=None,
@@ -77,7 +77,7 @@ def main():
     from setup import BIDS_DIR, ROOT_DIR, DERIVATIVES_DIR, DIR_PIPELINES
     from nicgiprep.pipelines.longitudinal import LongitudinalRegistration
 
-    cross_derivatives = args.cross_derivatives or join(DERIVATIVES_DIR, "nicgiprep-cross")
+    cross_derivatives = args.cross_derivatives or DIR_PIPELINES["nicgiprep-cross"]
 
     print("LOADING Dataset ...", end=" ", flush=True)
     db_file = join(ROOT_DIR, "BIDS-raw.db")

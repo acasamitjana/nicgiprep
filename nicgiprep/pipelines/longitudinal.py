@@ -25,7 +25,7 @@ from setup import *
 from nicgiprep.pipelines.base import Processor
 from nicgiprep.models import InstanceRigidModelLOG
 
-# from nicgiprep.callbacks import *
+from nicgiprep.utils.label_utils import labels_registration
 from nicgiprep.utils.preprocessing_utils import *
 from nicgiprep.utils.io_utils import create_dir, save_volume, ProcessResult
 from nicgiprep.utils.synthmorph_utils import synthmorph_register, integrate_svf

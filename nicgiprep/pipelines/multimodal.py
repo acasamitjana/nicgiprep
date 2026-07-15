@@ -40,7 +40,7 @@ from nicgiprep.utils.fn_utils import (
     one_hot_encoding,
 )
 from nicgiprep.utils.preprocessing_utils import bias_field_corr
-from nicgiprep.utils.label_utils import SYNTHSEG_LUT, SYNTHSEG_GMM_ONTOLOGY
+from nicgiprep.utils.label_utils import SYNTHSEG_LUT, SYNTHSEG_GMM_ONTOLOGY, labels_registration
 
 
 class MMProcessor(Processor):
