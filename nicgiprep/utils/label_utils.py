@@ -22,19 +22,19 @@ import numpy as np
 from importlib.resources import files
 
 # --- SuperSYNTH --- #
-path = files("nicgiprep.data.labels_classes_priors").joinpath(
+path = files("data.labels_classes_priors").joinpath(  #HACK: removed nicgiprep.
     "supersynth_segmentation_labels.npy"
 )
 supersynth_labels = np.load(path)
 SUPERSYNTH_LUT = {k: it_k for it_k, k in enumerate(np.unique(supersynth_labels))}
 
 # --- SynthSeg --- #
-path = files("nicgiprep.data.labels_classes_priors").joinpath(
+path = files("data.labels_classes_priors").joinpath(
     "synthseg_parcellation_labels.npy"
 )
 ctx_labels = np.load(path)
 
-path = files("nicgiprep.data.labels_classes_priors").joinpath(
+path = files("data.labels_classes_priors").joinpath(
     "synthseg_segmentation_labels.npy"
 )
 subcortical_labels = np.load(path)
@@ -71,5 +71,5 @@ SYNTHSEG_GMM_ONTOLOGY = {
 
 CSF_LABELS = [24]
 
-path = files("nicgiprep.data.labels_classes_priors").joinpath("labels_registration.npy")
+path = files("data.labels_classes_priors").joinpath("label_list_registration.npy")  #HACK: modified name from labels_registration to current
 labels_registration = np.load(path)

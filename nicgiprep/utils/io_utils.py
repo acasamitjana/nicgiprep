@@ -582,9 +582,7 @@ def reformat_to_list(
     if var is None:
         return None
     var = load_array_if_path(var, load_as_numpy=load_as_numpy)
-    if isinstance(
-        var, (int, float, np.int, np.int32, np.int64, np.float, np.float32, np.float64)
-    ):
+    if isinstance(var, (int, float, np.integer, np.floating)):
         var = [var]
     elif isinstance(var, tuple):
         var = list(var)
@@ -810,7 +808,7 @@ def get_volume_info(
 
     # get labels res
     if ".nii" in path_volume:
-        data_res = np.array(header["pixdim"][1: n_dims + 1])
+        data_res = np.array(header["pixdim"][1 : n_dims + 1])
     elif ".mgz" in path_volume:
         data_res = np.array(header["delta"])  # mgz image
     else:
@@ -878,9 +876,9 @@ def load_chunk(
     return (
         np.asarray(
             ps.dataobj[
-                chunk[0][0]: chunk[0][1],
-                chunk[1][0]: chunk[1][1],
-                chunk[2][0]: chunk[2][1],
+                chunk[0][0] : chunk[0][1],
+                chunk[1][0] : chunk[1][1],
+                chunk[2][0] : chunk[2][1],
             ]
         )[np.newaxis],
         ps_id,
@@ -916,9 +914,9 @@ def load_chunk_rescale(
     svf = rescale(svf, [factor] * 3 + [1])
     return (
         svf[
-            chunk[0][0]: chunk[0][1],
-            chunk[1][0]: chunk[1][1],
-            chunk[2][0]: chunk[2][1],
+            chunk[0][0] : chunk[0][1],
+            chunk[1][0] : chunk[1][1],
+            chunk[2][0] : chunk[2][1],
         ][np.newaxis],
         ps_id,
     )
@@ -1167,3 +1165,24 @@ def get_float_vol(v: Any) -> float:
         return float(v)
     except Exception:
         return -4
+
+
+
+
+def remove_duplicates_csv(csv_file: str):
+    """ Read a csv file and removes duplicated lines.
+
+    Parameters
+    ----------
+    csv_file : str
+        Path to the csv file.
+
+    """
+    if os.path.exists(csv_file):
+        with open(csv_file, "r") as f:
+            lines = f.readlines()
+        unique_lines = list(dict.fromkeys(line.strip() for line in lines if line.strip()))
+        with open(csv_file, "w") as f:
+            for line in unique_lines:
+                f.write(line + "\n")
+

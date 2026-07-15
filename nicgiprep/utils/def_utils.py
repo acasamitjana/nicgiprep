@@ -1,4 +1,5 @@
 from typing import Optional, Union, Sequence
+from pathlib import Path
 import nibabel as nib
 
 import numpy as np
@@ -9,6 +10,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from nicgiprep.utils.fn_utils import compute_centroids_ras
+from scipy.ndimage import gaussian_filter
 
 def fast_3D_interp_torch(
     X: torch.Tensor, II: torch.Tensor, JJ: torch.Tensor, KK: torch.Tensor, mode: str
@@ -148,6 +151,7 @@ def fast_3D_interp_field_torch(
         IIr = torch.round(II).long()
         JJr = torch.round(JJ).long()
         KKr = torch.round(KK).long()
+
         IIr[IIr < 0] = 0
         JJr[JJr < 0] = 0
         KKr[KKr < 0] = 0
@@ -156,9 +160,8 @@ def fast_3D_interp_field_torch(
         KKr[KKr > (X.shape[2] - 1)] = X.shape[2] - 1
         Y = torch.zeros([*II.shape, num_channels], device=X.device)
         for channel in range(num_channels):
-            #
             Xc = X[..., channel]
-            Y = Xc[IIr, JJr, KKr]
+            Y[..., channel] = Xc[IIr, JJr, KKr]
 
     elif mode == "linear":
         #
@@ -1211,3 +1214,75 @@ class SpatialTransformer(nn.Module):
         return F.grid_sample(
             src, new_locs, mode=mode, padding_mode=padding_mode, align_corners=True
         )
+
+
+
+def register_to_MNI(
+    im_filepath: str | Path,
+    seg_filepath: str | Path,
+    save_path: str | Path,
+    MNI_TEMPLATE_SEG: str | Path,
+    MNI_TEMPLATE: str | Path,
+    labels_registration: np.ndarray,
+) -> None:
+    """
+    Register a subject image to MNI space using centroid-based affine alignment.
+
+    Computes an affine transform by matching label centroids between the subject
+    segmentation and the MNI template segmentation, applies optional Gaussian
+    smoothing to account for resolution differences, resamples the image into
+    MNI space, and saves the result.
+
+    Parameters
+    ----------
+    im_filepath : str or Path
+        Path to the subject's input image (.nii.gz).
+    seg_filepath : str or Path
+        Path to the subject's SynthSeg segmentation file (.nii.gz), used for centroid
+        computation.
+    save_path : str or Path
+        Path where the MNI-registered image will be saved (.nii.gz). The affine
+        matrix is also saved alongside it with the suffix 'aff.npy'.
+    MNI_TEMPLATE_SEG : str or Path
+        Path to the MNI template segmentation, used as the registration reference
+        for centroid computation.
+    MNI_TEMPLATE : str or Path
+        Path to the MNI template image, used to define the target voxel grid and
+        resolution for resampling.
+    labels_registration : array-like
+        List or array of label indices to use for centroid matching between the
+        subject and MNI segmentations.
+
+    Returns
+    -------
+    None
+        Saves two files to disk:
+        - Registered image at `save_path`
+        - Affine matrix at `save_path.replace('.nii.gz', 'aff.npy')`
+
+    """
+    centroid_ref, ok_ref = compute_centroids_ras(
+        MNI_TEMPLATE_SEG, labels_registration
+    )
+    centroid_flo, ok_flo = compute_centroids_ras(
+        seg_filepath, labels_registration
+    )
+
+    aff_MNI = getM(
+        centroid_ref[:, ok_ref > 0], centroid_flo[:, ok_ref > 0], use_L1=False
+    )
+    np.save(save_path.replace('.nii.gz', 'aff.npy'), aff_MNI)
+
+    mni_proxy = nib.load(MNI_TEMPLATE)
+    im_proxy = nib.load(im_filepath)
+    voxsize = np.sqrt(np.sum(im_proxy.affine * im_proxy.affine, axis=0))[:-1]
+    voxsize_new = np.sqrt(np.sum(mni_proxy.affine * mni_proxy.affine, axis=0))[:-1]
+    factor = voxsize / voxsize_new
+    sigmas = 0.25 / factor
+    sigmas[factor > 1] = 0  # don't blur if upsampling
+
+    im_array = np.array(im_proxy.dataobj)
+    im_array = gaussian_filter(im_array, sigmas)
+    im_proxy = nib.Nifti1Image(im_array, np.linalg.inv(aff_MNI) @ im_proxy.affine)
+    im_proxy = vol_resample_fast(mni_proxy, im_proxy)
+    nib.save(im_proxy, save_path)

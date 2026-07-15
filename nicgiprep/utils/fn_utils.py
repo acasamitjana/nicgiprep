@@ -331,12 +331,12 @@ def get_rigid_params(
     translation : np.ndarray
         Translation vector ``[tx, ty, tz]`` in mm.
     """
-    ry = -np.asin(matrix[2, 0])
-    rx = np.atan2(matrix[2, 1] / np.cos(ry), matrix[2, 2] / np.cos(ry))
-    rz = np.atan2(matrix[1, 0] / np.cos(ry), matrix[0, 0] / np.cos(ry))
+    ry = -np.arcsin(matrix[2, 0])
+    rx = np.arctan2(matrix[2, 1] / np.cos(ry), matrix[2, 2] / np.cos(ry))
+    rz = np.arctan2(matrix[1, 0] / np.cos(ry), matrix[0, 0] / np.cos(ry))
     angles = np.array([rx, ry, rz])
 
-    T_center = np.zeros((4, 4)).to(matrix.device)
+    T_center = np.zeros((4, 4))
     T_center[0, 0] = 1
     T_center[1, 1] = 1
     T_center[2, 2] = 1
@@ -348,7 +348,7 @@ def get_rigid_params(
     else:
         T_center[:3, 3] = -cog
 
-    T_center_inv = np.zeros((4, 4)).to(matrix.device)
+    T_center_inv = np.zeros((4, 4))
     T_center_inv[0, 0] = 1
     T_center_inv[1, 1] = 1
     T_center_inv[2, 2] = 1
@@ -417,7 +417,8 @@ def one_hot_encoding(
         idx = (it_cls,) + idx_class
         labels[idx] = 1
 
-    return np.transpose(labels, axes=(1, 2, 3, 0))
+    # return np.transpose(labels, axes=(1, 2, 3, 0))
+    return np.moveaxis(labels, 0, -1)  # to allow for any number of dimensions
 
 
 def label_log_odds(

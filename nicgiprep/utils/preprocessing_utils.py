@@ -175,7 +175,8 @@ def projectKroneckerProductBasisFunctions(
         T = T.reshape(currentSizeOfT, order="F")
         # Shift dimension
         currentSizeOfT = currentSizeOfT[1:] + [currentSizeOfT[0]]
-        T = np.rollaxis(T, 0, 3)
+        # T = np.rollaxis(T, 0, 3)
+        T = np.moveaxis(T, 0, -1)  # to allow for any number of dimensions
     # Return result as vector
     coefficients = T.flatten(order="F")
     return coefficients
