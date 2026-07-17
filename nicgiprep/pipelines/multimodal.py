@@ -25,7 +25,7 @@ from skimage.morphology import ball, binary_dilation
 
 from setup import *
 from nicgiprep.pipelines.base import Processor
-from nicgiprep.pipelines.cross_sectional import SynthSegProcessor
+from nicgiprep.pipelines.cross_sectional import MRISegmentationProcessor
 from nicgiprep.pipelines.longitudinal import USLRLinear
 from nicgiprep.utils.io_utils import create_dir, save_volume, remove_dir
 from nicgiprep.utils.def_utils import (
@@ -335,7 +335,7 @@ class MMProcessor(Processor):
         return available
 
 
-class MultiModalSynthSegProcessor(SynthSegProcessor):
+class MultiModalSynthSegProcessor(MRISegmentationProcessor):
     """Run SynthSeg on *every* MRI modality of each session.
 
     The base :class:`~nicgiprep.pipelines.cross_sectional.SynthSegProcessor`
