@@ -24,12 +24,17 @@ filename_entities = [
     "datatype",
 ]
 BIDS_PATH_PATTERN = [
-    "sub-{subject}[/ses-{session}]/{datatype<anat|utils>|anat}/sub-{subject}[_ses-{session}][_space-{space}][_task-{task}][_acq-{acquisition}][_ce-{ceagent}][_rec-{reconstruction}][_run-{run}][_part-{part}][_desc-{desc}]_{suffix<aff|v2r>}{extension<.txt|.npy>|.npy}",
+    "sub-{subject}[/ses-{session}]/{datatype<anat|utils>|anat}/sub-{subject}[_ses-{session}][_space-{space}][_task-{task}][_acq-{acquisition}][_ce-{ceagent}][_rec-{reconstruction}][_run-{run}][_part-{part}][_desc-{desc}]_{suffix<aff|v2r|etiv|T1wetiv>}{extension<.txt|.npy>|.npy}",
     "sub-{subject}[/ses-{session}]/{datatype<anat|utils>|anat}/sub-{subject}[_ses-{session}][_space-{space}][_task-{task}][_acq-{acquisition}][_ce-{ceagent}][_rec-{reconstruction}][_run-{run}][_part-{part}][_desc-{desc}]_{suffix<T1w|T2w|T2star|T2starw|FLAIR|FLASH|PD|PDw|PDT2|inplaneT[12]|angio|dseg|posteriors|svf|jac|def|T1wpost|T1wstats|T1wstd|T1wmask|T1wdseg|T2wmask|T2wdseg|FLAIRmask|FLAIRdseg|PDwmask|PDwdseg|PDmask|PDdseg|T1wsynthseg|T2wsynthseg|FLAIRsynthseg|PDwsynthseg|mask|space>}{extension<.nii|.nii.gz|.json|.txt|.npy>|.nii.gz}",
     "sub-{subject}[/ses-{session}]/{datatype<func>|func}/sub-{subject}[_ses-{session}][_space-{space}][_task-{task}][_acq-{acquisition}][_ce-{ceagent}][_rec-{reconstruction}][_run-{run}][_part-{part}][_desc-{desc}]_{suffix<bold|cbv|sbref>}{extension<.nii|.nii.gz|.json|.txt|.npy>|.nii.gz}",
     "sub-{subject}[/ses-{session}]/{datatype<pet>|pet}/sub-{subject}[_ses-{session}][_space-{space}][_task-{task}][_acq-{acquisition}][_trc-{tracer}][_rec-{reconstruction}][_run-{run}][_part-{part}][_desc-{desc}]_{suffix<pet>}{extension<.nii|.nii.gz|.json|.txt|.npy>|.nii.gz}",
     "sub-{subject}[/ses-{session}]/{datatype<utils>|utils}/sub-{subject}[_ses-{session}][_space-{space}][_task-{task}][_acq-{acquisition}][_ce-{ceagent}][_rec-{reconstruction}][_run-{run}][_part-{part}][_desc-{desc}]_{suffix<svf|aff|empty|v2r|T1wsynthseg>}{extension<.nii|.nii.gz|.npy>|.nii.gz}",
 ]
+
+# Custom pybids config: extends the default "bids" config so BIDSLayout.
+# Pass config=[str(BIDS_CONFIG), "derivatives"] to BIDSLayout/add_derivatives
+# to use it in place of the built-in "bids" config.
+BIDS_CONFIG = files("data.config").joinpath("nicgiprep_bids.json")
 
 
 # ------------- #
@@ -123,31 +128,34 @@ for d, d_str in DESC_PIPELINES.items():
 # Initialize sys.stdout #
 # --------------------- #
 os.system("cls" if os.name == "nt" else "clear")
-print("          o")
-print("        ooooo")
-print("      ooooooooo")
-print("    ooooooooooooo")
-print("  ooooooooooooooooo")
-print("ooooooooooooooooooooo")
+print("            oo            ")
+print("          oooooo          ")
+print("        oooooooooo        ")
+print("      oooooooooooooo      ")
+print("    oooooooooooooooooo    ")
+print("  oooooooooooooooooooooo  ")
+print("oooooooooooooooooooooooooo")
 print("")
 print("Running NicGiPrep Pipeline")
 print("")
-print("ooooooooooooooooooooo")
-print("ooooooooooooooooooooo")
+print("oooooooooooooooooooooooooo")
+print("oooooooooooooooooooooooooo")
 print("")
+
+print("* RAWDATA DIRECTORY ($BIDS_DIR or --bids):      " + BIDS_DIR)
+print("* DERIVATIVES DIRECTORY:                        " + DERIVATIVES_DIR)
 
 if "FREESURFER_HOME" in os.environ:
     subprocess.call(["bash", "-c", "source $FREESURFER_HOME/SetUpFreeSurfer.sh"])
-    print("- Freesurfer version for seg/reg is " + os.environ["FREESURFER_HOME"])
+    print("* FREESURFER HOME:                              " + os.environ["FREESURFER_HOME"])
 
 else:
     print("Please, source FREESURFER first for registration and segmentation.")
     exit()
 
 
-print("- RAWDATA DIRECTORY ($BIDS_DIR or --bids): " + BIDS_DIR)
-print("- DERIVATIVES DIRECTORY: " + DERIVATIVES_DIR)
+
 print("")
-print("ooooooooooooooooooooo")
-print("ooooooooooooooooooooo")
+print("oooooooooooooooooooooooooo")
+print("oooooooooooooooooooooooooo")
 print("\n")
