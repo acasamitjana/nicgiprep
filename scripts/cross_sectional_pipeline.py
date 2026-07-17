@@ -88,7 +88,7 @@ def main():
 
     # ── Imports ───────────────────────────────────────────────────────────────
     import bids
-    from setup import BIDS_DIR, ROOT_DIR, DERIVATIVES_DIR, DIR_PIPELINES
+    from setup import BIDS_DIR, ROOT_DIR, DERIVATIVES_DIR, DIR_PIPELINES, BIDS_CONFIG
 
     from nicgiprep.pipelines import (
         SynthSegProcessor,
@@ -100,15 +100,19 @@ def main():
     os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_num)
 
     # ── BIDS layout ───────────────────────────────────────────────────────────────
-    print("LOADING Dataset ...", end=" ", flush=True)
+    bids_config = [str(BIDS_CONFIG), "derivatives"]
+
+    print("\n\nLOADING Dataset ...", end=" ", flush=True)
     db_file = join(ROOT_DIR, "BIDS-raw.db")
     if not exists(db_file):
-        bids_loader = bids.layout.BIDSLayout(root=BIDS_DIR, validate=False)
+        bids_loader = bids.layout.BIDSLayout(root=BIDS_DIR, validate=False, config=bids_config)
         bids_loader.save(db_file)
     else:
-        bids_loader = bids.layout.BIDSLayout(root=BIDS_DIR, validate=False, database_path=db_file)
+        bids_loader = bids.layout.BIDSLayout(
+            root=BIDS_DIR, validate=False, database_path=db_file, config=bids_config
+        )
 
-    bids_loader.add_derivatives(DIR_PIPELINES["nicgiprep-cross"])
+    bids_loader.add_derivatives(DIR_PIPELINES["nicgiprep-cross"], **{'config': bids_config})
 
     processing_seg = SynthSegProcessor(bids_loader=bids_loader, subject_list=args.subjects)
 
