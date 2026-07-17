@@ -301,9 +301,9 @@ class Processor(object):
             "config": [str(BIDS_CONFIG), "derivatives"],
         }
 
-        bids_loader = BIDSLayout(root=rawdir, **bids_kwargs, config=BIDS_CONFIG_PATH)
+        bids_loader = BIDSLayout(root=rawdir, **bids_kwargs)
         bids_loader.add_derivatives(
-            [DIR_PIPELINES[d] for d in derivatives], **bids_kwargs, config=BIDS_CONFIG_PATH
+            [DIR_PIPELINES[d] for d in derivatives], **bids_kwargs
         )
 
         self.bids_loader = bids_loader
@@ -325,9 +325,9 @@ class Processor(object):
             "config": [str(BIDS_CONFIG), "derivatives"],
         }
 
-        bids_loader = BIDSLayout(root=rawdir, **bids_kwargs, config=BIDS_CONFIG_PATH)
+        bids_loader = BIDSLayout(root=rawdir, **bids_kwargs)
         bids_loader.add_derivatives(
-            [DIR_PIPELINES[d] for d in derivatives], **bids_kwargs, config=BIDS_CONFIG_PATH
+            [DIR_PIPELINES[d] for d in derivatives], **bids_kwargs
         )
 
         self.bids_loader = bids_loader

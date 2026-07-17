@@ -102,6 +102,7 @@ def main():
     process_kwargs["force_flag"] = args.force
     process_kwargs["verbose"] = args.verbose
 
+    print("\nPROCESSING ...")
     processing.process(**process_kwargs)
 
 

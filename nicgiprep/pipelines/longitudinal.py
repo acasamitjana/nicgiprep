@@ -2162,6 +2162,8 @@ class LongitudinalRegistration(LongitudinalProcessor):
         **kwargs
         """
 
+        print("\nSubject: " + subject, end='\n')
+
         # build sessions file with the filename used for each session (T1w)
         sess_df = self._get_sessions_file(subject)
         if not isinstance(sess_df, pd.DataFrame):
@@ -2197,5 +2199,4 @@ class LongitudinalRegistration(LongitudinalProcessor):
 
             self._register_to_MNI(subject, sess_df)
 
-        pdb.set_trace()
         return ProcessResult(exit_code=0, message="success")

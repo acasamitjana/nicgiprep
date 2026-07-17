@@ -91,7 +91,7 @@ def main():
     from setup import BIDS_DIR, ROOT_DIR, DERIVATIVES_DIR, DIR_PIPELINES, BIDS_CONFIG
 
     from nicgiprep.pipelines import (
-        SynthSegProcessor,
+        MRISegmentationProcessor,
         BiasCorrectionProcessor,
         MNIRegistrationProcessor,
     )
@@ -114,7 +114,7 @@ def main():
 
     bids_loader.add_derivatives(DIR_PIPELINES["nicgiprep-cross"], **{'config': bids_config})
 
-    processing_seg = SynthSegProcessor(bids_loader=bids_loader, subject_list=args.subjects)
+    processing_seg = MRISegmentationProcessor(bids_loader=bids_loader, subject_list=args.subjects)
 
     print("Total subjects found: N=" + str(len(processing_seg.subject_list)), end="\n\n")
 
@@ -152,3 +152,7 @@ def main():
     )
 
     processing_mni.process(force_flag=args.force, session_list=args.sessions)
+
+
+if __name__ == "__main__":
+    main()
