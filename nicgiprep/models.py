@@ -78,7 +78,7 @@ class InstanceRigidModelLOG(nn.Module):
         np.ndarray
             Stacked transformation matrices, shape ``(4, 4, N)``.
         """
-        return self._compute_matrix().cpu().numpy()
+        return self._compute_matrix().detach().cpu().numpy()
 
     def _compute_matrix(self) -> torch.Tensor:
         """Compute 4×4 rigid transformation matrices from log-space parameters for all sessions available (N)
