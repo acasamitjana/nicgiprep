@@ -121,14 +121,14 @@ class MMProcessor(Processor):
         }
 
         # Per-modality image / mask / seg resampled into the session space.
-        self.im_graph_entities = {"space": self.SPACE, "extension": "nii.gz"}
-        self.mask_graph_entities = {"space": self.SPACE, "extension": "nii.gz"}
+        self.im_graph_entities = {"space": self.SPACE, "extension": ".nii.gz"}
+        self.mask_graph_entities = {"space": self.SPACE, "extension": ".nii.gz"}
 
         # Session template (S0): the aligned template-modality image + derivatives.
         self.template_entities = {
             "space": self.SPACE,
             "desc": "template",
-            "extension": "nii.gz",
+            "extension": ".nii.gz",
         }
 
         # Session-space (network) voxel-to-RAS array.
@@ -213,7 +213,7 @@ class MMProcessor(Processor):
         """
         entities = {
             "scope": self.CROSS_PIPELINE_DIR,
-            "extension": "nii.gz",
+            "extension": ".nii.gz",
             "suffix": modality,
             "acquisition": [None, "orig"],
         }
@@ -239,7 +239,7 @@ class MMProcessor(Processor):
         """
         return {
             "scope": self.CROSS_PIPELINE_DIR,
-            "extension": "nii.gz",
+            "extension": ".nii.gz",
             "suffix": self._seg_suffix(modality),
         }
 
@@ -405,7 +405,7 @@ class MultiModalSynthSegProcessor(SynthSegProcessor):
             subject=subject,
             session=session,
             suffix=modality,
-            extension=["nii", "nii.gz"],
+            extension=[".nii", ".nii.gz"],
             acquisition=["orig", None],
             scope="raw",
             ignore_check=True,
@@ -787,7 +787,7 @@ class MultiModalBiasCorrectionProcessor(MMProcessor):
 
                 # Find the raw image from which this session's segmentation was derived.
                 seg_ents = self._get_entities(seg_file)
-                seg_ents["extension"] = "nii.gz"
+                seg_ents["extension"] = ".nii.gz"
                 raw_entities = {k: v for k, v in seg_ents.items() if k != "acquisition"}
                 raw_entities["suffix"] = modality
                 raw_entities["scope"] = "raw"
@@ -1491,7 +1491,7 @@ class MultiMRIProcessor(MMProcessor):
                     **{
                         **extra,
                         "scope": self.CROSS_PIPELINE_DIR,
-                        "extension": "nii.gz",
+                        "extension": ".nii.gz",
                         "suffix": "T1wdseg",
                         "datatype": "anat",
                     },

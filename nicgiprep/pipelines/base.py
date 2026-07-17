@@ -292,7 +292,11 @@ class Processor(object):
         indexer = BIDSLayoutIndexer(
             validate=False, ignore="sub-(?!" + subject + ")(.*)$", index_metadata=False
         )
-        bids_kwargs = {"validate": False, "indexer": indexer}
+        bids_kwargs = {
+            "validate": False,
+            "indexer": indexer,
+            "config": [str(BIDS_CONFIG), "derivatives"],
+        }
 
         bids_loader = BIDSLayout(root=rawdir, **bids_kwargs)
         bids_loader.add_derivatives(
@@ -311,7 +315,11 @@ class Processor(object):
         derivatives = self.bids_loader.derivatives.keys()
 
         indexer = BIDSLayoutIndexer(validate=False, index_metadata=False)
-        bids_kwargs = {"validate": False, "indexer": indexer}
+        bids_kwargs = {
+            "validate": False,
+            "indexer": indexer,
+            "config": [str(BIDS_CONFIG), "derivatives"],
+        }
 
         bids_loader = BIDSLayout(root=rawdir, **bids_kwargs)
         bids_loader.add_derivatives(
@@ -335,7 +343,7 @@ class Processor(object):
         """
         sess_df = None
         sess_tsv = self._get_data(
-            suffix="sessions", extension="tsv", subject=subject, scope="bids"
+            suffix="sessions", extension=".tsv", subject=subject, scope="bids"
         )
         if sess_tsv:
             sess_df = pd.read_csv(sess_tsv[0].path, sep="\t")
@@ -354,7 +362,7 @@ class Processor(object):
             is found.
         """
         part_df = None
-        part_tsv = self._get_data(suffix="participants", extension="tsv")
+        part_tsv = self._get_data(suffix="participants", extension=".tsv")
         if part_tsv:
             part_df = pd.read_csv(part_tsv[0].path, sep="\t")
             part_df = part_df.set_index("participant_id")
@@ -482,7 +490,7 @@ class Processor(object):
             self._update_subject_layout(subject)
             try:
                 retcode = self.process_subject(subject, **kwargs)
-                if retcode is None or retcode["exit_code"] != 1:
+                if retcode is None or retcode["exit_code"] != 0:
                     subjects_failed.append(subject)
 
             except Exception:

@@ -4,9 +4,12 @@ Processing pipeline classes for longitudinal neuroimaging data in BIDS format.
 Provides base and specialised pipeline classes that wrap PyBIDS layout queries,
 coordinate volumetric resampling, label fusion, and longitudinal volume tracking.
 """
-
-from typing import Literal
+import os
+import pdb
+from typing import Literal, List, Callable
 from os.path import join, dirname, exists
+
+from bids.layout import BIDSFile
 from joblib import delayed, Parallel
 import itertools
 
@@ -67,14 +70,14 @@ class LongitudinalProcessor(Processor):
         - ``net_v2r_ent`` / ``svf_v2r_ent`` — v2r affine file entities.
         """
         super()._build_processor()
-        self.long_ent = {"space": "subject", "acquisition": "1", "extension": "nii.gz"}
+        self.long_ent = {"space": "subject", "acquisition": "1", "extension": ".nii.gz"}
         self.aff_long_ent = {"desc": "raw2temp", "suffix": "aff", "extension": ".npy"}
         self.im_long_ent = {"suffix": "T1w", **self.long_ent}
         self.mask_long_ent = {"suffix": "T1wmask", **self.long_ent}
         self.svf_long_ent = {
             "space": "subject",
             "suffix": "svf",
-            "extension": "nii.gz",
+            "extension": ".nii.gz",
             "datatype": "utils",
         }
         self.template_long_ent = {"desc": "template", "suffix": "T1w", **self.long_ent}
@@ -125,6 +128,7 @@ class LongitudinalProcessor(Processor):
             "sub-" + subject,
             "sub-" + subject + "_sessions.tsv",
         )
+
         if exists(
             join(
                 DIR_PIPELINES[self.pipeline_dir],
@@ -134,42 +138,47 @@ class LongitudinalProcessor(Processor):
         ):
             return pd.read_csv(sess_fpath, sep="\t")
 
+        else:
+            os.makedirs(join(
+                DIR_PIPELINES[self.pipeline_dir],
+                "sub-" + subject,
+            ))
+
         sess_df = {
             "session_id": [],
             "orig_t1w": [],
             "orig_seg": [],
             "orig_synthseg": [],
         }
-        im_ent = {"scope": "nicgiprep-cross", "extension": "nii.gz", "suffix": "T1w"}
+        im_raw_ent = {"scope": "nicgiprep-cross", "extension": ".nii.gz", "suffix": "T1w",
+                      'space': None,  'datatype': 'anat'}
+
+
         for sess_id in self.bids_loader.get_session(subject=subject):
-            im_files = self.bids_loader.get(
-                **{"subject": subject, "session": sess_id, **im_ent}
+            im_raw_files = self.bids_loader.get(
+                **{"subject": subject, "session": sess_id, **im_raw_ent}
             )
-            if len(im_files) == 0:
+
+            if len(im_raw_files) == 0:
                 return ProcessResult(
-                    exit_code=-1,
-                    message="[error] no T1w files are found for subject: "
-                    + subject
-                    + " and session "
-                    + str(sess_id)
-                    + ". Please run nicgiprep-cross first.",
+                    exit_code=1,
+                    message="[error] no T1w files are found for subject: " + subject + " and session "
+                            + str(sess_id) + ". Please run nicgiprep-cross first.",
                 )
-            elif len(im_files) > 1:
-                idx = np.random.choice(len(im_files), 1)
-                im_file = im_files[idx]
+
             else:
-                im_file = im_files[0]
+                filter_fn = lambda f: f.entities.get('run') in [None, '01', '1']
+                im_file = self._select_image(im_raw_files, filter_fn=filter_fn)
+
 
             seg_ent = im_file.get_entities()
             seg_ent["suffix"] = ["T1wdseg", "dseg"]
-            seg_files = self.bids_loader.get(
-                **{"subject": subject, "session": sess_id, **seg_ent}
-            )
+            seg_files = self.bids_loader.get(**seg_ent)
 
+            seg_ent.pop('datatype')
             seg_ent["suffix"] = ["T1wsynthseg"]
-            seg_files_synthseg = self.bids_loader.get(
-                **{"subject": subject, "session": sess_id, **seg_ent}
-            )
+            seg_files_synthseg = self.bids_loader.get(**seg_ent)
+
             if len(seg_files) == 0 or len(seg_files_synthseg) == 0:
                 return ProcessResult(
                     exit_code=-1,
@@ -290,6 +299,17 @@ class LongitudinalProcessor(Processor):
         tp_time = list(time_mapping.values())
         return tp_id[np.argmin(tp_time)]
 
+    def _select_image(self, files: List[BIDSFile], filter_fn: Callable[[BIDSFile], bool] | None = None ):
+
+        # filter by run entity: either None or 01
+        if filter_fn is not None and len(files) > 1:
+            files = list(filter(filter_fn, files))
+
+        # randomly pick one of the remaining
+        idx = np.random.choice(len(files))
+        im_file = files[idx]
+
+        return im_file
 
 class USLRLinear(LongitudinalProcessor):
     """Rigid longitudinal registration via the USLR spanning-tree algorithm.
@@ -329,58 +349,59 @@ class USLRLinear(LongitudinalProcessor):
         Returns
         -------
         dict
-            ``{'exit_code': int, 'message': str}``.  Exit codes:
-            ``-1`` error, ``0`` run full pipeline, ``1`` skip,
-            ``2`` graph done,
-            ``5`` single timepoint.
+            ``{'exit_code': int, 'message': str, 'data': dict}``.
+            Exit codes:
+                ``-1`` error,
+                ``0`` process is already completed (or has a single or no timpeoints available)
+                ``1`` subject needs the whole processing
+                ``2`` the subject is partially processed; do not need to run the graph part.
         """
-        # do not run if only 1 timepoint available
-        if len(session_list) == 1:
-            return ProcessResult(
-                exit_code=5, message="[done] It has only 1 timepoint. Linking files. \n"
-            )
+        default_result = ProcessResult(exit_code=-1, message="[error] Some error during the process occurred. \n")
 
-        # do not run if only 0 timepoint available
-        elif len(session_list) == 0:
-            return ProcessResult(
-                exit_code=1, message="[done] It has 0 sessions available. Skipping.\n"
-            )
-
-        # do not run if it has already been processed
-        elif (
-            self._get_data(
-                **{"subject": subject, **self.aff_long_ent},
-                curr_len=len(session_list),
-                verbose=False,
-            )
-            is not None
-            and not force_flag
-        ):
-
-            if not exists(
-                join(
-                    DIR_PIPELINES[self.pipeline_dir],
-                    "sub-" + subject,
-                    "sub-" + subject + "_T1wetiv.npy",
+        try:
+            # do not run if only 1 timepoint available
+            if len(session_list) == 1:
+                return ProcessResult(
+                    exit_code=0, message="[done] It has only 1 timepoint. Linking files. \n"
                 )
+
+            # do not run if only 0 timepoint available
+            elif len(session_list) == 0:
+                return ProcessResult(
+                    exit_code=0, message="[done] It has 0 sessions available. Skipping.\n"
+                )
+
+            # do not run if it has already been processed
+            elif (
+                self._get_data(
+                    **{"subject": subject, **self.aff_long_ent},
+                    curr_len=len(session_list),
+                    verbose=False,
+                )
+                is not None
+                and not force_flag
             ):
-                return ProcessResult(
-                    exit_code=2,
-                    message="[partly done] graph is already computed;  etiv missing.\n",
-                )
-            else:
-                return ProcessResult(
-                    exit_code=1,
-                    message="[done] subject already processed. Check the results in [..]/"
-                    + self.pipeline_dir
-                    + "/sub-"
-                    + subject
-                    + ".\n",
-                )
+                if self._get_data(**{"subject": subject, 'suffix': 'T1wetiv', 'datatype': 'anat'}) is None:
+                    return ProcessResult(
+                        exit_code=2,
+                        message="[partly done] graph is already computed;  etiv missing.\n",
+                    )
+                else:
+                    return ProcessResult(
+                        exit_code=0,
+                        message="[done] subject already processed. Check the results in [..]/"
+                        + self.pipeline_dir
+                        + "/sub-"
+                        + subject
+                        + ".\n",
+                    )
 
-        # need to entire pipeline
-        else:
-            return ProcessResult(exit_code=0, message="Subject needs to be processed")
+            # need to entire pipeline
+            else:
+                return ProcessResult(exit_code=1, message="Subject needs to be processed")
+
+        except Exception as e:
+            return default_result
 
     def _register_timepoints(
         self,
@@ -499,7 +520,7 @@ class USLRLinear(LongitudinalProcessor):
     def _init_graph(
         self, sess_df: pd.DataFrame, def_dir: str, force_flag: bool = False
     ) -> dict:
-        """Compute pairwise rigid affines between all timepoints via centroid SVD.
+        """Compute pairwise rigid affines between all timepoints via centroid SVD and save it locally
 
         Parameters
         ----------
@@ -509,9 +530,20 @@ class USLRLinear(LongitudinalProcessor):
             Directory where pairwise ``.npy`` affine files are written.
         force_flag : bool
             If ``True``, recompute even when files exist.
+
+
+        Return
+        ------
+        dict
+            Containing the center of gravity (COG) of each timepoint to be used later in the code.
         """
         # compute centroids
         t_cog_d = self._compute_cog(sess_df)
+        if all([exists(join(def_dir, str(r) + "_to_" + str(f) + ".npy"))
+                for r, f in itertools.combinations(sess_df.index, 2)]) and not force_flag:
+
+            return t_cog_d
+
         centroids_dict, ok_dict = self._get_centroids(sess_df)
 
         for sess_id in sess_df.index:
@@ -567,7 +599,10 @@ class USLRLinear(LongitudinalProcessor):
         Returns
         -------
         dict
-            Checkpoint dict with ``exit_code=2``.
+            ``{'exit_code': int, 'message': str, 'data': dict}``.
+            Exit codes:
+                ``-1`` error,
+                ``0`` process is already completed (or has a single or no timpeoints available)
         """
         log_r = USLRLinear.init_st2_lineal(sess_df.index, def_dir)
         t_res = USLRLinear.st2_lineal_pytorch(
@@ -615,7 +650,10 @@ class USLRLinear(LongitudinalProcessor):
         Returns
         -------
         dict
-            Checkpoint dict with ``exit_code=3``.
+            ``{'exit_code': int, 'message': str, 'data': dict}``.
+            Exit codes:
+                ``-1`` error,
+                ``0`` process is already completed (or has a single or no timpeoints available)
         """
         masks_dilated = []
         for sess_id, sess_files in sess_df.iterrows():
@@ -671,7 +709,7 @@ class USLRLinear(LongitudinalProcessor):
         )
 
         sss_kwargs = self.template_long_ent.copy()
-        sss_kwargs["subject"] = "subject"
+        sss_kwargs["subject"] = subject
         sss_kwargs["suffix"] = "empty"
         sss_kwargs["datatype"] = "utils"
 
@@ -685,13 +723,22 @@ class USLRLinear(LongitudinalProcessor):
         svf_v2r_filepath = join(
             root_dir, self.build_path({"subject": subject, **self.svf_v2r_ent})
         )
-        save_volume(np.zeros(self.net_shape), net_v2r, sss_filepath)
+
+        os.makedirs(dirname(sss_v2r_filepath), exist_ok=True)
         np.save(sss_v2r_filepath, net_v2r)
+
+        os.makedirs(dirname(svf_v2r_filepath), exist_ok=True)
         np.save(svf_v2r_filepath, svf_v2r)
+
+        os.makedirs(dirname(sss_filepath), exist_ok=True)
+        save_volume(np.zeros(self.net_shape), net_v2r, sss_filepath)
 
         subprocess.call(["rm", "-rf", join(self.tmp_dir, subject + "_template.nii.gz")])
 
-        return None
+        return ProcessResult(
+            exit_code=0,
+            message="[done] subject space created. \n",
+        )
 
     def _resample_to_subject_space(
         self, subject: str, sess_df: pd.DataFrame
@@ -707,10 +754,18 @@ class USLRLinear(LongitudinalProcessor):
             Subject ID.
         sess_df : pd.DataFrame
             Table with session_id as index and orig_t1w and orig_synthseg as columns
+
+        Returns
+        -------
+        dict
+            ``{'exit_code': int, 'message': str, 'data': dict}``.
+            Exit codes:
+                ``-1`` error,
+                ``0`` process is already completed (or has a single or no timpeoints available)
         """
 
         sss_kwargs = self.template_long_ent.copy()
-        sss_kwargs["subject"] = "subject"
+        sss_kwargs["subject"] = subject
         sss_kwargs["suffix"] = "empty"
         sss_kwargs["datatype"] = "utils"
 
@@ -745,7 +800,7 @@ class USLRLinear(LongitudinalProcessor):
                     "step for" + str(extra_kwargs) + ".\n",
                 )
 
-            im_proxy = nib.load(im_file.path)
+            im_proxy = nib.load(im_file)
             voxsize = np.sqrt(np.sum(im_proxy.affine * im_proxy.affine, axis=0))[:-1]
             voxsize_new = np.sqrt(np.sum(sss_proxy.affine * sss_proxy.affine, axis=0))[
                 :-1
@@ -761,7 +816,7 @@ class USLRLinear(LongitudinalProcessor):
 
             nib.save(im_proxy, join(DIR_PIPELINES[self.pipeline_dir], im_fname))
 
-        return ProcessResult(exit_code=0, message="succeed")
+        return ProcessResult(exit_code=0, message="[done] resampling to subject space correctly. \n")
 
     def _compute_etiv(self, subject: str, sess_df: pd.DataFrame) -> ProcessResult:
         """Estimate and save the total intra-cranial volume (eTIV) for a subject.
@@ -775,10 +830,19 @@ class USLRLinear(LongitudinalProcessor):
             Subject ID.
         sess_df : pd.DataFrame
             Table with session_id as index and orig_t1w and orig_seg as columns
+
+        Returns
+        -------
+        dict
+            ``{'exit_code': int, 'message': str, 'data': dict}``.
+            Exit codes:
+                ``-1`` error,
+                ``0`` process is already completed (or has a single or no timpeoints available)
+
         """
 
         sss_kwargs = self.template_long_ent.copy()
-        sss_kwargs["subject"] = "subject"
+        sss_kwargs["subject"] = subject
         sss_kwargs["suffix"] = "empty"
         sss_kwargs["datatype"] = "utils"
 
@@ -792,7 +856,7 @@ class USLRLinear(LongitudinalProcessor):
             )
 
         sss_proxy = nib.load(sss_filepath)
-        template_mask = np.zeros(self.net_shape + (len(self.labels_lut),))
+        template_mask = np.zeros(self.net_shape)
         for sess_id, sess_files in sess_df.iterrows():
             extra_kwargs = {"subject": subject, "session": sess_id}
             aff_file = self._get_data(**{**extra_kwargs, **self.aff_long_ent})
@@ -819,6 +883,7 @@ class USLRLinear(LongitudinalProcessor):
             mask_proxy = nib.Nifti1Image(
                 mask_arr.astype("uint8"), np.linalg.inv(aff) @ seg_proxy.affine
             )
+
             template_mask += vol_resample_fast(
                 sss_proxy, mask_proxy, return_np=True
             ) / len(sess_df)
@@ -827,6 +892,8 @@ class USLRLinear(LongitudinalProcessor):
         etiv_path = self.build_path(
             {"subject": subject, "suffix": "T1wetiv", "extension": "npy"}
         )
+
+        os.makedirs(dirname(join(DIR_PIPELINES[self.pipeline_dir], etiv_path)), exist_ok=True)
         np.save(join(DIR_PIPELINES[self.pipeline_dir], etiv_path), etiv)
 
         return ProcessResult(exit_code=0, message="succeed")
@@ -853,6 +920,14 @@ class USLRLinear(LongitudinalProcessor):
             is ``False``.
         **kwargs
             Forwarded to :meth:`_solve_graph`.
+
+        Returns
+        -------
+        dict
+            ``{'exit_code': int, 'message': str, 'data': dict}``.
+            Exit codes:
+                ``-1`` error,
+                ``0`` process is already completed (or has a single or no timpeoints available)
         """
         exit_dict = ProcessResult(exit_code=0, message="success")
         def_dir = join(self.tmp_dir, "sub-" + subject)
@@ -870,17 +945,13 @@ class USLRLinear(LongitudinalProcessor):
         checkpoint = self._check_running_subject(subject, session_list, force_flag)
 
         if kwargs.get("verbose", False):
-            print("* Subject: " + subject)
-        if (
-            checkpoint["exit_code"] == -1
-            or checkpoint["exit_code"] == 1
-            or checkpoint["exit_code"] == 5
-        ):
+            print("\nSubject: " + subject)
+        if checkpoint["exit_code"] in [-1, 0]:
             if kwargs.get("verbose", False):
                 print(checkpoint["message"])
             return checkpoint
 
-        if checkpoint["exit_code"] in [0]:
+        if checkpoint["exit_code"] in [1]:
             # initialize graph
             t_cog_d = self._init_graph(sess_df, def_dir, force_flag)
             self._update_subject_layout(subject)
@@ -1015,11 +1086,9 @@ class USLRLinear(LongitudinalProcessor):
         n_epochs: int,
         cost: Literal["l1", "l2"],
         lr: float,
-        dir_results: str,
         max_iter: int = 5,
         patience: int = 3,
         device: str = "cpu",
-        verbose: bool = True,
     ):
         """Fit the rigid USLR model via L-BFGS optimisation.
 
@@ -1038,8 +1107,6 @@ class USLRLinear(LongitudinalProcessor):
             Pairwise fitting loss.
         lr : float
             L-BFGS learning rate.
-        dir_results : str
-            Directory for :class:`~nicgiprep.callbacks.ModelCheckpoint`.
         max_iter : int, optional
             ``max_iter`` passed to L-BFGS. Default is 5.
         patience : int, optional
@@ -1047,9 +1114,6 @@ class USLRLinear(LongitudinalProcessor):
             is 3.
         device : str, optional
             PyTorch device string. Default is ``'cpu'``.
-        verbose : bool, optional
-            If ``True``, attach :class:`~nicgiprep.callbacks.PrinterCallback`.
-            Default is ``True``.
 
         Returns
         -------
@@ -1431,7 +1495,7 @@ class USLRDeformable(LongitudinalProcessor):
             "space": "subject",
             "task": "linfit",
             "scope": self.pipeline_dir,
-            "extension": "nii.gz",
+            "extension": ".nii.gz",
         }
 
     def _check_running_subject(
@@ -1459,13 +1523,13 @@ class USLRDeformable(LongitudinalProcessor):
         # do not run if only 1 timepoint available
         if len(session_list) == 1:
             return ProcessResult(
-                exit_code=5, message="[done] It has only 1 timepoint. Linking files. \n"
+                exit_code=0, message="[done] It has only 1 timepoint. Linking files. \n"
             )
 
         # do not run if only 0 timepoint available
         elif len(session_list) == 0:
             return ProcessResult(
-                exit_code=1, message="[done] It has 0 sessions available. Skipping.\n"
+                exit_code=0, message="[done] It has 0 sessions available. Skipping.\n"
             )
 
         # check if all timepoints are linearly registered
@@ -1512,19 +1576,19 @@ class USLRDeformable(LongitudinalProcessor):
             ):
                 return ProcessResult(
                     exit_code=3,
-                    message="[partly done] graph, template done. "
-                    "Computing mean trajectories.\n",
+                    message="[partly done] the graph is solved and the template is computed. "
+                    "Missing mean trajectories.\n",
                 )
 
             else:
                 return ProcessResult(
-                    exit_code=2,
+                    exit_code=0,
                     message="[done] subject already processed. Check the results in "
                     "[..]/" + self.pipeline_dir + "/sub-" + subject + ".\n",
                 )
 
         else:
-            return ProcessResult(exit_code=0, message="Subject needs to be processed")
+            return ProcessResult(exit_code=1, message="Subject needs to be processed")
 
     def _init_graph(
         self,
@@ -1548,7 +1612,7 @@ class USLRDeformable(LongitudinalProcessor):
             ``False``.
         """
         svf_v2r = np.load(
-            self._get_data(**{"subject": subject, **self.svf_v2r_ent})[0].path
+            self._get_data(**{"subject": subject, **self.svf_v2r_ent}).path
         )
         for sess_ref, sess_flo in itertools.permutations(session_list, 2):
             output_filepath = join(
@@ -1568,7 +1632,7 @@ class USLRDeformable(LongitudinalProcessor):
             if imref_file is None or imflo_file is None:
                 continue
 
-            fw_svf = synthmorph_register(imref_file[0], imflo_file[0])
+            fw_svf = synthmorph_register(imref_file, imflo_file)
             if fw_svf is None:
                 return ProcessResult(
                     exit_code=-1, message="[error] deformable registration has failed."
@@ -1633,7 +1697,7 @@ class USLRDeformable(LongitudinalProcessor):
             Table with session_id as index and orig_t1w and orig_seg as columns
         """
         sss_kwargs = self.template_long_ent.copy()
-        sss_kwargs["subject"] = "subject"
+        sss_kwargs["subject"] = subject
         sss_kwargs["suffix"] = "empty"
         sss_kwargs["datatype"] = "utils"
         sss_file = self._get_data(**{"subject": subject, **sss_kwargs})
@@ -1643,7 +1707,6 @@ class USLRDeformable(LongitudinalProcessor):
                 exit_code=-1,
                 message="[error] Subject-space has not been created. Please check.\n",
             )
-
         sss_proxy = nib.load(sss_file.path)
 
         # build path template: image, mask, seg
@@ -1677,11 +1740,11 @@ class USLRDeformable(LongitudinalProcessor):
                     message="[error] Some intermediate steps have failed. Please check.\n",
                 )
 
-            im_proxy = nib.load(im_file.path)
-            seg_proxy = nib.load(seg_file.path)
-            synthseg_proxy = nib.load(synthseg_file.path)
-            aff_arr = np.load(aff_file.path)
-            svf_proxy = nib.load(svf_file.path)
+            im_proxy = nib.load(im_file)
+            seg_proxy = nib.load(seg_file)
+            synthseg_proxy = nib.load(synthseg_file)
+            aff_arr = np.load(aff_file)
+            svf_proxy = nib.load(svf_file)
             flow_arr = integrate_svf(
                 np.array(svf_proxy.dataobj),
                 self.net_shape,
@@ -1743,7 +1806,7 @@ class USLRDeformable(LongitudinalProcessor):
         seg_template_arr = self._undo_one_hot(seg_template_arr)
 
         synthseg_template_arr = np.zeros(
-            im_template_arr.shape + (len(self.labels_lut),)
+            im_template_arr.shape + (len(self.synthseg_lut),)
         )
         for seg_proxy in synthseg_list:
             synthseg_template_arr += np.array(seg_proxy.dataobj)
@@ -1877,7 +1940,17 @@ class USLRDeformable(LongitudinalProcessor):
             If ``True``, rerun all steps. Default is ``False``.
         **kwargs
             Forwarded to :meth:`_solve_graph`.
+
+        Returns
+        -------
+        dict
+            ``{'exit_code': int, 'message': str, 'data': dict}``.
+            Exit codes:
+                ``-1`` error,
+                ``0`` process is already completed (or has a single or no timpeoints available)
         """
+
+
         exit_dict = ProcessResult(exit_code=0, message="success")
         assert cost in ["bch-l1", "bch-l2"]
 
@@ -1887,27 +1960,21 @@ class USLRDeformable(LongitudinalProcessor):
                 print(sess_df["message"])
             return sess_df
 
-        session_list = sess_df["session_id"]
+        session_list = sess_df["session_id"].tolist()
         sess_df.set_index("session_id", drop=False, inplace=True)
 
         checkpoint = self._check_running_subject(subject, session_list, force_flag)
         if kwargs.get("verbose", False):
             print("* Subject: " + subject)
 
-        if checkpoint["exit_code"] == -1 or checkpoint["exit_code"] == 1:
-            if kwargs.get("verbose", False):
-                print(checkpoint["message"])
-            return checkpoint
-
-        if checkpoint["exit_code"] in [5]:
+        if checkpoint["exit_code"] == -1 or checkpoint["exit_code"] == 0:
             if kwargs.get("verbose", False):
                 print(checkpoint["message"])
             return checkpoint
 
         def_dir = join(self.tmp_dir, "sub-" + subject)
         create_dir(def_dir)
-
-        if checkpoint["exit_code"] in [0]:
+        if checkpoint["exit_code"] in [1]:
             # compute svf v2r
             svf_v2r_file = self._get_data(subject=subject, **self.svf_v2r_ent)
             if svf_v2r_file is None:
@@ -1935,12 +2002,12 @@ class USLRDeformable(LongitudinalProcessor):
 
             self._update_subject_layout(subject)
 
-        if checkpoint["exit_code"] in [0, 2]:
+        if checkpoint["exit_code"] in [1, 2]:
             # compute template
             self._compute_template(subject, sess_df)
             self._update_subject_layout(subject)
 
-        if checkpoint["exit_code"] in [0, 2, 3]:
+        if checkpoint["exit_code"] in [1, 2, 3]:
             # compute mean SVF
             self._compute_mean_trajectories(subject, session_list)
             self._update_subject_layout(subject)
@@ -2001,7 +2068,7 @@ class LongitudinalRegistration(LongitudinalProcessor):
         aff_fname = self.build_path(
             {
                 "suffix": "aff",
-                "extension": "npy",
+                "extension": ".npy",
                 "datatype": "utils",
                 "desc": "tosubject",
                 **mni_ent,
@@ -2032,14 +2099,18 @@ class LongitudinalRegistration(LongitudinalProcessor):
         )
         np.save(join(DIR_PIPELINES[self.pipeline_dir], aff_fname), aff_MNI)
 
+
         mni_proxy = nib.load(MNI_TEMPLATE)
         for sess_id, sess_files in sess_df.iterrows():
             im_file = sess_files["orig_t1w"]
             extra_kwargs = {"subject": subject, "session": sess_id}
             aff_file = self._get_data(**{**extra_kwargs, **self.aff_long_ent})
             im_fname = self.build_path(
-                {"session": sess_id, "suffix": "T1w", "extension": "nii.gz", **mni_ent}
+                {"session": sess_id, "suffix": "T1w", "extension": ".nii.gz", 'scope': self.pipeline_dir, **mni_ent}
             )
+
+            if exists(join(DIR_PIPELINES[self.pipeline_dir], im_fname)):
+                continue
 
             if aff_file is None:
                 return ProcessResult(
@@ -2056,11 +2127,10 @@ class LongitudinalRegistration(LongitudinalProcessor):
                     "step for" + str(extra_kwargs) + ".\n",
                 )
 
-            im_proxy = nib.load(im_file.path)
+            im_proxy = nib.load(im_file)
             voxsize = np.sqrt(np.sum(im_proxy.affine * im_proxy.affine, axis=0))[:-1]
-            voxsize_new = np.sqrt(np.sum(mni_proxy.affine * mni_proxy.affine, axis=0))[
-                :-1
-            ]
+            voxsize_new = np.sqrt(np.sum(mni_proxy.affine * mni_proxy.affine, axis=0))[:-1]
+
             factor = voxsize / voxsize_new
             sigmas = 0.25 / factor
             sigmas[factor > 1] = 0  # don't blur if upsampling
@@ -2091,12 +2161,15 @@ class LongitudinalRegistration(LongitudinalProcessor):
             If ``True``, rerun all steps. Default is ``False``.
         **kwargs
         """
+
         # build sessions file with the filename used for each session (T1w)
         sess_df = self._get_sessions_file(subject)
         if not isinstance(sess_df, pd.DataFrame):
             if kwargs.get("verbose", False):
                 print(sess_df["message"])
             return sess_df
+
+        sess_df.set_index("session_id", inplace=True, drop=False)
 
         # call linear --> save etiv and T1w in subject space
         _ = self.linear_reg.process_subject(
@@ -2111,6 +2184,18 @@ class LongitudinalRegistration(LongitudinalProcessor):
         self._update_subject_layout(subject)
 
         # deform nonlinear template to MNI
-        self._register_to_MNI(subject, sess_df)
+        if (
+                self._get_data(
+                    **{"subject": subject, "space": "MNI", "suffix": "T1w", "extension": ".nii.gz",
+                       'scope': self.pipeline_dir},
+                    curr_len=len(sess_df),
+                    verbose=False
+                )
+                is None
+                or not force_flag
+        ):
 
+            self._register_to_MNI(subject, sess_df)
+
+        pdb.set_trace()
         return ProcessResult(exit_code=0, message="success")

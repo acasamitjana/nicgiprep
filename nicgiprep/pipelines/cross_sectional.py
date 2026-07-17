@@ -22,7 +22,7 @@ from setup import *
 from nicgiprep.pipelines.base import Processor
 from nicgiprep.utils.preprocessing_utils import *
 from nicgiprep.utils.fn_utils import one_hot_encoding, rescale_voxel_size
-from nicgiprep.utils.io_utils import save_volume, remove_duplicates_csv
+from nicgiprep.utils.io_utils import save_volume, remove_duplicates_csv, ProcessResult
 from nicgiprep.utils.def_utils import vol_resample_fast, register_to_MNI
 from nicgiprep.utils.label_utils import SYNTHSEG_LUT, CSF_LABELS, SYNTHSEG_GMM_ONTOLOGY, labels_registration
 
@@ -126,7 +126,7 @@ class SynthSegProcessor(CrossSectionalProcessor):
             subject=subject,
             session=sess,
             suffix="T1w",
-            extension=["nii", "nii.gz"],
+            extension=[".nii", ".nii.gz"],
             acquisition=["orig", None],
             scope="raw",
             ignore_check=True,
@@ -600,7 +600,7 @@ class BiasCorrectionProcessor(CrossSectionalProcessor):
 
         Returns
         -------
-        dict
+        ProcessResult
             ``{'exit_code': int, ...}`` — ``exit_code=0`` with ``'filepath'``
             on success; ``exit_code=-1`` with ``'message'`` on failure.
         """
@@ -746,7 +746,7 @@ class BiasCorrectionProcessor(CrossSectionalProcessor):
 
             # get entities
             seg_entities = self._get_entities(seg_file)
-            seg_entities["extension"] = "nii.gz"
+            seg_entities["extension"] = ".nii.gz"
             raw_entities = {
                 k: str(v) for k, v in seg_entities.items() if k != "acquisition"
             }
@@ -997,7 +997,7 @@ class MNIRegistrationProcessor(CrossSectionalProcessor):
 
             # get entities
             seg_entities = self._get_entities(seg_file)
-            seg_entities["extension"] = "nii.gz"
+            seg_entities["extension"] = ".nii.gz"
             raw_entities = {
                 k: str(v) for k, v in seg_entities.items() if k != "acquisition"
             }
