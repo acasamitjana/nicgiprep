@@ -71,5 +71,5 @@ SYNTHSEG_GMM_ONTOLOGY = {
 
 CSF_LABELS = [24]
 
-path = files("data.labels_classes_priors").joinpath("label_list_registration.npy")  #HACK: modified name from labels_registration to current
-labels_registration = np.load(path)
+labels_registration = files("data.labels_classes_priors").joinpath("label_list_registration.npy")  #HACK: modified name from labels_registration to current
+# labels_registration = np.load(path)
