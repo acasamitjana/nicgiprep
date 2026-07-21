@@ -2040,10 +2040,10 @@ class LongitudinalRegistration(LongitudinalProcessor):
         """
         super().__init__(bids_loader=bids_loader, subject_list=subject_list, **kwargs)
 
-        self.linear_reg = USLRLinear(
+        self.linear_reg = LinearLongitudinalRegistration(
             bids_loader=bids_loader, subject_list=subject_list, **kwargs
         )
-        self.nonlinear_reg = USLRDeformable(
+        self.nonlinear_reg = DeformableLongitudinalRegistration(
             bids_loader=bids_loader, subject_list=subject_list, **kwargs
         )
 
@@ -2167,7 +2167,7 @@ class LongitudinalRegistration(LongitudinalProcessor):
 
         print("\nSubject: " + subject, end='\n')
 
-        # build sessions file with the filename used for each session (T1w)
+        # step 1. build sessions file with the filename used for each session (T1w)
         sess_df = self._get_sessions_file(subject)
         if not isinstance(sess_df, pd.DataFrame):
             if kwargs.get("verbose", False):
@@ -2176,19 +2176,27 @@ class LongitudinalRegistration(LongitudinalProcessor):
 
         sess_df.set_index("session_id", inplace=True, drop=False)
 
-        # call linear --> save etiv and T1w in subject space
-        _ = self.linear_reg.process_subject(
+        # step 2. call linear --> save etiv and T1w in subject space
+        ret_code = self.linear_reg.process_subject(
             subject=subject, force_flag=force_flag, **kwargs
         )
         self._update_subject_layout(subject)
+        if ret_code['exit_code'] != 0:
+            if kwargs.get("verbose", False):
+                print(ret_code["message"])
+            return ret_code
 
-        # call nonlinear --> save nonlinear templates (T1w, T1wdseg) and SVF and JAC.
-        _ = self.nonlinear_reg.process_subject(
+        # step 3. call nonlinear --> save nonlinear templates (T1w, T1wdseg) and SVF and JAC.
+        ret_code = self.nonlinear_reg.process_subject(
             subject=subject, force_flag=force_flag, **kwargs
         )
         self._update_subject_layout(subject)
+        if ret_code['exit_code'] != 0:
+            if kwargs.get("verbose", False):
+                print(ret_code["message"])
+            return ret_code
 
-        # deform nonlinear template to MNI
+        # step 4. deform nonlinear template to MNI
         if (
                 self._get_data(
                     **{"subject": subject, "space": "MNI", "suffix": "T1w", "extension": ".nii.gz",
@@ -2200,6 +2208,9 @@ class LongitudinalRegistration(LongitudinalProcessor):
                 or not force_flag
         ):
 
-            self._register_to_MNI(subject, sess_df)
-
+            ret_code = self._register_to_MNI(subject, sess_df)
+            if ret_code['exit_code'] != 0:
+                if kwargs.get("verbose", False):
+                    print(ret_code["message"])
+                return ret_code
         return ProcessResult(exit_code=0, message="success")
