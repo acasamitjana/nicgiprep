@@ -25,7 +25,7 @@ import surfa as sf
 
 
 from setup import *
-from nicgiprep.pipelines.base import Processor
+from nicgiprep.pipelines.base import Processor, USLRLinear, USLRDeformable
 from nicgiprep.models import InstanceRigidModelLOG
 
 from nicgiprep.utils.label_utils import labels_registration
@@ -311,7 +311,7 @@ class LongitudinalProcessor(Processor):
 
         return im_file
 
-class USLRLinear(LongitudinalProcessor):
+class LinearLongitudinalRegistration(LongitudinalProcessor, USLRLinear):
     """Rigid longitudinal registration via the USLR spanning-tree algorithm.
 
     Estimates per-session rigid transforms to a latent (unknown) template by jointly minimising
@@ -403,175 +403,175 @@ class USLRLinear(LongitudinalProcessor):
         except Exception as e:
             return default_result
 
-    def _register_timepoints(
-        self,
-        ref_centroid: np.ndarray,
-        flo_centroid: np.ndarray,
-        affine_filepath: str,
-        ok_centr: Optional[np.ndarray] = None,
-        force_flag: bool = False,
-    ) -> None:
-        """Estimate and save a rigid transforms between for every combination of T1w sessions
-        from centroid correspondences via SVD.
-
-        Reference: https://www.cse.sc.edu/~songwang/CourseProj/proj2004/ross/ross.pdf
-
-        Parameters
-        ----------
-        ref_centroid : np.ndarray
-            Centroids for the N ROIs in RAS coordinates (mm) from the reference image each of shape ``(3, N)``.
-        flo_centroid : tuple of np.ndarray
-            Centroids for the N ROIs in RAS coordinates (mm) from the floating image each of shape ``(3, N)``.
-        affine_filepath : str
-            Path where the resulting 4×4 affine is saved as ``.npy``.
-        ok_centr : np.ndarray, optional
-            Binary flag array selecting reliable centroids (1 = use). If ``None``, all centroids are used.
-        force_flag : np.ndarray, optional, default to False
-            Binary flag to indicate whether to re-compute the registration if it already exists
-        """
-        #
-        if exists(affine_filepath) and not force_flag:
-            return
-
-        if ok_centr is not None:
-            ref_centroid = ref_centroid[:, ok_centr > 0]
-            flo_centroid = flo_centroid[:, ok_centr > 0]
-
-        trans_ref = np.mean(ref_centroid, axis=1, keepdims=True)
-        trans_flo = np.mean(flo_centroid, axis=1, keepdims=True)
-
-        ref_cent_tx = ref_centroid - trans_ref
-        flo_cent_tx = flo_centroid - trans_flo
-
-        cov = ref_cent_tx @ flo_cent_tx.T
-        u, s, vt = np.linalg.svd(cov)
-        D = np.eye(3)
-        if np.prod(np.diag(s)) < 0:
-            D[-1, -1] = -1
-
-        Q = vt.T @ D @ u.T
-
-        # Full transformation
-        Tr = np.eye(4)
-        Tr[:3, 3] = -trans_ref.squeeze()
-
-        Tf = np.eye(4)
-        Tf[:3, 3] = trans_flo.squeeze()
-
-        R = np.eye(4)
-        R[:3, :3] = Q
-
-        aff = Tf @ R @ Tr
-
-        np.save(affine_filepath, aff)
-
-    def _get_centroids(self, sess_df: pd.DataFrame):
-        """Compute RAS centroids (mm) for each ROI segmented on all the available sessions .
-        Each segmentation provides N_label ROIs.
-
-        Parameters
-        ----------
-        sess_df : pd.DataFrame
-            table with session_id as index and orig_t1w and orig_synthseg as columns
-
-        Returns
-        -------
-        centroid_dict : dict
-            ``{session_id: np.ndarray}`` of shape ``(3, N_labels)``.
-        ok : dict
-            ``{session_id: np.ndarray}`` binary flags per label.
-        """
-        centroid_dict = {}
-        ok = {}
-        for sess_id, sess_files in sess_df.iterrows():
-            seg_filepath = sess_files["orig_synthseg"]
-            centroid_dict[sess_id], ok[sess_id] = compute_centroids_ras(
-                seg_filepath, labels_registration
-            )
-
-        return centroid_dict, ok
-
-    def _compute_cog(self, sess_df: pd.DataFrame) -> dict:
-        """Compute and save a centring-to-COG transform for each session.
-
-        The centre-of-gravity (COG) is computed from the non-zero voxels of
-        each segmentation and saved as a 4×4 translation matrix in RAS mm.
-
-        Parameters
-        ----------
-        sess_df : pd.DataFrame
-            Table with session_id as index and orig_t1w and orig_synthseg as columns
-        """
-        T_cog_d = {}
-        for sess_id, sess_files in sess_df.iterrows():
-            seg_filepath = sess_files["orig_synthseg"]
-
-            seg_proxy = nib.load(seg_filepath)
-            data = np.array(seg_proxy.dataobj)
-            aux = np.where(data > 0)
-            i, j, k = np.median(aux[0]), np.median(aux[1]), np.median(aux[2])
-            ras_cog = seg_proxy.affine @ np.array([i, j, k, 1])
-            T_cog = np.eye(4)
-            T_cog[:3, -1] = -ras_cog[:3]
-            T_cog_d[sess_id] = T_cog
-
-        return T_cog_d
-
-    def _init_graph(
-        self, sess_df: pd.DataFrame, def_dir: str, force_flag: bool = False
-    ) -> dict:
-        """Compute pairwise rigid affines between all timepoints via centroid SVD and save it locally
-
-        Parameters
-        ----------
-        sess_df : pd.DataFrame
-            Table with session_id as index and orig_t1w and orig_synthseg as columns
-        def_dir : str
-            Directory where pairwise ``.npy`` affine files are written.
-        force_flag : bool
-            If ``True``, recompute even when files exist.
-
-
-        Return
-        ------
-        dict
-            Containing the center of gravity (COG) of each timepoint to be used later in the code.
-        """
-        # compute centroids
-        t_cog_d = self._compute_cog(sess_df)
-        if all([exists(join(def_dir, str(r) + "_to_" + str(f) + ".npy"))
-                for r, f in itertools.combinations(sess_df.index, 2)]) and not force_flag:
-
-            return t_cog_d
-
-        centroids_dict, ok_dict = self._get_centroids(sess_df)
-
-        for sess_id in sess_df.index:
-            t_cog = t_cog_d[sess_id]
-            centroids_dict[sess_id] = t_cog @ np.concatenate(
-                [
-                    centroids_dict[sess_id],
-                    np.ones((1, centroids_dict[sess_id].shape[1])),
-                ]
-            )
-            centroids_dict[sess_id] = centroids_dict[sess_id][:3]
-
-        # pairwise registration
-        for sess_ref, sess_flo in itertools.combinations(sess_df.index, 2):
-            output_filepath = join(
-                def_dir, str(sess_ref) + "_to_" + str(sess_flo) + ".npy"
-            )
-            ok_cent = (ok_dict[sess_ref] == 1) & (ok_dict[sess_flo] == 1)
-            self._register_timepoints(
-                centroids_dict[sess_ref],
-                centroids_dict[sess_flo],
-                output_filepath,
-                ok_centr=ok_cent,
-                force_flag=force_flag,
-            )
-
-        return t_cog_d
-
+    # def _register_timepoints(
+    #     self,
+    #     ref_centroid: np.ndarray,
+    #     flo_centroid: np.ndarray,
+    #     affine_filepath: str,
+    #     ok_centr: Optional[np.ndarray] = None,
+    #     force_flag: bool = False,
+    # ) -> None:
+    #     """Estimate and save a rigid transforms between for every combination of T1w sessions
+    #     from centroid correspondences via SVD.
+    #
+    #     Reference: https://www.cse.sc.edu/~songwang/CourseProj/proj2004/ross/ross.pdf
+    #
+    #     Parameters
+    #     ----------
+    #     ref_centroid : np.ndarray
+    #         Centroids for the N ROIs in RAS coordinates (mm) from the reference image each of shape ``(3, N)``.
+    #     flo_centroid : tuple of np.ndarray
+    #         Centroids for the N ROIs in RAS coordinates (mm) from the floating image each of shape ``(3, N)``.
+    #     affine_filepath : str
+    #         Path where the resulting 4×4 affine is saved as ``.npy``.
+    #     ok_centr : np.ndarray, optional
+    #         Binary flag array selecting reliable centroids (1 = use). If ``None``, all centroids are used.
+    #     force_flag : np.ndarray, optional, default to False
+    #         Binary flag to indicate whether to re-compute the registration if it already exists
+    #     """
+    #     #
+    #     if exists(affine_filepath) and not force_flag:
+    #         return
+    #
+    #     if ok_centr is not None:
+    #         ref_centroid = ref_centroid[:, ok_centr > 0]
+    #         flo_centroid = flo_centroid[:, ok_centr > 0]
+    #
+    #     trans_ref = np.mean(ref_centroid, axis=1, keepdims=True)
+    #     trans_flo = np.mean(flo_centroid, axis=1, keepdims=True)
+    #
+    #     ref_cent_tx = ref_centroid - trans_ref
+    #     flo_cent_tx = flo_centroid - trans_flo
+    #
+    #     cov = ref_cent_tx @ flo_cent_tx.T
+    #     u, s, vt = np.linalg.svd(cov)
+    #     D = np.eye(3)
+    #     if np.prod(np.diag(s)) < 0:
+    #         D[-1, -1] = -1
+    #
+    #     Q = vt.T @ D @ u.T
+    #
+    #     # Full transformation
+    #     Tr = np.eye(4)
+    #     Tr[:3, 3] = -trans_ref.squeeze()
+    #
+    #     Tf = np.eye(4)
+    #     Tf[:3, 3] = trans_flo.squeeze()
+    #
+    #     R = np.eye(4)
+    #     R[:3, :3] = Q
+    #
+    #     aff = Tf @ R @ Tr
+    #
+    #     np.save(affine_filepath, aff)
+    #
+    # def _get_centroids(self, sess_df: pd.DataFrame):
+    #     """Compute RAS centroids (mm) for each ROI segmented on all the available sessions .
+    #     Each segmentation provides N_label ROIs.
+    #
+    #     Parameters
+    #     ----------
+    #     sess_df : pd.DataFrame
+    #         table with session_id as index and orig_t1w and orig_synthseg as columns
+    #
+    #     Returns
+    #     -------
+    #     centroid_dict : dict
+    #         ``{session_id: np.ndarray}`` of shape ``(3, N_labels)``.
+    #     ok : dict
+    #         ``{session_id: np.ndarray}`` binary flags per label.
+    #     """
+    #     centroid_dict = {}
+    #     ok = {}
+    #     for sess_id, sess_files in sess_df.iterrows():
+    #         seg_filepath = sess_files["orig_synthseg"]
+    #         centroid_dict[sess_id], ok[sess_id] = compute_centroids_ras(
+    #             seg_filepath, labels_registration
+    #         )
+    #
+    #     return centroid_dict, ok
+    #
+    # def _compute_cog(self, sess_df: pd.DataFrame) -> dict:
+    #     """Compute and save a centring-to-COG transform for each session.
+    #
+    #     The centre-of-gravity (COG) is computed from the non-zero voxels of
+    #     each segmentation and saved as a 4×4 translation matrix in RAS mm.
+    #
+    #     Parameters
+    #     ----------
+    #     sess_df : pd.DataFrame
+    #         Table with session_id as index and orig_t1w and orig_synthseg as columns
+    #     """
+    #     T_cog_d = {}
+    #     for sess_id, sess_files in sess_df.iterrows():
+    #         seg_filepath = sess_files["orig_synthseg"]
+    #
+    #         seg_proxy = nib.load(seg_filepath)
+    #         data = np.array(seg_proxy.dataobj)
+    #         aux = np.where(data > 0)
+    #         i, j, k = np.median(aux[0]), np.median(aux[1]), np.median(aux[2])
+    #         ras_cog = seg_proxy.affine @ np.array([i, j, k, 1])
+    #         T_cog = np.eye(4)
+    #         T_cog[:3, -1] = -ras_cog[:3]
+    #         T_cog_d[sess_id] = T_cog
+    #
+    #     return T_cog_d
+    #
+    # def _init_graph(
+    #     self, sess_df: pd.DataFrame, def_dir: str, force_flag: bool = False
+    # ) -> dict:
+    #     """Compute pairwise rigid affines between all timepoints via centroid SVD and save it locally
+    #
+    #     Parameters
+    #     ----------
+    #     sess_df : pd.DataFrame
+    #         Table with session_id as index and orig_t1w and orig_synthseg as columns
+    #     def_dir : str
+    #         Directory where pairwise ``.npy`` affine files are written.
+    #     force_flag : bool
+    #         If ``True``, recompute even when files exist.
+    #
+    #
+    #     Return
+    #     ------
+    #     dict
+    #         Containing the center of gravity (COG) of each timepoint to be used later in the code.
+    #     """
+    #     # compute centroids
+    #     t_cog_d = self._compute_cog(sess_df)
+    #     if all([exists(join(def_dir, str(r) + "_to_" + str(f) + ".npy"))
+    #             for r, f in itertools.combinations(sess_df.index, 2)]) and not force_flag:
+    #
+    #         return t_cog_d
+    #
+    #     centroids_dict, ok_dict = self._get_centroids(sess_df)
+    #
+    #     for sess_id in sess_df.index:
+    #         t_cog = t_cog_d[sess_id]
+    #         centroids_dict[sess_id] = t_cog @ np.concatenate(
+    #             [
+    #                 centroids_dict[sess_id],
+    #                 np.ones((1, centroids_dict[sess_id].shape[1])),
+    #             ]
+    #         )
+    #         centroids_dict[sess_id] = centroids_dict[sess_id][:3]
+    #
+    #     # pairwise registration
+    #     for sess_ref, sess_flo in itertools.combinations(sess_df.index, 2):
+    #         output_filepath = join(
+    #             def_dir, str(sess_ref) + "_to_" + str(sess_flo) + ".npy"
+    #         )
+    #         ok_cent = (ok_dict[sess_ref] == 1) & (ok_dict[sess_flo] == 1)
+    #         self._register_timepoints(
+    #             centroids_dict[sess_ref],
+    #             centroids_dict[sess_flo],
+    #             output_filepath,
+    #             ok_centr=ok_cent,
+    #             force_flag=force_flag,
+    #         )
+    #
+    #     return t_cog_d
+    #
     def _solve_graph(
         self, subject: str, sess_df: pd.DataFrame, def_dir: str, t_cog_d: dict, **kwargs
     ) -> ProcessResult:
@@ -604,10 +604,7 @@ class USLRLinear(LongitudinalProcessor):
                 ``-1`` error,
                 ``0`` process is already completed (or has a single or no timpeoints available)
         """
-        log_r = USLRLinear.init_st2_lineal(sess_df.index, def_dir)
-        t_res = USLRLinear.st2_lineal_pytorch(
-            log_r, sess_df.index, verbose=False, **kwargs
-        )
+        t_res = super()._solve_graph(subject=subject, sess_df=sess_df, def_dir=def_dir, t_cog_d=t_cog_d, **kwargs)
 
         if np.sum(np.isnan(t_res)) > 0:
             return ProcessResult(
@@ -628,7 +625,10 @@ class USLRLinear(LongitudinalProcessor):
 
             np.save(output_filepath, np.linalg.inv(T_cog) @ affine_matrix)
 
-        return ProcessResult(exit_code=0, message="[success]\n")
+        return ProcessResult(
+            exit_code=2,
+            message="[partly done] graph is already computed;  etiv missing.\n",
+        )
 
     def _create_subject_space(
         self, subject: str, sess_df: pd.DataFrame
@@ -649,7 +649,7 @@ class USLRLinear(LongitudinalProcessor):
 
         Returns
         -------
-        dict
+        ProcessResult
             ``{'exit_code': int, 'message': str, 'data': dict}``.
             Exit codes:
                 ``-1`` error,
@@ -743,10 +743,7 @@ class USLRLinear(LongitudinalProcessor):
     def _resample_to_subject_space(
         self, subject: str, sess_df: pd.DataFrame
     ) -> ProcessResult:
-        """Estimate and save the total intra-cranial volume (eTIV) for a subject.
-
-        Averages binary brain masks across timepoints in the network space and
-        saves the resulting voxel count.
+        """Resample all timepoints to a common subject space
 
         Parameters
         ----------
@@ -757,7 +754,7 @@ class USLRLinear(LongitudinalProcessor):
 
         Returns
         -------
-        dict
+        ProcessResult
             ``{'exit_code': int, 'message': str, 'data': dict}``.
             Exit codes:
                 ``-1`` error,
@@ -963,24 +960,30 @@ class USLRLinear(LongitudinalProcessor):
                 "n_epochs": 30,
                 "cost": "l1",
                 "lr": 0.1,
-                "dir_results": tmp_dir,
                 "max_iter": 20,
             }
-            self._solve_graph(subject, sess_df, def_dir, t_cog_d, **graph_kwargs)
+
+            checkpoint = self._solve_graph(subject, sess_df, def_dir, t_cog_d, **graph_kwargs)
             self._update_subject_layout(subject)
 
-        if checkpoint["exit_code"] in [0, 2]:
+        if checkpoint["exit_code"] in [1, 2]:
             # create subject space
             pr = self._create_subject_space(subject, sess_df)
             if pr["exit_code"] != 0:
+                if kwargs.get("verbose", False):
+                    print(pr["message"])
                 return pr
 
             pr = self._resample_to_subject_space(subject, sess_df)
             if pr["exit_code"] != 0:
+                if kwargs.get("verbose", False):
+                    print(pr["message"])
                 return pr
 
             pr = self._compute_etiv(subject, sess_df)
             if pr["exit_code"] != 0:
+                if kwargs.get("verbose", False):
+                    print(pr["message"])
                 return pr
 
             self._update_subject_layout(subject)
@@ -1200,7 +1203,7 @@ class USLRLinear(LongitudinalProcessor):
         return T
 
 
-class USLRDeformable(LongitudinalProcessor):
+class DeformableLongitudinalRegistration(LongitudinalProcessor, USLRDeformable):
     """Nonlinear longitudinal registration via BCH-approximated USLR.
 
     Estimates per-timepoint SVFs by solving a spanning-tree problem over
