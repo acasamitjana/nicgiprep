@@ -88,11 +88,11 @@ def main():
 
     # ── Imports ───────────────────────────────────────────────────────────────
     import bids
-    from setup import BIDS_DIR, ROOT_DIR, DERIVATIVES_DIR, DIR_PIPELINES, BIDS_CONFIG
+    from setup import BIDS_DIR, ROOT_DIR, BIDS_CONFIG, DIR_PIPELINES
 
     from nicgiprep.pipelines import (
-        MRISegmentationProcessor,
-        BiasCorrectionProcessor,
+        T1wSegmentationProcessor,
+        T1wBiasCorrectionProcessor,
         MNIRegistrationProcessor,
     )
 
@@ -114,7 +114,7 @@ def main():
 
     bids_loader.add_derivatives(DIR_PIPELINES["nicgiprep-cross"], **{'config': bids_config})
 
-    processing_seg = MRISegmentationProcessor(bids_loader=bids_loader, subject_list=args.subjects)
+    processing_seg = T1wSegmentationProcessor(bids_loader=bids_loader, subject_list=args.subjects)
 
     print("Total subjects found: N=" + str(len(processing_seg.subject_list)), end="\n\n")
 
@@ -136,7 +136,7 @@ def main():
 
     # ── Step 2: bias-field correction for T1w modality ────────────────────────
     print("\n=== Step 2: bias-field correction for T1w modality ===")
-    processing_bias = BiasCorrectionProcessor(
+    processing_bias = T1wBiasCorrectionProcessor(
         bids_loader=bids_loader, subject_list=args.subjects
     )
 

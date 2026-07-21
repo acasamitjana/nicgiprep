@@ -83,9 +83,9 @@ def main():
 
     # ── Imports ───────────────────────────────────────────────────────────────
     import bids
-    from setup import BIDS_DIR, ROOT_DIR, DERIVATIVES_DIR, DIR_PIPELINES
+    from setup import BIDS_DIR, ROOT_DIR, BIDS_CONFIG, DIR_PIPELINES
     from nicgiprep.pipelines import (
-        MultiModalSynthSegProcessor,
+        MultiModalSegmentationProcessor,
         MultiModalBiasCorrectionProcessor,
         MultiMRIProcessor,
     )
@@ -95,19 +95,23 @@ def main():
 
 
     # ── BIDS layout ───────────────────────────────────────────────────────────────
-    print("LOADING Dataset ...", end=" ", flush=True)
+    bids_config = [str(BIDS_CONFIG), "derivatives"]
+
+    print("\n\nLOADING Dataset ...", end=" ", flush=True)
     db_file = join(ROOT_DIR, "BIDS-raw.db")
     if not exists(db_file):
-        bids_loader = bids.layout.BIDSLayout(root=BIDS_DIR, validate=False)
+        bids_loader = bids.layout.BIDSLayout(root=BIDS_DIR, validate=False, config=bids_config)
         bids_loader.save(db_file)
     else:
-        bids_loader = bids.layout.BIDSLayout(root=BIDS_DIR, validate=False, database_path=db_file)
+        bids_loader = bids.layout.BIDSLayout(
+            root=BIDS_DIR, validate=False, database_path=db_file, config=bids_config
+        )
 
     # Register all derivative directories needed by the multimodal pipeline.
-    for key in ("nicgiprep-cross", "nicgiprep-mm"):
-        bids_loader.add_derivatives(DIR_PIPELINES[key])
+    bids_loader.add_derivatives(DIR_PIPELINES["nicgiprep-cross"], **{'config': bids_config})
+    bids_loader.add_derivatives(DIR_PIPELINES["nicgiprep-mm"], **{'config': bids_config})
 
-    subject_list = bids_loader.subject_list if args.subjects is None else args.subjects
+    subject_list = bids_loader.get_subjects() if args.subjects is None else args.subjects
     print("Total subjects found: N=" + str(len(subject_list)), end="\n\n")
 
 
@@ -121,16 +125,14 @@ def main():
     proces_seg_kwargs["verbose"] = args.verbose
 
     # ── Step 1a: SynthSeg for non-T1w modalities (T1w done by cross-sectional pipeline) ──
-    print("\n=== Step 1a: SynthSeg for non-T1w modalities ===")
-    processing_seg = MultiModalSynthSegProcessor(
-        bids_loader=bids_loader, subject_list=args.subjects
-    )
+    print("\n=== Step 1a: SuperSynth for non-T1w modalities ===")
+    processing_seg = MultiModalSegmentationProcessor(bids_loader=bids_loader, subject_list=args.subjects)
     processing_seg.process(prefix="mm", **proces_seg_kwargs)
 
     # ── Step 1b: bias-field correction for all modalities ────────────────────────
     print("\n=== Step 1b: Bias field correction ===")
     processing_bias = MultiModalBiasCorrectionProcessor(
-        bids_loader=processing_seg.bids_loader, subject_list=args.subjects
+        bids_loader=bids_loader, subject_list=args.subjects
     )
     processing_bias.process(**process_kwargs)
 
@@ -138,7 +140,7 @@ def main():
     # ── Steps 2 & 3: joint registration → session space → MNI ────────────────────
     print("\n=== Steps 2 & 3: Joint multimodal registration + MNI ===")
     processing_mm = MultiMRIProcessor(
-        bids_loader=processing_bias.bids_loader, subject_list=args.subjects
+        bids_loader=bids_loader, subject_list=args.subjects
     )
 
     processing_mm.process(**process_kwargs)
@@ -150,3 +152,5 @@ def main():
     #     processing_mm._update_full_layout()
 
 
+if __name__ == "__main__":
+    main()
