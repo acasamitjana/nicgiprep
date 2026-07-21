@@ -43,9 +43,72 @@ class CrossSectionalProcessor(Processor):
         """
 
         super()._build_processor(**kwargs)
+        self.pipeline_dir = 'nicgiprep-cross'
+
+    def _select_images(self,
+                       subject: str,
+                       sess: str,
+                       num: Optional[int] = None,
+                       **kwargs) -> Optional[BIDSFile | List[BIDSFile]]:
+        """Select (all or "num") MRI raw images for a given subject and session.
+
+        Parameters
+        ----------
+        subject : str
+            Subject ID.
+        sess : str
+            Session ID.
+        num : int, optional
+            Number of retrieved images. If None, all images are returned, otherwise, we randomly select min(image, num)
+        kwargs: dict
+            Specify ``modality`` (e.g. ``'T2w'``), ``scope`` (e.g. ``'raw'``) or ``acquisition`` (e.g. ``None``).
+
+        Returns
+        -------
+        BIDSFile or None
+            The selected T1w file, or ``None`` if none is found.
+        """
+
+        modality = kwargs.get('modality', 'T1w')
+        scope = kwargs.get('scope', 'raw')
+        acquisition = kwargs.get('acquisition', ["orig", None])
+
+        # Select a single T1w image per session
+        im_list = self._get_data(
+            subject=subject,
+            session=sess,
+            suffix=modality,
+            extension=[".nii", ".nii.gz"],
+            acquisition=acquisition,
+            scope=scope,
+            ignore_check=True,
+        )
+
+        if num is None:
+            return im_list
+
+        if len(im_list) == 0:
+            return None
+
+        elif len(im_list) > 1:
+            if any(["acquisition" not in f.entities.keys() for f in im_list]):
+                im_list_r = list(
+                    filter(lambda x: "acquisition" not in x.entities.keys(), im_list)
+                )
+            elif any(["run" in f.entities.keys() for f in im_list]):
+                im_list_r = list(filter(lambda x: x.entities["run"] == "01", im_list))
+            else:
+                im_list_r = im_list
+            im_file = im_list_r[0]
+
+        else:
+            im_file = im_list[0]
+
+        return im_file
 
 
-class MRISegmentationProcessor(CrossSectionalProcessor):
+
+class T1wSegmentationProcessor(CrossSectionalProcessor):
     """Run SuperSynth and SynthSeg parcellation on all T1w images in a BIDS dataset.
 
     Collects input/output paths across subjects and sessions, invokes
@@ -106,56 +169,6 @@ class MRISegmentationProcessor(CrossSectionalProcessor):
                 "exit_message": "File excluded due to an error reading the file or computing image shape and resolution.",
             }
 
-    def _select_images(self, subject: str, sess: str, num: Optional[int] = None,) -> Optional[BIDSFile|List[BIDSFile]]:
-        """Select a single T1w image for a given subject and session.
-
-        Parameters
-        ----------
-        subject : str
-            Subject ID.
-        sess : str
-            Session ID.
-        num : int, optional
-            Number of retrieved images. If None, all images are returned, otherwise, we randomly select min(image, num)
-
-        Returns
-        -------
-        BIDSFile or None
-            The selected T1w file, or ``None`` if none is found.
-        """
-        # Select a single T1w image per session
-        t1w_list = self._get_data(
-            subject=subject,
-            session=sess,
-            suffix="T1w",
-            extension=[".nii", ".nii.gz"],
-            acquisition=["orig", None],
-            scope="raw",
-            ignore_check=True,
-        )
-
-        if num is None:
-            return t1w_list
-
-        if len(t1w_list) == 0:
-            return None
-
-        elif len(t1w_list) > 1:
-            if any(["acquisition" not in f.entities.keys() for f in t1w_list]):
-                t1w_list_r = list(
-                    filter(lambda x: "acquisition" not in x.entities.keys(), t1w_list)
-                )
-            elif any(["run" in f.entities.keys() for f in t1w_list]):
-                t1w_list_r = list(filter(lambda x: x.entities["run"] == "01", t1w_list))
-            else:
-                t1w_list_r = t1w_list
-            t1w_i = t1w_list_r[0]
-
-        else:
-            t1w_i = t1w_list[0]
-
-        return t1w_i
-
     def process_parallel(self, num_cores, **kwargs):  # TODO: Fix this or remove it
         """Sequential fallback — SynthSeg cannot be parallelised.
 
@@ -192,7 +205,8 @@ class MRISegmentationProcessor(CrossSectionalProcessor):
         if exists(csv_file):
             os.remove(csv_file)
 
-        input_files, res_files, synthseg_files, supersynth_files = (
+        input_files, res_files, synthseg_files, images_found, supersynth_files = (
+            [],
             [],
             [],
             [],
@@ -210,6 +224,7 @@ class MRISegmentationProcessor(CrossSectionalProcessor):
             supersynth_files['mode'].extend(output[3]['mode'])
             supersynth_files['tmp_dir'].extend(output[3]['tmp_dir'])
             supersynth_files['run'].extend(output[3]['run'])
+            images_found.extend(output[4])
 
         with open(join(TMP_DIR, prefix + "_input_files.txt"), "w") as f:
             for i_f in input_files:
@@ -268,6 +283,7 @@ class MRISegmentationProcessor(CrossSectionalProcessor):
             )
 
             ## Checking if some cases were skipped due to CUDA OOM
+            pdb.set_trace() # last time it was halted here. CHECK!
             run_df = pd.DataFrame()
             for _, row in supersynth_df.iterrows():
                 if row['run'] and not exists(join(row['tmp_dir'], "segmentation.mgz")):
@@ -279,7 +295,7 @@ class MRISegmentationProcessor(CrossSectionalProcessor):
                 run_df.to_csv(join(TMP_DIR, prefix + "_supersynth_files.csv"), header=False, index=False, mode='w')
                 subprocess.call(
                     [
-                        "mri_super_synth",  # ERROR: temporary fix using full path to supersynth
+                        "mri_super_synth",
                         "--i",
                         join(TMP_DIR, prefix + "_supersynth_files.csv"),
                         "--threads",
@@ -297,7 +313,7 @@ class MRISegmentationProcessor(CrossSectionalProcessor):
             input_file, tmp_dir =  row['input_file'], row['tmp_dir']
 
             proc_sess_dir = join(
-                DIR_PIPELINES["nicgiprep-cross"],
+                DIR_PIPELINES[self.pipeline_dir],
                 "sub-" + str(subject_id),
             )
 
@@ -323,15 +339,14 @@ class MRISegmentationProcessor(CrossSectionalProcessor):
             csv_file = join(tmp_dir, "volumes.csv")
             qc_file = join(tmp_dir, "qc.csv")
 
-
             if not exists(seg_file) or not exists(csv_file) or not exists(qc_file):
                 #supersynth failed for whatever reason and continue
                 supersynth_failed.append(input_file)
                 continue
 
             # save original SuperSynth in the utils
-            if not exists(join(DIR_PIPELINES["nicgiprep-cross"], seg_1x1x1_fname)):
-                subprocess.call(['cp', seg_file, join(DIR_PIPELINES["nicgiprep-cross"], seg_1x1x1_fname)])
+            if not exists(join(DIR_PIPELINES[self.pipeline_dir], seg_1x1x1_fname)):
+                subprocess.call(['cp', seg_file, join(DIR_PIPELINES[self.pipeline_dir], seg_1x1x1_fname)])
 
             # copy the volumes and qc data
             vols_df = pd.read_csv(csv_file, dtype=str)
@@ -370,10 +385,10 @@ class MRISegmentationProcessor(CrossSectionalProcessor):
                 seg_res_arr[seg_argmax_res_arr == it_ul] = ul
 
             # save anat and utils files
-            save_volume(seg_res_arr, aff=onehot_proxy.affine, path=join(DIR_PIPELINES['nicgiprep-cross'], seg_fname))
+            save_volume(seg_res_arr, aff=onehot_proxy.affine, path=join(DIR_PIPELINES[self.pipeline_dir], seg_fname))
 
             # remove supersynth directory
-            # subprocess.call(['rm', '-rf', tmp_dir])
+            subprocess.call(['rm', '-rf', tmp_dir])
 
         self._update_full_layout()
 
@@ -381,6 +396,7 @@ class MRISegmentationProcessor(CrossSectionalProcessor):
         print("=" * 40)
         print("-" * 15 + "  SUMMARY  " + "-" * 14)
         print("=" * 40)
+        print(f"Total Number of images found: {len(images_found)}")
         print(f"Total Number of images processed: {len(supersynth_df)}")
         print(f"SUCCESS:                  {len(supersynth_df) - len(supersynth_failed)}/{len(supersynth_df)}")
         print(f"FAILED:                   {len(supersynth_failed)}/{len(supersynth_df)}")
@@ -394,7 +410,7 @@ class MRISegmentationProcessor(CrossSectionalProcessor):
         session_list: Optional[List[str]] = None,
         check_seg: Optional[str] = None,
         **kwargs,
-    ) -> Tuple[List, List, List, Dict]:
+    ) -> Tuple[List, List, List, Dict, List[BIDSFile]]:
         """Collect SynthSeg I/O paths for all sessions of one subject.
 
         Parameters
@@ -419,7 +435,8 @@ class MRISegmentationProcessor(CrossSectionalProcessor):
             ``(input_files, res_files, output_files, vol_files,
             )`` — one entry per session queued.
         """
-        input_files, res_files, output_files, supersynth_files = (
+        input_files, res_files, output_files, found_files, supersynth_files = (
+            [],
             [],
             [],
             [],
@@ -431,12 +448,14 @@ class MRISegmentationProcessor(CrossSectionalProcessor):
             sessions = [s for s in sessions if s in session_list]
 
         for sess_id in sessions:
-            t1w_files = self._select_images(subject, sess_id)
+            t1w_files = self._select_images(subject, sess_id, modality='T1w')
             if t1w_files is None:
                 continue
 
             if isinstance(t1w_files, BIDSFile):
                 t1w_files = [t1w_files]
+
+            found_files.extend(t1w_files)
 
             tmp_dir = join(
                 TMP_DIR,
@@ -445,14 +464,14 @@ class MRISegmentationProcessor(CrossSectionalProcessor):
                 "ses-" + sess_id)
 
             proc_anat_dir = join(
-                DIR_PIPELINES["nicgiprep-cross"],
+                DIR_PIPELINES[self.pipeline_dir],
                 "sub-" + str(subject),
                 "ses-" + str(sess_id),
                 "anat",
             )
 
             proc_utils_dir = join(
-                DIR_PIPELINES["nicgiprep-cross"],
+                DIR_PIPELINES[self.pipeline_dir],
                 "sub-" + subject,
                 "ses-" + sess_id,
                 "utils",
@@ -500,7 +519,7 @@ class MRISegmentationProcessor(CrossSectionalProcessor):
 
                 seg_fname = t1w_file.filename.replace(".nii.gz", "dseg.nii.gz")
 
-                if not exists(join(proc_anat_dir, seg_fname)):
+                if not exists(join(proc_anat_dir, seg_fname)) or force_flag:
                     os.makedirs(tmp_dir, exist_ok=True)
                     supersynth_files['subject'] += [subject]
                     supersynth_files['session'] += [sess_id]
@@ -513,10 +532,10 @@ class MRISegmentationProcessor(CrossSectionalProcessor):
                     else:
                         supersynth_files['run'] += [False]
 
-        return input_files, res_files, output_files, supersynth_files
+        return input_files, res_files, output_files, supersynth_files, found_files
 
 
-class BiasCorrectionProcessor(CrossSectionalProcessor):
+class T1wBiasCorrectionProcessor(CrossSectionalProcessor):
     """Bias-field correction and brain-mask generation for cross-sectional data.
 
     For each session, computes a brain mask from the SynthSeg parcellation,
@@ -548,7 +567,7 @@ class BiasCorrectionProcessor(CrossSectionalProcessor):
 
         if not resampled_file:
             resampled_filepath = join(
-                DIR_PIPELINES["nicgiprep-cross"], self.build_path(resampled_entities)
+                DIR_PIPELINES[self.pipeline_dir], self.build_path(resampled_entities)
             )
             proxyraw = nib.load(raw_file.path)
             pixdim = np.sqrt(np.sum(proxyraw.affine * proxyraw.affine, axis=0))[:-1]
@@ -642,13 +661,17 @@ class BiasCorrectionProcessor(CrossSectionalProcessor):
 
         return out_seg
 
-    def process_image(self, seg_file: BIDSFile, force_flag: bool=False):
+    def process_image(self, im_file: BIDSFile, seg_file: BIDSFile, output_filepath: str, force_flag: bool=False):
         """Run bias-field correction for a given image.
 
         Parameters
         ----------
-        seg_file : BIDSFile
+        im_file : BIDSFile
             File to process. It should be a BIDSFile so that we can get the entities to build the outputs.
+        seg_file : BIDSFile
+            Segmentation file associated.
+        output_filepath : str
+            Filepath to the bias corrected image
         force_flag : bool, optional
             If ``True``, reprocess sessions even when outputs already exist.
             Default is ``False``.
@@ -665,7 +688,7 @@ class BiasCorrectionProcessor(CrossSectionalProcessor):
         sess_id = seg_file.entities['session']
 
         preproc_dirname = join(
-            DIR_PIPELINES["nicgiprep-cross"],
+            DIR_PIPELINES[self.pipeline_dir],
             "sub-" + subject,
             "ses-" + sess_id,
             "utils",
@@ -676,28 +699,19 @@ class BiasCorrectionProcessor(CrossSectionalProcessor):
         seg_entities["extension"] = ".nii.gz"
 
         # build T1w rawdata entities
-        raw_entities = copy.deepcopy(seg_entities)
-        raw_entities["suffix"] = "T1w"
-        raw_entities["scope"] = "raw"
-        raw_entities["acquisition"] = [None, "orig"]
-        raw_entities.pop("datatype", None)
-        if 'run' not in raw_entities: raw_entities['run'] = None
+        raw_entities = self._get_entities(im_file)
+
 
         # build T1w corrected and resampled entities
         resampled_entities = copy.copy(raw_entities)
         resampled_entities["acquisition"] = "1"
-        resampled_entities["scope"] = "nicgiprep-cross"
+        resampled_entities["scope"] = self.pipeline_dir
         resampled_entities["datatype"] = "utils"
 
-        # raw image
-        raw_file = self._get_data(**raw_entities)
-        if raw_file is None:
-            return
-
-        # build output paths
-        output_filepath = join(
-            preproc_dirname.replace("utils", "anat"), basename(raw_file)
-        )  ## Saving the final result in /anat
+        # # build output paths
+        # output_filepath = join(
+        #     preproc_dirname.replace("utils", "anat"), basename(im_file)
+        # )  ## Saving the final result in /anat
         output_mask_filepath = join(
             preproc_dirname, seg_file.filename.replace("synthseg", "mask")
         )
@@ -712,8 +726,9 @@ class BiasCorrectionProcessor(CrossSectionalProcessor):
                 "message": "image already processed.",
             }
 
+        pdb.set_trace()
         # read images
-        proxyraw = nib.load(raw_file.path)
+        proxyraw = nib.load(im_file.path)
         proxyseg = nib.load(seg_file.path)
 
         # ------------------------ #
@@ -734,7 +749,7 @@ class BiasCorrectionProcessor(CrossSectionalProcessor):
                 path=output_mask_filepath,
             )
 
-        resampled_flag = self._check_resampled_file(raw_file, resampled_entities)
+        resampled_flag = self._check_resampled_file(im_file, resampled_entities)
         if resampled_flag["exit_code"] == -1:
             return resampled_flag
 
@@ -884,7 +899,7 @@ class BiasCorrectionProcessor(CrossSectionalProcessor):
         for sess_id in tqdm.tqdm(sessions, leave=False):
             # input segs
             synthseg_entities = copy.copy(self.seg_entities)
-            synthseg_entities["scope"] = ["nicgiprep-cross"]
+            synthseg_entities["scope"] = [self.pipeline_dir]
             synthseg_entities["suffix"] = ["T1wsynthseg", "synthseg"]
             synthseg_entities["datatype"] = ["utils"]
             seg_files = self._get_data(
@@ -893,8 +908,37 @@ class BiasCorrectionProcessor(CrossSectionalProcessor):
             if seg_files is None:
                 continue
 
+            cross_anat = join(
+                DIR_PIPELINES[self.pipeline_dir],
+                "sub-" + subject,
+                "ses-" + sess_id,
+                "anat",
+            )
+
             for seg_file in seg_files:
-                ret_code = self.process_image(seg_file=seg_file, force_flag=force_flag)
+                raw_entities = self._get_entities(seg_file)
+                raw_entities["extension"] = ".nii.gz"
+                raw_entities["suffix"] = "T1w"
+                raw_entities["scope"] = "raw"
+                raw_entities["acquisition"] = [None, "orig"]
+                raw_entities.pop("datatype", None)
+                if 'run' not in raw_entities: raw_entities['run'] = None
+
+                raw_file = self._get_data(**raw_entities)
+                if raw_file is None:
+                    continue
+
+                ret_code = {'exit_code': -1}
+                if isinstance(raw_file, BIDSFile):
+                    output_filepath = join(
+                        cross_anat, raw_file.filename
+                    )
+
+                    ret_code = self.process_image(im_file=raw_file,
+                                                  seg_file=seg_file,
+                                                  output_filepath=output_filepath,
+                                                  force_flag=force_flag)
+
                 if ret_code['exit_code'] == 0:
                     exit_dict['images_processed'] += [seg_file.path]
                 else:
@@ -948,18 +992,9 @@ class MNIRegistrationProcessor(CrossSectionalProcessor):
         exit_dict = {"images_processed": [], "images_failed": [], "exit_code": 0, "message": ""}
         for sess_id in tqdm.tqdm(sessions, leave=False):
 
-            # preproc_dirname = join(
-            #     DIR_PIPELINES["nicgiprep-cross"],
-            #     "sub-" + subject,
-            #     "ses-" + sess_id,
-            #     "anat",
-            # )
-            # if not exists(preproc_dirname):
-            #     os.makedirs(preproc_dirname)
-
             # input segs
             synthseg_entities = copy.copy(self.seg_entities)
-            synthseg_entities["scope"] = ["nicgiprep-cross"]
+            synthseg_entities["scope"] = [self.pipeline_dir]
             synthseg_entities["datatype"] = ["utils"]
             synthseg_entities["suffix"] = ["T1wsynthseg", "synthseg"]
             seg_files = self._get_data(
@@ -977,7 +1012,7 @@ class MNIRegistrationProcessor(CrossSectionalProcessor):
                 raw_entities["suffix"] = "T1w"
                 raw_entities["datatype"] = "anat"
                 raw_entities["acquisition"] = [None, 'orig']
-                raw_entities["scope"] = "nicgiprep-cross"
+                raw_entities["scope"] = self.pipeline_dir
                 raw_entities["space"] = [None, 'subject']
                 raw_entities.pop("datatype", None)
                 if 'run' not in raw_entities: raw_entities['run'] = None
@@ -994,13 +1029,13 @@ class MNIRegistrationProcessor(CrossSectionalProcessor):
                 output_entities['space'] = 'MNI'
                 output_entities['acquisition'] = None
                 output_filename = self.build_path(output_entities)
-                output_filepath = join(DIR_PIPELINES["nicgiprep-cross"], output_filename)  ## Saving the final result in /anat
+                output_filepath = join(DIR_PIPELINES[self.pipeline_dir], output_filename)  ## Saving the final result in /anat
 
                 output_entities['suffix'] = 'aff'
                 output_entities['desc'] = None
                 output_entities['extension'] = '.npy'
                 output_aff_filename = self.build_path(output_entities)
-                output_aff_filepath = join(DIR_PIPELINES["nicgiprep-cross"], output_aff_filename)  ## Saving the final result in /anat
+                output_aff_filepath = join(DIR_PIPELINES[self.pipeline_dir], output_aff_filename)  ## Saving the final result in /anat
 
                 if exists(output_filepath) and not force_flag:
                     exit_dict['images_processed'] += [seg_file.path]
