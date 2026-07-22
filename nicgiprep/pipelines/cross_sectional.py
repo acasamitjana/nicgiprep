@@ -65,7 +65,7 @@ class CrossSectionalProcessor(Processor):
 
         Returns
         -------
-        BIDSFile or None
+        BIDSFile, list of BIDSFile or None
             The selected T1w file, or ``None`` if none is found.
         """
 

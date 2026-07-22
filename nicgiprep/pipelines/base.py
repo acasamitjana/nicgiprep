@@ -1022,6 +1022,27 @@ class USLRLinear(Processor):
     def process_subject(
         self, subject: str, force_flag: bool = False, **kwargs
     ) -> ProcessResult:
+        """Run the full linear USLR pipeline for one subject. To be implemented.
+
+        It will require, at least, the following parameters.
+
+        Parameters
+        ----------
+        subject : str
+            Subject ID.
+        force_flag : bool, optional
+            If ``True``, rerun all steps. Default is ``False``.
+        **kwargs
+            Forwarded to child implementations
+
+        Returns
+        -------
+        dict
+            ``{'exit_code': int, 'message': str, 'data': dict}``.
+            Exit codes:
+                ``-1`` error,
+                ``0`` process is already completed (or has a single or no timpeoints available)
+        """
         raise NotImplementedError
 
     @staticmethod

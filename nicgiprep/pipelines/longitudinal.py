@@ -299,8 +299,21 @@ class LongitudinalProcessor(Processor):
         tp_time = list(time_mapping.values())
         return tp_id[np.argmin(tp_time)]
 
-    def _select_image(self, files: List[BIDSFile], filter_fn: Callable[[BIDSFile], bool] | None = None ):
+    def _select_image(self, files: List[BIDSFile], filter_fn: Callable[[BIDSFile], bool] | None = None ) -> BIDSFile:
+        """Select a single T1w raw images for a given subject and session to be processed through the pipeline
 
+        Parameters
+        ----------
+        files : list of BIDSFile
+            List from which to select the images
+        filter_fn: function, optional
+            Filter some specific files
+
+        Returns
+        -------
+        BIDSFile
+            Return a single BIDSFile
+        """
         # filter by run entity: either None or 01
         if filter_fn is not None and len(files) > 1:
             files = list(filter(filter_fn, files))
