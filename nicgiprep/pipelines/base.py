@@ -366,10 +366,10 @@ class Processor(object):
         """
         sess_df = None
         sess_tsv = self._get_data(
-            suffix="sessions", extension=".tsv", subject=subject, scope="bids"
+            suffix="sessions", extension=".tsv", subject=subject, scope="raw"
         )
-        if sess_tsv:
-            sess_df = pd.read_csv(sess_tsv[0].path, sep="\t")
+        if sess_tsv is not None:
+            sess_df = pd.read_csv(sess_tsv.path, sep="\t")
             sess_df = sess_df.set_index("session_id")
             sess_df = sess_df[~sess_df.index.duplicated(keep="last")]
 
@@ -531,9 +531,9 @@ class Processor(object):
         print(f"FAILED:                   {len(subjects_failed)}/{len(self.subject_list)}")
         print("-" * 40)
 
-
-        print("\nSubjects that failed: ")
-        print("\n".join(subjects_failed))
+        if len(subjects_failed) > 0:
+            print("\nSubjects that failed: ")
+            print("\n".join(subjects_failed))
 
 
 
@@ -746,6 +746,7 @@ class USLRLinear(Processor):
         t_res = USLRLinear.st2_lineal_pytorch(
             log_r, sess_df.index, **kwargs
         )
+
 
         return t_res
 

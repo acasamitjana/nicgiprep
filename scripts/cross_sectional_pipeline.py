@@ -16,6 +16,7 @@ Required environment variables:
     FREESURFER_HOME               (for segmentation and registration)
 """
 import os
+import pdb
 from os.path import exists, join, dirname
 from argparse import ArgumentParser
 import copy
@@ -131,7 +132,7 @@ def main():
 
     # ── Step 1: SynthSeg and SuperSynth for T1w modality ──────────────────────
     print("\n=== Step 1: SynthSeg and SuperSynth for T1w modality ===")
-    processing_seg.process(**process_kwargs)
+    processing_seg.process(**proces_seg_kwargs)
 
 
     # ── Step 2: bias-field correction for T1w modality ────────────────────────

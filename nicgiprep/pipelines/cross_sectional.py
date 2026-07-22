@@ -283,7 +283,6 @@ class T1wSegmentationProcessor(CrossSectionalProcessor):
             )
 
             ## Checking if some cases were skipped due to CUDA OOM
-            pdb.set_trace() # last time it was halted here. CHECK!
             run_df = pd.DataFrame()
             for _, row in supersynth_df.iterrows():
                 if row['run'] and not exists(join(row['tmp_dir'], "segmentation.mgz")):
@@ -520,14 +519,14 @@ class T1wSegmentationProcessor(CrossSectionalProcessor):
                 seg_fname = t1w_file.filename.replace(".nii.gz", "dseg.nii.gz")
 
                 if not exists(join(proc_anat_dir, seg_fname)) or force_flag:
-                    os.makedirs(tmp_dir, exist_ok=True)
+                    os.makedirs(join(tmp_dir, t1w_file.filename), exist_ok=True)
                     supersynth_files['subject'] += [subject]
                     supersynth_files['session'] += [sess_id]
                     supersynth_files['input_file'] += [f"{join(raw_dirname, t1w_file.filename)}"]
-                    supersynth_files['tmp_dir'] += [tmp_dir]
+                    supersynth_files['tmp_dir'] += [join(tmp_dir, t1w_file.filename)]
                     supersynth_files['mode'] += ["invivo"]
                     supersynth_files['output_fname'] += [join(proc_anat_dir, seg_fname)]
-                    if not exists(join(tmp_dir, "segmentation.mgz")):
+                    if not exists(join(tmp_dir, t1w_file.filename, "segmentation.mgz")):
                         supersynth_files['run'] += [True]
                     else:
                         supersynth_files['run'] += [False]
@@ -726,7 +725,6 @@ class T1wBiasCorrectionProcessor(CrossSectionalProcessor):
                 "message": "image already processed.",
             }
 
-        pdb.set_trace()
         # read images
         proxyraw = nib.load(im_file.path)
         proxyseg = nib.load(seg_file.path)

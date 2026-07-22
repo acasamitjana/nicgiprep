@@ -1538,7 +1538,7 @@ class DeformableLongitudinalRegistration(LongitudinalProcessor, USLRDeformable):
         # check if all timepoints are linearly registered
         elif any(
             [
-                self._get_data(**{"subject": subject, "session": t, **self.im_long_ent})
+                self._get_data(**{"subject": subject, "session": t, **self.im_long_ent}, verbose=False)
                 is None
                 for t in session_list
             ]
@@ -1852,6 +1852,7 @@ class DeformableLongitudinalRegistration(LongitudinalProcessor, USLRDeformable):
         session_list : list of str
             Session IDs to include
         """
+        pdb.set_trace()
         linreg = LinearRegression()
         time_list = self._get_session_time(subject, session_list)
 
@@ -1952,7 +1953,6 @@ class DeformableLongitudinalRegistration(LongitudinalProcessor, USLRDeformable):
                 ``-1`` error,
                 ``0`` process is already completed (or has a single or no timpeoints available)
         """
-
 
         exit_dict = ProcessResult(exit_code=0, message="success")
         assert cost in ["bch-l1", "bch-l2"]
