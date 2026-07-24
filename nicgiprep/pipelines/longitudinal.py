@@ -1865,7 +1865,7 @@ class DeformableLongitudinalRegistration(LongitudinalProcessor, USLRDeformable):
         session_list : list of str
             Session IDs to include
         """
-        pdb.set_trace()
+        # pdb.set_trace()
         linreg = LinearRegression()
         time_list = self._get_session_time(subject, session_list)
 
@@ -2067,6 +2067,27 @@ class LongitudinalRegistration(LongitudinalProcessor):
         self.tmp_dir = join(self.tmp_dir, "long-reg")
         create_dir(self.tmp_dir)
         self.pipeline_dir = "nicgiprep-long"
+
+    def _update_subject_layout(self, subject: str) -> None:
+        """Rebuild the layout and propagate it to ``linear_reg``/``nonlinear_reg``.
+        Otherwise ``nonlinear_reg`` cannot see the T1w images that
+        ``linear_reg`` just wrote to subject space.
+
+        Parameters
+        ----------
+        subject : str
+            Subject ID to keep in the layout index.
+        """
+        super()._update_subject_layout(subject)
+        self.linear_reg.bids_loader = self.bids_loader
+        self.nonlinear_reg.bids_loader = self.bids_loader
+
+    def _update_full_layout(self) -> None:
+        """Rebuild the full layout and propagate it to ``linear_reg``/``nonlinear_reg``.
+        """
+        super()._update_full_layout()
+        self.linear_reg.bids_loader = self.bids_loader
+        self.nonlinear_reg.bids_loader = self.bids_loader
 
     def _register_to_MNI(self, subject: str, sess_df: pd.DataFrame):
         """Register the nonlinear template to MNI via centroid affine.
