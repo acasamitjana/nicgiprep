@@ -11,7 +11,9 @@ the **timepoints of a single subject**.
 
 import copy
 import itertools
-from glob import glob
+import pdb
+import traceback
+import tqdm
 from os import makedirs
 from os.path import join, dirname, basename, exists
 from typing import Dict, List, Optional, Sequence, Tuple
@@ -22,12 +24,14 @@ import pandas as pd
 from bids.layout import BIDSFile
 from scipy.ndimage import gaussian_filter
 from skimage.morphology import ball, binary_dilation
+from sympy.vector import Cross
 
+from nicgiprep.pipelines import CrossSectionalProcessor
 from setup import *
 from nicgiprep.pipelines.base import Processor
-from nicgiprep.pipelines.cross_sectional import MRISegmentationProcessor
+from nicgiprep.pipelines.cross_sectional import T1wSegmentationProcessor, T1wBiasCorrectionProcessor
 from nicgiprep.pipelines.longitudinal import USLRLinear
-from nicgiprep.utils.io_utils import create_dir, save_volume, remove_dir
+from nicgiprep.utils.io_utils import create_dir, save_volume, remove_dir, ProcessResult
 from nicgiprep.utils.def_utils import (
     vol_resample_fast,
     network_space,
@@ -40,10 +44,10 @@ from nicgiprep.utils.fn_utils import (
     one_hot_encoding,
 )
 from nicgiprep.utils.preprocessing_utils import bias_field_corr
-from nicgiprep.utils.label_utils import SYNTHSEG_LUT, SYNTHSEG_GMM_ONTOLOGY
+from nicgiprep.utils.label_utils import SYNTHSEG_LUT, SYNTHSEG_GMM_ONTOLOGY, labels_registration
 
 
-class MMProcessor(Processor):
+class MMProcessor(CrossSectionalProcessor):
     """Base class for multi-modal processing pipelines.
 
     Extends :class:`~nicgiprep.pipelines.base.Processor` with BIDS entity
@@ -64,20 +68,15 @@ class MMProcessor(Processor):
         Spatial shape of the 1 mm isotropic session/common space.
     """
 
+    #: Anatomical reference space where all the outputs are defined
+    SPACE = 'session'
+
     #: Anatomical MRI contrasts handled by the multimodal pipeline.
     DEFAULT_MODALITIES = ["T1w", "T2w", "FLAIR", "PDw"]
 
     #: Modality elected as the session template.
     TEMPLATE_MODALITY = "T1w"
 
-    #: BIDS ``space`` entity label for all common-space derivatives.
-    SPACE = "session"
-
-    #: Derivatives directory key / pybids scope for the multimodal outputs.
-    PIPELINE_DIR = "nicgiprep-mm"
-
-    #: Derivatives directory key for the cross-sectional preprocessing outputs.
-    CROSS_PIPELINE_DIR = "nicgiprep-cross"
 
     def _build_processor(self, **kwargs) -> None:
         """Extend the base processor with multimodal entity templates.
@@ -114,30 +113,35 @@ class MMProcessor(Processor):
 
         # Per-modality affine mapping the raw modality to the session template.
         # The modality is encoded in the ``desc`` entity (e.g. ``desc-T1wtosession``).
+        self.im_session_entities = {
+            "space": self.SPACE,
+            "extension": ".nii.gz",
+        }
         self.aff_graph_entities = {
             "space": self.SPACE,
-            "suffix": "aff",
             "extension": ".npy",
         }
 
         # Per-modality image / mask / seg resampled into the session space.
-        self.im_graph_entities = {"space": self.SPACE, "extension": "nii.gz"}
-        self.mask_graph_entities = {"space": self.SPACE, "extension": "nii.gz"}
+        # self.im_graph_entities = {"space": self.SPACE, "extension": ".nii.gz"}
+        # self.mask_graph_entities = {"space": self.SPACE, "extension": ".nii.gz"}
 
         # Session template (S0): the aligned template-modality image + derivatives.
         self.template_entities = {
             "space": self.SPACE,
+            "datatype": "utils",
+            "acquisition": "1",
+            "suffix": "empty",
             "desc": "template",
-            "extension": "nii.gz",
+            "extension": ".nii.gz",
         }
 
-        # Session-space (network) voxel-to-RAS array.
-        self.net_v2r_entities = {
-            "space": self.SPACE,
-            "desc": "template",
-            "suffix": "v2r",
-            "extension": ".npy",
-        }
+
+        #: Derivatives directory key for the cross-sectional preprocessing outputs.
+        self.pipeline_cross_dir = "nicgiprep-cross" if 'pipeline-cross' not in kwargs else kwargs['pipeline-cross']
+
+        #: Derivatives directory key / pybids scope for the multimodal outputs.
+        self.pipeline_dir = "nicgiprep-mm"
 
     def _name(self) -> str:
         """Return the display name of this pipeline."""
@@ -212,8 +216,8 @@ class MMProcessor(Processor):
             BIDS entity filters for the preprocessed modality image.
         """
         entities = {
-            "scope": self.CROSS_PIPELINE_DIR,
-            "extension": "nii.gz",
+            "scope": self.pipeline_cross_dir,
+            "extension": ".nii.gz",
             "suffix": modality,
             "acquisition": [None, "orig"],
         }
@@ -238,59 +242,29 @@ class MMProcessor(Processor):
             BIDS entity filters for the modality's SynthSeg segmentation.
         """
         return {
-            "scope": self.CROSS_PIPELINE_DIR,
-            "extension": "nii.gz",
+            "scope": self.pipeline_cross_dir,
+            "extension": ".nii.gz",
             "suffix": self._seg_suffix(modality),
         }
 
-    def _aff_desc(self, modality: str) -> str:
-        """Build the ``desc`` value encoding a modality-to-template affine.
-
-        Parameters
-        ----------
-        modality : str
-            Modality suffix (e.g. ``'T1w'``).
-
-        Returns
-        -------
-        str
-            The ``desc`` entity value, e.g. ``'T1wtosession'``.
-        """
-        return modality + "to" + self.SPACE
-
-    def _modality_aff_entities(self, modality: str) -> Dict:
-        """Build BIDS entities for a modality's modality-to-template affine file.
-
-        Parameters
-        ----------
-        modality : str
-            Modality suffix (e.g. ``'T1w'``).
-
-        Returns
-        -------
-        dict
-            BIDS entity filters for the modality-to-template affine ``.npy``.
-        """
-        return {**self.aff_graph_entities, "desc": self._aff_desc(modality)}
+    # def _aff_desc(self, modality: str) -> str:
+    #     """Build the ``desc`` value encoding a modality-to-template affine.
+    #
+    #     Parameters
+    #     ----------
+    #     modality : str
+    #         Modality suffix (e.g. ``'T1w'``).
+    #
+    #     Returns
+    #     -------
+    #     str
+    #         The ``desc`` entity value, e.g. ``'T1wtosession'``.
+    #     """
+    #     return modality + "to" + self.SPACE
 
     # ------------------------------------------------------------------ #
     #  Discovery helpers                                                  #
     # ------------------------------------------------------------------ #
-    def _get_sessions(self, subject: str) -> List[str]:
-        """Return all session IDs available for a subject.
-
-        Parameters
-        ----------
-        subject : str
-            Subject ID.
-
-        Returns
-        -------
-        list of str
-            Session IDs for the subject.
-        """
-        return self.bids_loader.get_session(subject=subject)
-
     def _get_modalities(self, subject: str, session: str) -> List[str]:
         """List the configured modalities available *and* segmented for a session.
 
@@ -335,7 +309,7 @@ class MMProcessor(Processor):
         return available
 
 
-class MultiModalSynthSegProcessor(MRISegmentationProcessor):
+class MultiModalSegmentationProcessor(MMProcessor, T1wSegmentationProcessor):
     """Run SynthSeg on *every* MRI modality of each session.
 
     The base :class:`~nicgiprep.pipelines.cross_sectional.SynthSegProcessor`
@@ -375,60 +349,8 @@ class MultiModalSynthSegProcessor(MRISegmentationProcessor):
         None
         """
         super()._build_processor(**kwargs)
-        self.modalities = kwargs.get("modalities", list(MMProcessor.DEFAULT_MODALITIES))
+        self.modalities = kwargs.get("modalities", list(self.DEFAULT_MODALITIES))
 
-    def _select_image(
-        self, subject: str, session: str, modality: str
-    ) -> Optional[BIDSFile]:
-        """Select a single raw image of a given modality for a session.
-
-        Generalises :meth:`SynthSegProcessor._select_image` (which is hardwired
-        to ``T1w``) to an arbitrary modality suffix. When several candidate
-        files exist, prefers files without an ``acquisition`` entity, then
-        ``run-01``.
-
-        Parameters
-        ----------
-        subject : str
-            Subject ID.
-        session : str
-            Session ID.
-        modality : str
-            Modality suffix (e.g. ``'T2w'``).
-
-        Returns
-        -------
-        bids.layout.BIDSFile or None
-            The selected raw image, or ``None`` if none is found.
-        """
-        im_list = self._get_data(
-            subject=subject,
-            session=session,
-            suffix=modality,
-            extension=["nii", "nii.gz"],
-            acquisition=["orig", None],
-            scope="raw",
-            ignore_check=True,
-        )
-
-        if len(im_list) == 0:
-            return None
-
-        elif len(im_list) > 1:
-            if any(["acquisition" not in f.entities.keys() for f in im_list]):
-                im_list_r = list(
-                    filter(lambda x: "acquisition" not in x.entities.keys(), im_list)
-                )
-            elif any(["run" in f.entities.keys() for f in im_list]):
-                im_list_r = list(filter(lambda x: x.entities["run"] == "01", im_list))
-            else:
-                im_list_r = im_list
-            im_file = im_list_r[0]
-
-        else:
-            im_file = im_list[0]
-
-        return im_file
 
     def _write_session_inputs_log(
         self, subject: str, session: str, selected: List[Tuple[str, str]]
@@ -449,7 +371,7 @@ class MultiModalSynthSegProcessor(MRISegmentationProcessor):
             One entry per modality that was selected for this session.
         """
         out_dir = join(
-            DIR_PIPELINES[MMProcessor.CROSS_PIPELINE_DIR],
+            DIR_PIPELINES[self.pipeline_cross_dir],
             "sub-" + subject,
             "ses-" + session,
         )
@@ -466,7 +388,7 @@ class MultiModalSynthSegProcessor(MRISegmentationProcessor):
         force_flag: bool = False,
         session_list: Optional[List[str]] = None,
         **kwargs
-    ) -> Tuple[List, List, List, List, List]:
+    ) -> Tuple[List, List, List, Dict, List]:
         """Collect SynthSeg I/O paths for non-T1w modalities of every session.
 
         The T1w image must already be processed by the cross-sectional pipeline
@@ -497,113 +419,129 @@ class MultiModalSynthSegProcessor(MRISegmentationProcessor):
         **kwargs
             Ignored; present for API compatibility.
 
+
         Returns
         -------
-        tuple of list
+        tuple of list/doct
             ``(input_files, res_files, output_files, vol_files,
-            discarded_files)`` — one entry per (session, modality) queued.
+            )`` — one entry per session queued.
         """
-        input_files, res_files, output_files, vol_files, discarded_files = (
+        input_files, res_files, output_files, found_files, supersynth_files = (
             [],
             [],
             [],
             [],
-            [],
+            {'subject': [], 'session': [], 'input_file': [], 'output_fname': [], 'mode': [], 'tmp_dir': [], 'run': []},
         )
 
-        available_sessions = self.bids_loader.get_session(subject=subject)
+        sessions = self.bids_loader.get_session(subject=subject)
         if session_list is not None:
-            available_sessions = [s for s in available_sessions if s in session_list]
+            sessions = [s for s in sessions if s in session_list]
 
-        for session in available_sessions:
-            cross_anat_dir = join(
-                DIR_PIPELINES[MMProcessor.CROSS_PIPELINE_DIR],
+        for sess_id in sessions:
+            tmp_dir = join(
+                TMP_DIR,
+                "supersynth_process",
                 "sub-" + subject,
-                "ses-" + session,
+                "ses-" + sess_id)
+
+            cross_anat_dir = join(
+                DIR_PIPELINES[self.pipeline_cross_dir],
+                "sub-" + subject,
+                "ses-" + sess_id,
                 "anat",
             )
             cross_utils_dir = join(
-                DIR_PIPELINES[MMProcessor.CROSS_PIPELINE_DIR],
+                DIR_PIPELINES[self.pipeline_cross_dir],
                 "sub-" + subject,
-                "ses-" + session,
+                "ses-" + sess_id,
                 "utils",
             )
 
-            # Verify that the T1w cross-sectional pipeline has been run first.
-            t1w_img_done = bool(glob(join(cross_anat_dir, "*T1w.nii.gz")))
-            t1w_dseg_done = bool(glob(join(cross_anat_dir, "*T1wdseg.nii.gz")))
-            if not (t1w_img_done and t1w_dseg_done):
-                print(
-                    "\n  [skip] sub-"
-                    + subject
-                    + "/ses-"
-                    + session
-                    + ": T1w cross-sectional outputs not found in "
-                    + cross_anat_dir
-                    + ". Please run the T1w cross-sectional pipeline first."
-                )
-                continue
+            mm_anat_dir = join(
+                DIR_PIPELINES[self.pipeline_dir],
+                "sub-" + subject,
+                "ses-" + sess_id,
+                "anat",
+            )
+
+            mm_utils_dir = join(
+                DIR_PIPELINES[self.pipeline_dir],
+                "sub-" + subject,
+                "ses-" + sess_id,
+                "utils",
+            )
 
             # Collect raw modalities available for this session (T1w included for logging).
-            to_process = []
             session_log: List[Tuple[str, str]] = []
 
-            t1w_file = self._select_image(
-                subject, session, MMProcessor.TEMPLATE_MODALITY
-            )
-            if t1w_file is not None:
-                session_log.append((MMProcessor.TEMPLATE_MODALITY, t1w_file.path))
-
-            for modality in self.modalities:
-                if modality == MMProcessor.TEMPLATE_MODALITY:
-                    continue
-                im_file = self._select_image(subject, session, modality)
-                if im_file is not None:
-                    to_process.append((modality, im_file))
-                    session_log.append((modality, im_file.path))
-
-            # Always write the session log so downstream steps know which raw
-            # files were used, even when there is nothing new to segment.
-            self._write_session_inputs_log(subject, session, session_log)
-
-            if not to_process:
+            image_files = self._select_images(subject, sess_id, **{'modality': ['T1w', 'T2w', 'PD', 'FLAIR']})
+            if image_files is None:
                 continue
 
-            for modality, im_file in to_process:
-                output_dir = cross_utils_dir
+            if isinstance(image_files, BIDSFile):
+                image_files = [image_files]
 
-                if not exists(output_dir):
-                    makedirs(output_dir)
+            found_files.extend(image_files)
 
-                im_entities = {
-                    k: str(v)
-                    for k, v in im_file.entities.items()
-                    if k in filename_entities
-                }
-                im_entities["acquisition"] = "1"
-                seg_entities = {**im_entities, "suffix": self._seg_suffix(modality)}
+            for image_file in image_files:
+                image_entities = dict(image_file.entities)
+                image_entities["acquisition"] = "1"
 
-                anat_res = basename(self.build_path(im_entities))
-                anat_seg = basename(self.build_path(seg_entities))
-                anat_vols = anat_seg.replace("nii.gz", "tsv")
+                synthseg_entities = copy.deepcopy(image_entities)
+                synthseg_entities['suffix'] += "synthseg"
 
-                if not exists(join(output_dir, anat_seg)) or force_flag:
-                    im_proxy = nib.load(im_file.path)
-                    run_code = self._check_file(im_proxy)
-                    if run_code["run_flag"]:
-                        input_files.append(im_file.path)
-                        # SynthSeg's resampled output is a temporary artifact; send it to
-                        # TMP_DIR so it never lands in nicgiprep-cross.
-                        res_files.append(join(TMP_DIR, anat_res))
-                        output_files.append(join(output_dir, anat_seg))
-                        vol_files.append(join(output_dir, anat_vols))
+                anat_res = basename(self.build_path(image_entities))
+                anat_synthseg = basename(self.build_path(synthseg_entities))
+                anat_seg = image_file.filename.replace(".nii.gz", "dseg.nii.gz")
+
+                session_log.append((image_entities['suffix'], image_file.path))
+
+                # Synthseg
+                if not exists(join(mm_utils_dir, anat_synthseg)) or force_flag:
+                    if not exists(mm_utils_dir): os.makedirs(mm_utils_dir)
+                    if exists(join(cross_utils_dir, anat_synthseg)):
+                        subprocess.call(
+                            ["cp", join(cross_utils_dir, anat_synthseg), join(mm_utils_dir, anat_synthseg)]
+                        )
+
                     else:
-                        with open(
-                            join(output_dir, modality + "_excluded_file.txt"), "w"
-                        ) as f:
-                            f.write(run_code["exit_message"])
+                        proxy = nib.load(image_file.path)
+                        run_code = self._check_file(proxy)
 
-        return input_files, res_files, output_files, vol_files, discarded_files
+                        if run_code["run_flag"]:
+                            input_files += [image_file.path]
+                            res_files += [join(mm_utils_dir, anat_res)]
+                            output_files += [join(mm_utils_dir, anat_synthseg)]
+
+                        else:
+                            with open(join(mm_utils_dir, "excluded_file.txt"), "w") as f:
+                                f.write(run_code["exit_message"])
+
+                # SuperSynth
+                if not exists(join(mm_anat_dir, anat_seg)):
+                    if not exists(mm_anat_dir): os.makedirs(mm_anat_dir)
+                    if (exists(join(cross_anat_dir, anat_seg)) and image_entities['suffix'] == 'T1w') and not force_flag:
+                        subprocess.call(
+                            ["ln", '-s', join(cross_anat_dir, anat_seg), join(mm_anat_dir, anat_seg)]
+                        )
+                    else:
+                        os.makedirs(join(tmp_dir, image_file.filename), exist_ok=True)
+                        supersynth_files['subject'] += [subject]
+                        supersynth_files['session'] += [sess_id]
+                        supersynth_files['input_file'] += [f"{image_file.path}"]
+                        supersynth_files['tmp_dir'] += [join(tmp_dir, image_file.filename)]
+                        supersynth_files['mode'] += ["invivo"]
+                        supersynth_files['output_fname'] += [join(mm_anat_dir, anat_seg)]
+                        if not exists(join(tmp_dir, image_file.filename, "segmentation.mgz")) or force_flag:
+                            supersynth_files['run'] += [True]
+                        else:
+                            supersynth_files['run'] += [False]
+
+            self._write_session_inputs_log(subject, sess_id, session_log)
+
+        return input_files, res_files, output_files, supersynth_files, found_files
+
 
     def _seg_suffix(self, modality: str) -> str:
         """Return the SynthSeg output suffix for a modality.
@@ -621,7 +559,7 @@ class MultiModalSynthSegProcessor(MRISegmentationProcessor):
         return modality + "synthseg"
 
 
-class MultiModalBiasCorrectionProcessor(MMProcessor):
+class MultiModalBiasCorrectionProcessor(MMProcessor, T1wBiasCorrectionProcessor):
     """Bias-field correction and intensity normalisation for all MRI modalities.
 
     Runs the same EM-based bias-field correction and WM-mean normalisation as
@@ -645,310 +583,123 @@ class MultiModalBiasCorrectionProcessor(MMProcessor):
         """Return the display name of this pipeline."""
         return "MultiModalBiasFieldCorrection"
 
-    def _check_resampled_file(self, raw_file, resampled_entities: Dict) -> Dict:
-        """Return the path to the 1 mm resampled image needed for bias-field estimation.
 
-        SynthSeg writes its ``--resample`` output to ``TMP_DIR`` (not to
-        ``nicgiprep-cross``).  If that temporary file is still present it is
-        reused directly.  Otherwise the raw image is resampled to 1 mm and
-        saved in ``TMP_DIR``.  Nothing is written to ``nicgiprep-cross``.
-
-        Parameters
-        ----------
-        raw_file : BIDSFile
-            Source raw image.
-        resampled_entities : dict
-            BIDS entities used to derive the expected filename.
-
-        Returns
-        -------
-        dict
-            ``{'exit_code': 0, 'filepath': str}`` on success, or
-            ``{'exit_code': -1, 'message': str}`` on failure.
-        """
-        tmp_path = join(TMP_DIR, basename(self.build_path(resampled_entities)))
-        if exists(tmp_path):
-            return {"exit_code": 0, "filepath": tmp_path}
-
-        proxyraw = nib.load(raw_file.path)
-        pixdim = np.sqrt(np.sum(proxyraw.affine * proxyraw.affine, axis=0))[:-1]
-        if all([np.abs(p - 1) < 0.01 for p in pixdim]):
-            return {"exit_code": 0, "filepath": raw_file.path}
-        if any([p < 0.01 for p in pixdim]):
-            return {"exit_code": -1, "message": "some dimensions are wrong"}
-        v, aff = rescale_voxel_size(
-            np.array(proxyraw.dataobj), proxyraw.affine, [1, 1, 1]
-        )
-        save_volume(v, aff, None, tmp_path)
-        return {"exit_code": 0, "filepath": tmp_path}
-
-    def _posterior2generative_labelmap(
-        self, seg: np.ndarray, lut: Dict = SYNTHSEG_LUT
-    ) -> np.ndarray:
-        """Convert a soft posterior segmentation to a hemisphere-unified label space.
-
-        Identical to
-        :meth:`BiasCorrectionProcessor._posterior2generative_labelmap`.
-
-        Parameters
-        ----------
-        seg : np.ndarray
-            Soft segmentation ``(*spatial, n_labels)``.
-        lut : dict, optional
-            Label-to-channel lookup table. Defaults to ``SYNTHSEG_LUT``.
-
-        Returns
-        -------
-        np.ndarray
-            Normalised posteriors ``(*spatial, n_unified_classes)``.
-        """
-        out_seg = np.zeros(seg.shape[:-1] + (len(SYNTHSEG_GMM_ONTOLOGY),))
-        for it_lab, (_, lab_list) in enumerate(SYNTHSEG_GMM_ONTOLOGY.items()):
-            for lab in lab_list:
-                out_seg[..., it_lab] += seg[..., lut[lab]]
-        out_seg = out_seg / (np.sum(out_seg, axis=-1, keepdims=True) + 1e-10)
-        out_seg[np.isnan(out_seg)] = 0
-        return out_seg
-
-    def process_subject(
-        self,
-        subject: str,
-        force_flag: bool = False,
-        remove_wrong: bool = True,
-        session_list: Optional[List[str]] = None,
-        **kwargs
-    ) -> Dict:
-        """Run bias-field correction and WM normalisation for every modality.
-
-        For each session and each modality that has a segmentation in
-        ``nicgiprep-cross``:
-
-        1. Derives a brain mask from the SynthSeg segmentation (CSF excluded).
-        2. Uses the ``acq-1`` resampled image (written by SynthSeg) as the
-           reference for computing the bias field.
-        3. Applies the bias field and normalises the WM mean to 110.
-        4. Saves the corrected image under the raw filename (``acq=None``) so
-           that downstream queries with ``acquisition=[None, 'orig']`` find it
-           unambiguously.
+    def process_subject(self,
+                        subject: str,
+                        session_list: Optional[List[str]] = None,
+                        force_flag: bool=False, **kwargs):
+        """Run bias-field correction for all sessions of one subject.
 
         Parameters
         ----------
         subject : str
             Subject ID.
-        force_flag : bool, optional
-            If ``True``, reprocess even when output already exists. Default
-            is ``False``.
-        remove_wrong : bool, optional
-            If ``True``, print an error and skip when bias-field estimation
-            fails rather than raising. Default is ``True``.
         session_list : list of str, optional
             Restrict processing to these session IDs. If ``None``, all
             sessions for the subject are processed.
+        force_flag : bool, optional
+            If ``True``, reprocess sessions even when outputs already exist.
+            Default is ``False``.
         **kwargs
             Ignored; present for API compatibility.
 
         Returns
         -------
         dict
-            ``{'exit_code': 0, 'message': 'success'}``.
+            Result dict with keys:
+            - ``exit_code`` (int): ``0`` on success / already processed, ``-1`` on failure.
+            - ``message`` (str): human-readable description of the outcome.
+            - ``images_processed`` (int): number of images successfully processed for this subject.
+            - ``images_failed`` (int): number of images that failed processing for this subject. This may have
+                                       numerous causes, among them, wrong segmentation or poor quality
         """
-        print("\nSubject: " + subject)
+        print("\nSubject: " + subject, end='\n')
 
-        available_sessions = self.bids_loader.get_session(subject=subject)
+        sessions = self._get_sessions(subject=subject)
         if session_list is not None:
-            available_sessions = [s for s in available_sessions if s in session_list]
+            sessions = [s for s in sessions if s in session_list]
 
-        for session in available_sessions:
-            print("\n* Session: " + session, end=": ", flush=True)
+        exit_dict = {"images_processed": [], "images_failed": [], "exit_code": 0, "message": ""}
+        for sess_id in tqdm.tqdm(sessions, leave=False, desc="Processing sessions"):
+            # input segs
+            synthseg_entities = copy.copy(self.seg_entities)
+            synthseg_entities["scope"] = [self.pipeline_dir]
+            synthseg_entities["suffix"] = ["T1wsynthseg", "T2wsynthseg", "FLAIRsynthseg", 'PDsynthseg']
+            synthseg_entities["space"] = [None]
+            synthseg_entities["desc"] = [None]
+            synthseg_entities["datatype"] = ["utils"]
+            seg_files = self._get_data(
+                **{"session": sess_id, "subject": subject, **synthseg_entities}, ignore_check=True
+            )
+            if seg_files is None:
+                continue
 
-            for modality in self.modalities:
-                # T1w bias correction is handled by the cross-sectional pipeline.
-                if modality == self.template_modality:
-                    continue
+            cross_utils = join(
+                DIR_PIPELINES[self.pipeline_cross_dir],
+                "sub-" + subject,
+                "ses-" + sess_id,
+                "utils",
+            )
 
-                seg_file = self._get_data(
-                    **{
-                        "session": session,
-                        "subject": subject,
-                        **self._modality_seg_entities(modality),
-                    },
-                    verbose=False
-                )
-                if seg_file is None:
-                    print(modality + " not available. Skipping. ", end="", flush=True)
-                    continue
+            mm_anat = join(
+                DIR_PIPELINES[self.pipeline_dir],
+                "sub-" + subject,
+                "ses-" + sess_id,
+                "anat",
+            )
 
-                output_dir = join(
-                    DIR_PIPELINES[self.CROSS_PIPELINE_DIR],
-                    "sub-" + subject,
-                    "ses-" + session,
-                    self._modality_datatype(modality),
-                )
-
-                # Find the raw image from which this session's segmentation was derived.
-                seg_ents = self._get_entities(seg_file)
-                seg_ents["extension"] = "nii.gz"
-                raw_entities = {k: v for k, v in seg_ents.items() if k != "acquisition"}
-                raw_entities["suffix"] = modality
+            for seg_file in tqdm.tqdm(seg_files, leave=False, desc="Processing images     "):
+                raw_entities = self._get_entities(seg_file)
+                raw_entities["extension"] = ".nii.gz"
+                raw_entities["suffix"] = raw_entities["suffix"].split('synthseg')[0]
                 raw_entities["scope"] = "raw"
                 raw_entities["acquisition"] = [None, "orig"]
+                raw_entities.pop("datatype", None)
+                if 'run' not in raw_entities: raw_entities['run'] = None
 
                 raw_file = self._get_data(**raw_entities)
                 if raw_file is None:
                     continue
 
-                output_filepath = join(output_dir, basename(raw_file.path))
+                ret_code = {'exit_code': -1}
+                if isinstance(raw_file, BIDSFile):
+                    output_filepath = join(mm_anat, raw_file.filename)
+                    if exists(output_filepath):
+                        ret_code = {'exit_code': 0}
 
-                if exists(output_filepath) and not force_flag:
-                    print(modality + ": already done. ", end="", flush=True)
-                    continue
-
-                proxyraw = nib.load(raw_file.path)
-                proxyseg = nib.load(seg_file.path)
-
-                # --- 1 mm resampled image (written by SynthSeg to TMP_DIR; created here if absent) ---
-                resampled_entities = dict(
-                    seg_ents
-                )  # has acq='1', same run/session/subject
-                resampled_entities["suffix"] = modality
-                resampled_entities["scope"] = self.CROSS_PIPELINE_DIR
-                resampled_entities["datatype"] = self._modality_datatype(modality)
-
-                resampled_flag = self._check_resampled_file(
-                    raw_file, resampled_entities
-                )
-                if resampled_flag["exit_code"] == -1:
-                    print(resampled_flag["message"], end="", flush=True)
-                    continue
-
-                proxyres = nib.load(resampled_flag["filepath"])
-
-                # --- Bias-field correction ---
-                if not exists(output_filepath) or force_flag:
-                    vox2ras0 = proxyres.affine
-                    mri_acq = np.asarray(proxyres.dataobj).astype("float32")
-                    mri_acq[np.isnan(mri_acq)] = 0
-
-                    # Resample seg to 1 mm if voxel sizes differ.
-                    pixdimim = np.sqrt(np.sum(proxyres.affine**2, axis=0))[:-1]
-                    pixdimseg = np.sqrt(np.sum(proxyseg.affine**2, axis=0))[:-1]
-                    if any(np.abs(pixdimseg - pixdimim) > 0.01):
-                        proxyseg_res = vol_resample_fast(
-                            proxyres, proxyseg, mode="nearest"
+                    elif exists(join(cross_utils, raw_file.filename)):
+                        subprocess.call(
+                            ["ln", "-s", join(cross_utils, raw_file.filename), output_filepath]
                         )
+
                     else:
-                        proxyseg_res = proxyseg
+                        ret_code = self.process_image(im_file=raw_file,
+                                                      seg_file=seg_file,
+                                                      output_filepath=output_filepath,
+                                                      force_flag=force_flag)
 
-                    seg_arr_res = np.array(proxyseg_res.dataobj)
-                    soft_seg = one_hot_encoding(seg_arr_res, categories=SYNTHSEG_LUT)
-                    soft_seg = self._posterior2generative_labelmap(
-                        soft_seg, lut=SYNTHSEG_LUT
-                    )
+                if ret_code['exit_code'] == 0:
+                    exit_dict['images_processed'] += [seg_file.path]
+                else:
+                    exit_dict['images_failed'] += [seg_file.path]
+                    exit_dict['exit_code'] = 1
 
-                    try:
-                        mri_acq_corr, bias_field = bias_field_corr(
-                            mri_acq,
-                            soft_seg,
-                            penalty=1,
-                            VERBOSE=False,
-                            filter_exceptions=True,
-                        )
-                    except Exception:
-                        mri_acq_corr = None
-
-                    if mri_acq_corr is None:
-                        print(
-                            "[error] bias field cannot be computed for "
-                            + modality
-                            + ". ",
-                            end="",
-                            flush=True,
-                        )
-                        continue
-
-                    del soft_seg
-                    mask_bf = seg_arr_res > 0
-                    wm_mask = (seg_arr_res == 2) | (seg_arr_res == 41)
-                    del seg_arr_res
-
-                    vox2ras0_orig = proxyraw.affine
-                    mri_acq_orig = np.asarray(proxyraw.dataobj).astype("float32")
-                    mri_acq_orig[np.isnan(mri_acq_orig)] = 0
-                    if mri_acq_orig.ndim > 3:
-                        mri_acq_orig = mri_acq_orig[..., 0]
-
-                    vox_size = np.linalg.norm(vox2ras0, 2, 0)[:3]
-                    orig_vox_size = np.linalg.norm(vox2ras0_orig, 2, 0)[:3]
-
-                    if all(v1 == v2 for v1, v2 in zip(vox_size, orig_vox_size)):
-                        # Same resolution: correct and normalise in-place.
-                        mask_dilated = binary_dilation(mask_bf, ball(3))
-                        m = np.mean(mri_acq_corr[wm_mask])
-                        mri_acq_corr = 110 * mri_acq_corr / m
-                        mri_acq_corr *= mask_dilated
-                        save_volume(
-                            np.clip(mri_acq_corr, 0, 255).astype("uint8"),
-                            proxyres.affine,
-                            None,
-                            output_filepath,
-                        )
-                    else:
-                        # Different resolutions: propagate bias field back to original res.
-                        bias_proxy = nib.Nifti1Image(bias_field, proxyres.affine)
-                        bias_field_resize = vol_resample_fast(
-                            proxyraw, bias_proxy, return_np=True
-                        )
-
-                        mask_proxy = nib.Nifti1Image(
-                            mask_bf.astype("float"), proxyres.affine
-                        )
-                        mask_resize = (
-                            vol_resample_fast(proxyraw, mask_proxy, return_np=True)
-                            > 0.5
-                        )
-
-                        wm_proxy = nib.Nifti1Image(
-                            wm_mask.astype("float"), proxyres.affine
-                        )
-                        wm_resize = (
-                            vol_resample_fast(proxyraw, wm_proxy, return_np=True) > 0.5
-                        )
-
-                        mri_orig_corr = copy.copy(mri_acq_orig)
-                        mri_orig_corr[mask_resize] /= bias_field_resize[mask_resize]
-
-                        m = np.mean(mri_orig_corr[wm_resize])
-                        mri_orig_corr = 110 * mri_orig_corr / m
-                        mask_dilated = binary_dilation(mask_resize, ball(3))
-                        mri_orig_corr[~mask_dilated] = 0
-
-                        save_volume(
-                            np.clip(mri_orig_corr, 0, 255).astype("uint8"),
-                            proxyraw.affine,
-                            None,
-                            output_filepath,
-                        )
-
-                        del (
-                            bias_field,
-                            bias_field_resize,
-                            mri_acq_orig,
-                            mri_orig_corr,
-                            mask_dilated,
-                        )
-
-                    print(modality + ": done. ", end="", flush=True)
-
-        return {"exit_code": 0, "message": "success"}
+        exit_dict['total_images'] = len(exit_dict['images_processed']) + len(exit_dict['images_failed'])
+        exit_dict['message'] = (str(len(exit_dict['images_processed'])) + "/" + str(exit_dict['total_images']) +
+                                " of images were successfully processed.")
+        print(' o ' + exit_dict['message'])
+        print("\n")
+        return exit_dict
 
 
-class MultiMRIProcessor(MMProcessor):
+
+class MultiMRIProcessor(MMProcessor, USLRLinear):
     """Joint, unbiased rigid registration of multiple MRI contrasts.
 
     For every session, estimates one rigid transform per modality that maps it
     into a session-specific common space lying at the centre of all modalities,
     by solving the same log-space spanning-tree problem as
-    :class:`~nicgiprep.pipelines.longitudinal.USLR_Linear`. The aligned
+    :class:`~nicgiprep.pipelines.longitudinal.USLRLinear`. The aligned
     template modality (T1w by default) is stored as the session template.
 
     The processing for a single session follows USLR's linear step closely:
@@ -980,26 +731,128 @@ class MultiMRIProcessor(MMProcessor):
         None
         """
         super()._build_processor(**kwargs)
-        self.pipeline_dir = self.PIPELINE_DIR
-        self.tmp_dir = join(self.tmp_dir, "SessionSpace")
+        self.tmp_dir = join(self.tmp_dir, "MMSessionSpace")
         create_dir(self.tmp_dir)
+
+    def _get_process_image_file(self, subject: str, sessions: List[str]) -> pd.DataFrame | ProcessResult:
+        """Create a table with all sessions and needed information to process. It contains the following columns:
+            * subject
+            * session_id
+            * orig_image: the selected MRI modalities for the multimodal pipeline.
+                          If there are multiple runs available in the rawdata, select ALL.
+            * orig_seg: the supersynth segmentation of the selected T1w image for the longitudinal pipeline.
+            * orig_synthseg: the synthseg segmentation of the selected T1w image for the longitudinal pipeline. It
+                             will be used for rigid registration.
+
+        Parameters
+        ----------
+        subject : str
+            Subject ID
+        sessions : List[str]
+            List of session IDs to run.
+
+        Returns
+        -------
+        pd.DataFrame | Process results
+            dataframe containing all session to process. It define at least three columns:
+            'session_id', 'orig_mri' and 'orig_seg'
+
+        """
+        sess_fpath = join(
+            DIR_PIPELINES[self.pipeline_dir],
+            "sub-" + subject,
+            "sub-" + subject + "_sessions.tsv",
+        )
+
+        if exists(
+            join(
+                DIR_PIPELINES[self.pipeline_dir],
+                "sub-" + subject,
+                "sub-" + subject + "_sessions.tsv",
+            )
+        ):
+            sess_df = pd.read_csv(sess_fpath, sep="\t")
+            if all([s in sess_df.session_id.to_list() for s in sessions]):
+                return sess_df
+
+        else:
+            os.makedirs(join(
+                DIR_PIPELINES[self.pipeline_dir],
+                "sub-" + subject
+            ), exist_ok=True)
+
+            sess_df = pd.DataFrame({
+                "subject": [],
+                "session_id": [],
+                "orig_mri": [],
+                "orig_seg": [],
+                "orig_synthseg": [],
+                "index_image": []
+            })
+
+        im_raw_ent = {"scope": "nicgiprep-mm", "extension": ".nii.gz", "suffix": ["T1w", "T2w", "PD", "FLAIR"],
+                      'space': None,  'datatype': 'anat'}
+
+        for sess_id in sessions:
+            im_raw_files = self.bids_loader.get(
+                **{"subject": subject, "session": sess_id, **im_raw_ent}
+            )
+
+            if len(im_raw_files) == 0:
+                continue
+
+            elif len(im_raw_files) == 1:
+                continue
+
+            row = {}
+            for idx_i, im_file in enumerate(im_raw_files):
+                im_ent = im_file.get_entities()
+                seg_ent = im_file.get_entities()
+                seg_ent["suffix"] = [im_ent["suffix"] + "dseg", im_ent["suffix"] + "dseg"]
+                seg_ent["scope"] =  "nicgiprep-mm"
+                if 'run' not in seg_ent.keys():
+                    seg_ent["run"] = None # avoid reading the all runs if run is not in the filename
+                seg_files = self._get_data(**seg_ent)
+
+                seg_ent.pop('datatype')
+                seg_ent["suffix"] = im_ent["suffix"] + "synthseg"
+                seg_ent["desc"] = None # avoid reading the template image
+                seg_files_synthseg = self._get_data(**seg_ent)
+
+                row["subject"] = [subject]
+                row["session_id"] = [sess_id]
+                row["index_image"] = ["M" + str(idx_i)]
+                row["orig_mri"] = [im_file.path]
+                if seg_files is None:
+                    row["orig_seg"] = [None]
+                else:
+                    row["orig_seg"] = [seg_files.path]
+
+
+                if seg_files_synthseg is None:
+                    row["orig_synthseg"] = [None]
+                else:
+                    row["orig_synthseg"] = [seg_files_synthseg.path]
+
+                sess_df = pd.concat([sess_df, pd.DataFrame(row)], axis=0, ignore_index=True)
+
+        sess_df.drop_duplicates(inplace=True)
+        sess_df.to_csv(sess_fpath, sep="\t", index=False)
+
+        return sess_df
 
     # ------------------------------------------------------------------ #
     #  Checkpointing                                                      #
     # ------------------------------------------------------------------ #
     def _check_running_session(
-        self, subject: str, session: str, modalities: List[str], force_flag: bool
-    ) -> Dict:
+        self, sess_df: pd.DataFrame, force_flag: bool
+    ) -> ProcessResult:
         """Determine the processing checkpoint for a single session.
 
         Parameters
         ----------
-        subject : str
-            Subject ID.
-        session : str
-            Session ID.
-        modalities : list of str
-            Modalities available for the session.
+        sess_df: pd.DataFrame
+            Table with index_image as index and (subject, session_id, orig_mri, orig_synthseg) as columns.
         force_flag : bool
             If ``True``, ignore existing outputs and rerun.
 
@@ -1010,280 +863,122 @@ class MultiMRIProcessor(MMProcessor):
             ``-1`` error, ``0`` run full pipeline, ``1`` skip (already done),
             ``5`` single modality (nothing to register, link as template).
         """
-        # Nothing to register if there are no modalities.
-        if len(modalities) == 0:
-            return {
-                "exit_code": 1,
-                "message": "[done] no usable modalities found. Skipping.\n",
-            }
+        default_result = ProcessResult(exit_code=-1, message="[error] Some error during the process occurred. \n")
 
-        # A single modality cannot define a joint space: skip multimodal registration.
-        if len(modalities) == 1:
-            return {
-                "exit_code": 1,
-                "message": "[skip] only T1w available. Multimodal registration requires at least 2 modalities.\n",
-            }
-
-        # Already processed: a per-modality affine exists for every modality and
-        # the session template is present.
-        im_template = self._get_data(
-            **{
-                "subject": subject,
-                "session": session,
-                "suffix": self.template_modality,
-                **self.im_graph_entities,
-            },
-            verbose=False
-        )
-        all_affs = all(
-            self._get_data(
-                **{
-                    "subject": subject,
-                    "session": session,
-                    **self._modality_aff_entities(m),
-                },
-                verbose=False
-            )
-            is not None
-            for m in modalities
-        )
-        if all_affs and im_template is not None and not force_flag:
-            return {
-                "exit_code": 1,
-                "message": "[done] session already processed. "
-                "Check the results in [..]/session_space/sub-"
-                + subject
-                + "/ses-"
-                + str(session)
-                + ".\n",
-            }
-
-        return {"exit_code": 0, "message": "running multimodal registration"}
-
-    # ------------------------------------------------------------------ #
-    #  Rigid graph estimation (parcellation-based, log-space spanning tree)
-    # ------------------------------------------------------------------ #
-    def _get_centroids(
-        self, subject: str, session: str, modalities: List[str]
-    ) -> Tuple[Dict, Dict]:
-        """Compute RAS centroids for each modality's segmentation.
-
-        Parameters
-        ----------
-        subject : str
-            Subject ID.
-        session : str
-            Session ID.
-        modalities : list of str
-            Modalities to process.
-
-        Returns
-        -------
-        centroid_dict : dict
-            ``{modality: np.ndarray}`` of shape ``(3, N_labels)``.
-        ok_dict : dict
-            ``{modality: np.ndarray}`` binary flags per label.
-        """
-        centroid_dict = {}
-        ok_dict = {}
-        for modality in modalities:
-            seg_file = self._get_data(
-                **{
-                    "subject": subject,
-                    "session": session,
-                    **self._modality_seg_entities(modality),
-                }
-            )
-            centroid_dict[modality], ok_dict[modality] = compute_centroids_ras(
-                seg_file.path, labels_registration
-            )
-
-        return centroid_dict, ok_dict
-
-    def _cog_path(self, seg_file: BIDSFile, modality: str) -> str:
-        """Build the COG ``.npy`` path next to a modality's segmentation file.
-
-        Parameters
-        ----------
-        seg_file : bids.layout.BIDSFile
-            The modality's segmentation file.
-        modality : str
-            Modality suffix (e.g. ``'T1w'``).
-
-        Returns
-        -------
-        str
-            Path to the centre-of-gravity ``.npy`` file.
-        """
-        return (
-            seg_file.path.replace("nii.gz", "npy")
-            .replace(self._seg_suffix(modality), "cog")
-            .replace("dseg", "cog")
-        )
-
-    def _compute_cog(self, subject: str, session: str, modalities: List[str]) -> None:
-        """Compute and save a centring-to-COG transform for each modality.
-
-        Mirrors :meth:`USLR_Linear._compute_cog`: the centre-of-gravity is
-        derived from the non-zero voxels of each modality's segmentation and
-        saved as a 4x4 translation matrix in RAS mm next to the segmentation.
-
-        Parameters
-        ----------
-        subject : str
-            Subject ID.
-        session : str
-            Session ID.
-        modalities : list of str
-            Modalities to process.
-
-        Returns
-        -------
-        None
-        """
-        for modality in modalities:
-            seg_file = self._get_data(
-                **{
-                    "subject": subject,
-                    "session": session,
-                    **self._modality_seg_entities(modality),
-                }
-            )
-            cog_path = self._cog_path(seg_file, modality)
-
-            seg_proxy = nib.load(seg_file.path)
-            seg_arr = np.array(seg_proxy.dataobj)
-            aux = np.where(seg_arr > 0)
-            i, j, k = np.median(aux[0]), np.median(aux[1]), np.median(aux[2])
-            ras_cog = seg_proxy.affine @ np.array([i, j, k, 1])
-            T_cog = np.eye(4)
-            T_cog[:3, -1] = -ras_cog[:3]
-            np.save(cog_path, T_cog.astype("float32"))
-
-    def _register_pair(
-        self,
-        pairwise_centroids: Sequence[np.ndarray],
-        affine_filepath: str,
-        ok_centr: Optional[np.ndarray] = None,
-    ) -> None:
-        """Estimate and save a rigid transform from centroid correspondences via SVD.
-
-        Identical procedure to :meth:`USLR_Linear._register_timepoints` (closed
-        form rigid fit from corresponding centroids), applied here to a pair of
-        modalities.
-
-        Parameters
-        ----------
-        pairwise_centroids : sequence of np.ndarray
-            ``(refCent, floCent)`` — each of shape ``(3, N_labels)``.
-        affine_filepath : str
-            Path where the resulting 4x4 affine is saved as ``.npy``.
-        ok_centr : np.ndarray, optional
-            Binary flag array selecting reliable centroids (1 = use). If
-            ``None``, all centroids are used.
-
-        Returns
-        -------
-        None
-        """
-        refCent, floCent = pairwise_centroids
-
-        if ok_centr is not None:
-            refCent = refCent[:, ok_centr > 0]
-            floCent = floCent[:, ok_centr > 0]
-
-        trans_ref = np.mean(refCent, axis=1, keepdims=True)
-        trans_flo = np.mean(floCent, axis=1, keepdims=True)
-
-        refCent_tx = refCent - trans_ref
-        floCent_tx = floCent - trans_flo
-
-        cov = refCent_tx @ floCent_tx.T
-        u, s, vt = np.linalg.svd(cov)
-        D = np.eye(3)
-        if np.prod(np.diag(s)) < 0:
-            D[-1, -1] = -1
-
-        Q = vt.T @ D @ u.T
-        Tr = np.eye(4)
-        Tr[:3, 3] = -trans_ref.squeeze()
-
-        Tf = np.eye(4)
-        Tf[:3, 3] = trans_flo.squeeze()
-
-        R = np.eye(4)
-        R[:3, :3] = Q
-
-        aff = Tf @ R @ Tr
-        np.save(affine_filepath, aff)
-
-    def _init_graph(
-        self,
-        subject: str,
-        session: str,
-        modalities: List[str],
-        def_dir: str,
-        force_flag: bool,
-    ) -> None:
-        """Compute pairwise rigid affines between all modalities via centroid SVD.
-
-        Parameters
-        ----------
-        subject : str
-            Subject ID.
-        session : str
-            Session ID.
-        modalities : list of str
-            Modalities to register.
-        def_dir : str
-            Directory where pairwise ``<ref>_to_<flo>.npy`` affine files are
-            written.
-        force_flag : bool
-            If ``True``, recompute even when files exist.
-
-        Returns
-        -------
-        None
-        """
-        centroid_dict, ok_dict = self._get_centroids(subject, session, modalities)
-
-        # Centre every modality on its COG before pairwise registration.
-        for modality in modalities:
-            seg_file = self._get_data(
-                **{
-                    "subject": subject,
-                    "session": session,
-                    **self._modality_seg_entities(modality),
-                }
-            )
-            T_cog = np.load(self._cog_path(seg_file, modality))
-            centroid_dict[modality] = T_cog @ np.concatenate(
-                [
-                    centroid_dict[modality],
-                    np.ones((1, centroid_dict[modality].shape[1])),
-                ]
-            )
-            centroid_dict[modality] = centroid_dict[modality][:3]
-
-        for mod_ref, mod_flo in itertools.combinations(modalities, 2):
-            output_filepath = join(
-                def_dir, str(mod_ref) + "_to_" + str(mod_flo) + ".npy"
-            )
-            if not exists(output_filepath) or force_flag:
-                self._register_pair(
-                    [centroid_dict[mod_ref], centroid_dict[mod_flo]],
-                    output_filepath,
-                    ok_centr=(ok_dict[mod_ref] == 1) & (ok_dict[mod_flo] == 1),
+        try:
+            # Nothing to register if there are no modalities.
+            if len(sess_df) == 0:
+                return ProcessResult(
+                    exit_code=1,
+                    message="[done] no usable image modalities found. Skipping.\n",
                 )
 
+            # A single modality cannot define a joint space: skip multimodal registration.
+            if len(sess_df) == 1:
+                return ProcessResult(
+                    exit_code=1,
+                    message="[skip] only 1 modality available. Multimodal registration requires at least 2 modalities.\n",
+                )
+
+            if any([f is None for f in sess_df['orig_synthseg']]):
+                return ProcessResult(
+                    exit_code=-1,
+                    message="[error] missing SynthSeg segmentations in the subject/session/utils file.\n",
+                )
+            # Already processed: a per-modality affine exists for every modality and
+            # the session template is present.
+            subject = sess_df.iloc[0]["subject"]
+            session = sess_df.iloc[0]["session_id"]
+            # step 1: are all affine matrices computed?
+            all_affs = all(
+                self._get_data(
+                    **{"subject": subject,
+                       "session": session,
+                       'suffix': self._get_entities(file)['suffix'].split('synthseg')[0] + 'aff',
+                       'run': self._get_entities(file).get('run', None),
+                       **self.aff_graph_entities},
+                    verbose=False,
+                )
+                is not None
+                for file in sess_df['orig_synthseg']
+            )
+
+            # step 2: is the t1w segmentation in session space available?
+            sss_kwargs = self.template_entities.copy()
+            sss_kwargs["subject"] = subject
+            sss_kwargs["session"] = session
+            sss_file = self._get_data(**sss_kwargs, verbose=False)
+
+            # step 3: are all images resampled to session space?
+            all_im_resampled = all(
+                self._get_data(
+                    **{"subject": subject,
+                       "session": session,
+                       'suffix': self._get_entities(file)['suffix'],
+                       'run': self._get_entities(file).get('run', None),
+                       **self.im_session_entities},
+                    verbose=False,
+                )
+                is not None
+                for file in sess_df['orig_mri']
+            )
+
+            # step 4: is the affine matrix to MNI computed?
+            mni_aff_entities = {
+                "subject": subject,
+                "session": session,
+                "space": "MNI",
+                "suffix": "aff",
+                "extension": ".npy",
+                "scope": self.pipeline_dir
+            }
+            aff_MNI = self._get_data(**mni_aff_entities, verbose=False)
+
+            if not all_affs or force_flag:
+                return ProcessResult(
+                    exit_code=1,
+                    message="[running] subject needs to be processed."
+                )
+
+            elif sss_file is None:
+                return ProcessResult(
+                    exit_code=2,
+                    message="[partly done] graph is solved; need to create session space."
+                )
+
+            elif not all_im_resampled:
+                return ProcessResult(
+                    exit_code=3,
+                    message="[partly done] session space is computed; need to resample images."
+                )
+
+            elif aff_MNI is None:
+                return ProcessResult(
+                    exit_code=4,
+                    message="[partly done] missing MNI registration from the session template."
+                )
+
+            else:
+                return ProcessResult(
+                    exit_code=0,
+                    message="[done] session already processed. "
+                    "Check the results in [..]/" + self.pipeline_dir
+                    + "/sub-" + subject
+                    + "/ses-" + str(session)
+                    + ".\n",
+                )
+
+        except Exception as e:
+            return default_result
+
     def _solve_graph(
-        self, subject: str, session: str, modalities: List[str], def_dir: str, **kwargs
-    ) -> Dict:
+            self, subject: str, sess_df: pd.DataFrame, def_dir: str, t_cog_d: dict, **kwargs
+    ) -> ProcessResult:
         """Solve the rigid spanning-tree problem and save per-modality affines.
 
         Reuses the USLR log-space solver verbatim
-        (:meth:`USLR_Linear.init_st2_lineal` and
-        :meth:`USLR_Linear.st2_lineal_pytorch`), since the multimodal and USLR
+        (:meth:`USLRLinear.init_st2_lineal` and
+        :meth:`USLRLinear.st2_lineal_pytorch`), since the multimodal and USLR
         rigid models are mathematically identical — only the graph vertices differ
         (modalities here vs. timepoints in USLR).
 
@@ -1291,10 +986,8 @@ class MultiMRIProcessor(MMProcessor):
         ----------
         subject : str
             Subject ID.
-        session : str
-            Session ID.
-        modalities : list of str
-            Modalities (graph vertices).
+        sess_df: pd.DataFrame
+            Table with index_image as index and (subject, session_id, orig_mri, orig_synthseg) as columns.
         def_dir : str
             Directory containing pairwise ``<ref>_to_<flo>.npy`` files.
         **kwargs
@@ -1303,45 +996,42 @@ class MultiMRIProcessor(MMProcessor):
 
         Returns
         -------
-        dict
-            ``{'exit_code': int, 'message': str}`` checkpoint dict.
+        ProcessResults
+            ``{'exit_code': int, 'message': str, 'data': dict}``.
+            Exit codes:
+                ``-1`` error,
+                ``0`` process is already completed (or has a single or no timpeoints available)
         """
-        R_log = USLRLinear.init_st2_lineal(modalities, def_dir)
-        Tres = USLRLinear.st2_lineal_pytorch(
-            R_log, modalities, verbose=False, **kwargs
-        )
-
+        Tres = super()._solve_graph(subject, sess_df, def_dir, t_cog_d, **kwargs)
         if np.sum(np.isnan(Tres)) > 0:
-            return {
-                "exit_code": -1,
-                "message": "[error] Something went wrong in the rigid registration step.\n",
-            }
+            if np.sum(np.isnan(Tres)) == np.sum(np.isnan(Tres[:3, 3])):
+                # nan values in the displacement, meaning that there is no translation among images
+                # (probably taken at the same moment)
+                Tres[:3, 3] = 0
+            else:
+                return {
+                    "exit_code": -1,
+                    "message": "[error] Something went wrong in the rigid registration step.\n",
+                }
 
-        for it_mod, modality in enumerate(modalities):
-            seg_file = self._get_data(
-                **{
-                    "subject": subject,
-                    "session": session,
-                    **self._modality_seg_entities(modality),
-                }
-            )
-            filename = self.build_path(
-                {
-                    "subject": subject,
-                    "session": session,
-                    **self._modality_aff_entities(modality),
-                }
-            )
+        for it_mod, (idx_row, row) in enumerate(sess_df.iterrows()):
+            extra_kwargs = {
+                "subject": row['subject'],
+                "session": row["session_id"],
+                "run": self._get_entities(row['orig_synthseg']).get('run', None),
+                "suffix": self._get_entities(row['orig_synthseg'])['suffix'].split("synthseg")[0] + 'aff',
+            }
+            filename = self.build_path({**extra_kwargs, **self.aff_graph_entities})
 
             affine_matrix = Tres[..., it_mod]
-            T_cog = np.load(self._cog_path(seg_file, modality))
+            T_cog = t_cog_d[idx_row]
 
             output_filepath = join(DIR_PIPELINES[self.pipeline_dir], filename)
             create_dir(dirname(output_filepath))
             np.save(output_filepath, np.linalg.inv(T_cog) @ affine_matrix)
 
         return {
-            "exit_code": 0,
+            "exit_code": 2,
             "message": "[partly done] graph computed; building session space.\n",
         }
 
@@ -1349,8 +1039,8 @@ class MultiMRIProcessor(MMProcessor):
     #  Session space construction                                         #
     # ------------------------------------------------------------------ #
     def _create_session_space(
-        self, subject: str, session: str, modalities: List[str]
-    ) -> Dict:
+        self, sess_df: pd.DataFrame
+    ) -> ProcessResult | None:
         """Build the unbiased session space and resample every modality into it.
 
         Computes an average bounding box from all modalities' brain masks
@@ -1364,241 +1054,198 @@ class MultiMRIProcessor(MMProcessor):
 
         Parameters
         ----------
-        subject : str
-            Subject ID.
-        session : str
-            Session ID.
-        modalities : list of str
-            Modalities to resample.
+        sess_df: pd.DataFrame
+            Table with index_image as index and (subject, session_id, orig_mri, orig_synthseg) as columns.
 
         Returns
         -------
-        dict
-            ``{'exit_code': int, 'message': str}`` checkpoint dict.
+        ProcessResult
+            ``{'exit_code': int, 'message': str, 'data': dict}``.
+            Exit codes:
+                ``-1`` error,
+                ``0`` process is already completed (or has a single or no timpeoints available)
         """
-        extra = {"subject": subject, "session": session}
 
         # Gather solved affines and dilated masks in the common frame.
-        aff_dict = {}
-        mask_dilated_proxy_dict = {}
-        for modality in modalities:
-            aff_filename = self.build_path(
-                {**extra, **self._modality_aff_entities(modality)}
+        masks_dilated = []
+        t1w_onehot = []
+        for idx_row, row in sess_df.iterrows():
+            synthseg_file = row['orig_synthseg']
+            aff_file = self._get_data(
+                **{"subject": row["subject"],
+                   "session": row["session_id"],
+                   'suffix': self._get_entities(synthseg_file)['suffix'].split('synthseg')[0] + 'aff',
+                   'run': self._get_entities(synthseg_file).get('run', None),
+                   **self.aff_graph_entities},
+                verbose=False,
             )
-            aff = np.load(join(DIR_PIPELINES[self.pipeline_dir], aff_filename))
-            seg_file = self._get_data(
-                **{**extra, **self._modality_seg_entities(modality)}
-            )
-            if aff is None or seg_file is None:
-                continue
+
+            if aff_file is None or synthseg_file is None:
+                return ProcessResult(
+                    exit_code=-1,
+                    message="[error] Something went wrong in the rigid registration step.\n",
+                )
+
+            aff = np.load(aff_file)
             if np.sum(np.isnan(aff)) > 0:
-                return {
-                    "exit_code": -1,
-                    "message": "[error] Something went wrong in the rigid registration step.\n",
-                }
+                return ProcessResult(
+                    exit_code=-1,
+                    message="[error] Something went wrong in the rigid registration step.\n",
+                )
 
-            aff_dict[modality] = aff
+            # aff_dict[idx_row] = aff
 
-            seg_proxy = nib.load(seg_file.path)
+            seg_proxy = nib.load(synthseg_file)
             seg_arr = np.array(seg_proxy.dataobj)
+            if self._get_entities(row['orig_mri'])['suffix'] == 'T1w':
+                onehot_arr = one_hot_encoding(seg_arr, categories=self.synthseg_lut )
+                t1w_onehot.append(
+                    nib.Nifti1Image(onehot_arr.astype('float32'), np.linalg.inv(aff) @ seg_proxy.affine)
+                )
+
             mask_arr = (seg_arr > 0) & (seg_arr != 24)
 
             mask_dilated_arr = binary_dilation(mask_arr, ball(3)).astype("float")
-            mask_dilated_proxy_dict[modality] = nib.Nifti1Image(
-                mask_dilated_arr, np.linalg.inv(aff) @ seg_proxy.affine
+            masks_dilated.append(
+                nib.Nifti1Image(mask_dilated_arr, np.linalg.inv(aff) @ seg_proxy.affine)
             )
 
-        if len(mask_dilated_proxy_dict) == 0:
-            return {
-                "exit_code": -1,
-                "message": "[error] no masks available to build the session space.\n",
-            }
+
 
         # Define the common (network) space centred on the union bounding box.
         _, template_v2r, template_size = create_empty_template(
-            list(mask_dilated_proxy_dict.values())
+            masks_dilated, margin_bb=5
         )
-        # tmp_template = join(
-        #     self.tmp_dir, subject + "_" + str(session) + "_template.nii.gz"
-        # )
-        # save_volume(np.zeros(template_size), template_vox2ras0, None, tmp_template)
-        #
-        # ref_geom = sf.load_volume(tmp_template)
-        # net2vox, vox2net, net_v2r = network_space(
-        #     ref_geom, shape=self.net_shape, center=ref_geom
-        # )
-        ref_proxy = nib.Nifti1Image(np.zeros(template_size), template_v2r)
 
-        filename_t_v2r = self.build_path({**extra, **self.net_v2r_entities})
-        create_dir(dirname(join(DIR_PIPELINES[self.pipeline_dir], filename_t_v2r)))
-        np.save(join(DIR_PIPELINES[self.pipeline_dir], filename_t_v2r), template_v2r)
-        # os.remove(tmp_template)
+        sss_kwargs = self.template_entities.copy()
+        sss_kwargs["subject"] = sess_df["subject"].iloc[0]
+        sss_kwargs["session"] = sess_df["session_id"].iloc[0]
 
-        # Resample every modality into the session space.
-        for modality in modalities:
-            if modality not in aff_dict:
-                continue
-            aff = aff_dict[modality]
+        root_dir = DIR_PIPELINES[self.pipeline_dir]
+        sss_filepath = join(root_dir, self.build_path(sss_kwargs))
 
-            im_file = self._get_data(
-                **{**extra, **self._modality_image_entities(modality)}
+        sss_kwargs["suffix"] = "T1wsynthseg"
+        sss_seg_filepath = join(root_dir, self.build_path(sss_kwargs))
+
+        save_volume(
+            np.zeros(template_size),
+            template_v2r,
+            sss_filepath,
+        )
+        if len(t1w_onehot) > 0:
+            proxytemp = nib.Nifti1Image(np.zeros(template_size), template_v2r)
+            arr_template_onehot = np.zeros(template_size + (len(self.synthseg_lut),), dtype='float32')
+            for proxyseg in t1w_onehot:
+                arr_template_onehot += vol_resample_fast(proxytemp, proxyseg, return_np=True)
+
+            arr_template_seg = np.argmax(arr_template_onehot, axis=-1)
+            arr_template_seg = self._undo_one_hot(arr_template_seg, lut=self.synthseg_lut)
+
+            save_volume(
+                arr_template_seg,
+                template_v2r,
+                sss_seg_filepath,
             )
-            seg_file = self._get_data(
-                **{**extra, **self._modality_seg_entities(modality)}
-            )
-            if im_file is None or seg_file is None:
-                continue
 
-            # Anti-alias to 1 mm before resampling (don't blur if upsampling).
-            im_proxy = nib.load(im_file.path)
-            pixdim = np.sqrt(np.sum(im_proxy.affine * im_proxy.affine, axis=0))[:-1]
-            factor = pixdim / np.array([1, 1, 1])
-            sigmas = 0.25 / factor
-            sigmas[factor > 1] = 0
+        return ProcessResult(
+            exit_code=3,
+            message="[done] subject space created. \n",
+        )
 
-            im_arr = np.array(im_proxy.dataobj)
-            im_arr = gaussian_filter(im_arr, sigmas)
-            im_proxy = nib.Nifti1Image(im_arr, np.linalg.inv(aff) @ im_proxy.affine)
-            im_proxy = vol_resample_fast(ref_proxy, im_proxy)
-
-            filename_im = self.build_path(
-                {**extra, **self.im_graph_entities, "suffix": modality}
-            )
-            nib.save(im_proxy, join(DIR_PIPELINES[self.pipeline_dir], filename_im))
-
-            if modality == self.template_modality:
-                # Save T1w SynthSeg segmentation in session space — used by the
-                # MNI registration step to compute centroid-based alignment.
-                seg_proxy = nib.load(seg_file.path)
-                seg_arr = np.array(seg_proxy.dataobj)
-                seg_proxy = nib.Nifti1Image(
-                    seg_arr, np.linalg.inv(aff) @ seg_proxy.affine
-                )
-                seg_proxy = vol_resample_fast(ref_proxy, seg_proxy, mode="nearest")
-                filename_synthseg = self.build_path(
-                    {
-                        **extra,
-                        **self.im_graph_entities,
-                        "suffix": self._seg_suffix(modality),
-                    }
-                )
-                nib.save(
-                    seg_proxy, join(DIR_PIPELINES[self.pipeline_dir], filename_synthseg)
-                )
-
-                # Save T1w SuperSynth (dseg) segmentation in session space — final output.
-                t1w_dseg_file = self._get_data(
-                    **{
-                        **extra,
-                        "scope": self.CROSS_PIPELINE_DIR,
-                        "extension": "nii.gz",
-                        "suffix": "T1wdseg",
-                        "datatype": "anat",
-                    },
-                    verbose=False
-                )
-                if t1w_dseg_file is not None:
-                    t1w_dseg_proxy = nib.load(t1w_dseg_file.path)
-                    t1w_dseg_arr = np.array(t1w_dseg_proxy.dataobj)
-                    t1w_dseg_proxy = nib.Nifti1Image(
-                        t1w_dseg_arr, np.linalg.inv(aff) @ t1w_dseg_proxy.affine
-                    )
-                    t1w_dseg_proxy = vol_resample_fast(
-                        ref_proxy, t1w_dseg_proxy, mode="nearest"
-                    )
-                    filename_dseg = self.build_path(
-                        {**extra, **self.im_graph_entities, "suffix": "T1wdseg"}
-                    )
-                    nib.save(
-                        t1w_dseg_proxy,
-                        join(DIR_PIPELINES[self.pipeline_dir], filename_dseg),
-                    )
-            # For non-T1w modalities: only the image is saved; SynthSeg segmentations
-            # are used solely for registration and are not propagated to the output.
-
-        return {"exit_code": 0, "message": "[done] session space created.\n"}
-
-    def _link_single_modality(self, subject: str, session: str, modality: str) -> None:
-        """Handle the degenerate single-modality session.
-
-        With a single modality there is nothing to register: the modality is
-        rescaled to 1 mm (if needed) and stored as the session template ``S0``
-        with an identity modality-to-template affine.
+    def _resample_to_session_space(
+        self, sess_df: pd.DataFrame
+    ) -> ProcessResult:
+        """Resample all image modalities to a common session space
 
         Parameters
         ----------
-        subject : str
-            Subject ID.
-        session : str
-            Session ID.
-        modality : str
-            The only available modality.
+        sess_df : pd.DataFrame
+            Table with index_image as index and (subject, session_id, orig_mri, orig_synthseg) as columns.
 
         Returns
         -------
-        None
+        ProcessResult
+            ``{'exit_code': int, 'message': str, 'data': dict}``.
+            Exit codes:
+                ``-1`` error,
+                ``0`` process is already completed (or has a single or no timpeoints available)
         """
-        extra = {"subject": subject, "session": session}
 
-        aff_fname = self.build_path({**extra, **self._modality_aff_entities(modality)})
-        aff_fpath = join(DIR_PIPELINES[self.pipeline_dir], aff_fname)
-        if not exists(aff_fpath):
-            if not exists(dirname(aff_fpath)):
-                makedirs(dirname(aff_fpath))
-            np.save(aff_fpath, np.eye(4))
+        sss_kwargs = self.template_entities.copy()
+        sss_kwargs["subject"] = sess_df["subject"].iloc[0]
+        sss_kwargs["session"] = sess_df["session_id"].iloc[0]
 
-        im_fname = self.build_path(
-            {**extra, **self.im_graph_entities, "suffix": modality}
-        )
-        im_fpath = join(DIR_PIPELINES[self.pipeline_dir], im_fname)
-        if not exists(im_fpath):
-            if not exists(dirname(im_fpath)):
-                makedirs(dirname(im_fpath))
-            im_file = self._get_data(
-                **{**extra, **self._modality_image_entities(modality)}
+        sss_file = self._get_data(**sss_kwargs, verbose=False)
+
+        if sss_file is None:
+            return ProcessResult(
+                exit_code=-1, message="[error] Session-space has not been created.\n"
             )
-            if im_file is None:
-                return
 
-            im_proxy = nib.load(im_file.path)
-            pixdim = np.sqrt(np.sum(im_proxy.affine * im_proxy.affine, axis=0))[:-1]
-            if all([np.abs(p - 1) < 0.01 for p in pixdim]):
-                rf = subprocess.call(
-                    ["ln", "-s", im_file.path, im_fpath], stderr=subprocess.PIPE
-                )
-                if rf != 0:
-                    subprocess.call(["cp", im_file.path, im_fpath])
-            else:
-                if any([p < 0.01 for p in pixdim]):
-                    return
-                im_arr_resc, aff_resc = rescale_voxel_size(
-                    np.array(im_proxy.dataobj), im_proxy.affine, [1, 1, 1]
-                )
-                save_volume(im_arr_resc.astype("float32"), aff_resc, None, im_fpath)
+        sss_proxy = nib.load(sss_file.path)
+        for im_idx, im_files in sess_df.iterrows():
+            im_file = im_files["orig_mri"]
+            synthseg_file = im_files['orig_synthseg']
 
-        seg_file = self._get_data(**{**extra, **self._modality_seg_entities(modality)})
-        if seg_file is not None:
-            seg_fname = self.build_path(
-                {
-                    **extra,
-                    **self.im_graph_entities,
-                    "suffix": self._seg_suffix(modality),
-                }
+            extra_kwargs = {
+                "subject": im_files['subject'],
+                "session": im_files["session_id"],
+                "run": self._get_entities(im_files['orig_synthseg']).get('run', None),
+            }
+
+            aff_file = self._get_data(
+                **{**extra_kwargs,
+                   **self.aff_graph_entities,
+                   'suffix': self._get_entities(synthseg_file)['suffix'].split('synthseg')[0] + 'aff',
+                   },
+                verbose=False,
             )
-            seg_fpath = join(DIR_PIPELINES[self.pipeline_dir], seg_fname)
-            if not exists(seg_fpath):
-                if not exists(dirname(seg_fpath)):
-                    makedirs(dirname(seg_fpath))
-                subprocess.call(
-                    ["ln", "-s", seg_file.path, seg_fpath], stderr=subprocess.PIPE
+
+            im_fname = self.build_path({
+                **extra_kwargs,
+                **self.im_session_entities,
+                'suffix': self._get_entities(im_file)['suffix']
+            })
+
+            if aff_file is None:
+                return ProcessResult(
+                    exit_code=-1,
+                    message="[error] could not find the affine file from session space to image " + synthseg_file +
+                     ".\n",
                 )
 
-    # ------------------------------------------------------------------ #
-    #  MNI registration                                                  #
-    # ------------------------------------------------------------------ #
+            aff = np.load(aff_file)
+            if np.sum(np.isnan(aff)) > 0:
+                return ProcessResult(
+                    exit_code=-1,
+                    message="[error] the affine matrix from session space to image " + synthseg_file + "has some"
+                    "NaN values.\n",
+                )
+
+            im_proxy = nib.load(im_file)
+            voxsize = np.sqrt(np.sum(im_proxy.affine * im_proxy.affine, axis=0))[:-1]
+            voxsize_new = np.sqrt(np.sum(sss_proxy.affine * sss_proxy.affine, axis=0))[
+                :-1
+            ]
+            factor = voxsize / voxsize_new
+            sigmas = 0.25 / factor
+            sigmas[factor > 1] = 0  # don't blur if upsampling
+
+            im_array = np.array(im_proxy.dataobj)
+            im_array = gaussian_filter(im_array, sigmas)
+            im_proxy = nib.Nifti1Image(im_array, np.linalg.inv(aff) @ im_proxy.affine)
+            im_proxy = vol_resample_fast(sss_proxy, im_proxy)
+
+            nib.save(im_proxy, join(DIR_PIPELINES[self.pipeline_dir], im_fname))
+
+
+        return ProcessResult(exit_code=4,
+                             message="[partly done] resampling to subject space correctly; "
+                                     "missing registration to MNI\n")
+
     def _register_to_MNI_session(
-        self, subject: str, session: str, modalities: List[str]
-    ) -> Dict:
+            self, sess_df: pd.DataFrame
+    ) -> ProcessResult:
         """Register the session-space T1w template to MNI and propagate to all modalities.
 
         Uses centroid-based affine alignment (same approach as
@@ -1610,49 +1257,46 @@ class MultiMRIProcessor(MMProcessor):
 
         Parameters
         ----------
-        subject : str
-            Subject ID.
-        session : str
-            Session ID.
-        modalities : list of str
-            Modalities to propagate the MNI transform to.
+        sess_df : pd.DataFrame
+            Table with index_image as index and (subject, session_id, orig_mri, orig_synthseg) as columns.
 
         Returns
         -------
-        dict
-            ``{'exit_code': int, 'message': str}`` checkpoint dict.
+        ProcessResult
+            ``{'exit_code': int, 'message': str, 'data': dict}``.
+            Exit codes:
+                ``-1`` error,
+                ``0`` process is already completed (or has a single or no timpeoints available)
         """
-        extra = {"subject": subject, "session": session}
+
+        # extra = {"subject": subject, "session": session}
 
         # --- affine file ---
+        extra_kwargs = {
+            "subject": sess_df['subject'].iloc[0],
+            "session": sess_df["session_id"].iloc[0],
+        }
+
         mni_aff_entities = {
             "space": "MNI",
-            "desc": "tosession",
             "suffix": "aff",
             "extension": ".npy",
         }
-        mni_aff_fname = self.build_path({**extra, **mni_aff_entities})
+        mni_aff_fname = self.build_path({**extra_kwargs, **mni_aff_entities})
         mni_aff_fpath = join(DIR_PIPELINES[self.pipeline_dir], mni_aff_fname)
 
-        # Load the session-space T1w template and its segmentation.
-        template_im_file = self._get_data(
-            **{**extra, **self.im_graph_entities, "suffix": self.template_modality},
-            verbose=False
-        )
-        template_seg_file = self._get_data(
-            **{
-                **extra,
-                **self.im_graph_entities,
-                "suffix": self._seg_suffix(self.template_modality),
-            },
-            verbose=False
-        )
+        # Load the session-space template segmentation.
+        sss_kwargs = self.template_entities.copy()
+        sss_kwargs["subject"] = sess_df["subject"].iloc[0]
+        sss_kwargs["session"] = sess_df["session_id"].iloc[0]
+        sss_kwargs["suffix"] = "T1wsynthseg"
 
-        if template_im_file is None or template_seg_file is None:
-            return {
-                "exit_code": -1,
-                "message": "[error] session-space T1w template not found; skipping MNI registration.\n",
-            }
+        template_seg_file = self._get_data(**sss_kwargs, verbose=False)
+        if template_seg_file is None:
+            return ProcessResult(
+                exit_code=-1,
+                message="[error] session-space T1w template segmentation not found; skipping MNI registration.\n",
+            )
 
         # Centroid-based affine: MNI template → session-space T1w.
         centroid_ref, ok_ref = compute_centroids_ras(
@@ -1667,72 +1311,17 @@ class MultiMRIProcessor(MMProcessor):
         create_dir(dirname(mni_aff_fpath))
         np.save(mni_aff_fpath, M_sbj)
 
-        proxytemplate_mni = nib.load(MNI_TEMPLATE)
-
-        # Resample each session-space modality into MNI space.
-        for modality in modalities:
-            im_file = self._get_data(
-                **{**extra, **self.im_graph_entities, "suffix": modality}, verbose=False
-            )
-            if im_file is None:
-                continue
-
-            # Build MNI output entities from the session-space file entities.
-            file_entities = {
-                k: str(v) for k, v in im_file.entities.items() if k in filename_entities
-            }
-            file_entities.pop("acquisition", None)
-            file_entities.pop("desc", None)
-            file_entities["space"] = "MNI"
-
-            im_mni_fpath = join(
-                DIR_PIPELINES[self.pipeline_dir], self.build_path(file_entities)
-            )
-            create_dir(dirname(im_mni_fpath))
-
-            # Anti-alias to 1 mm then apply affine into MNI space.
-            proxyim = nib.load(im_file.path)
-            pixdim = np.sqrt(np.sum(proxyim.affine * proxyim.affine, axis=0))[:-1]
-            factor = pixdim / np.array([1, 1, 1])
-            sigmas = 0.25 / factor
-            sigmas[factor > 1] = 0  # don't blur if upsampling
-            im_arr = np.array(proxyim.dataobj)
-            im_arr = gaussian_filter(im_arr, sigmas)
-            proxyim = nib.Nifti1Image(im_arr, np.linalg.inv(M_sbj) @ proxyim.affine)
-            proxyim = vol_resample_fast(proxytemplate_mni, proxyim)
-            nib.save(proxyim, im_mni_fpath)
-
-            # For T1w only: propagate the SuperSynth (dseg) segmentation to MNI space.
-            # SynthSeg segmentations (used only for registration) are not saved here.
-            # Non-T1w modality segmentations are not saved in the multimodal output.
-            if modality == self.template_modality:
-                t1w_session_dseg_file = self._get_data(
-                    **{**extra, **self.im_graph_entities, "suffix": "T1wdseg"},
-                    verbose=False
-                )
-                if t1w_session_dseg_file is not None:
-                    dseg_entities = {**file_entities, "suffix": "T1wdseg"}
-                    dseg_mni_fpath = join(
-                        DIR_PIPELINES[self.pipeline_dir], self.build_path(dseg_entities)
-                    )
-                    proxyseg = nib.load(t1w_session_dseg_file.path)
-                    proxyseg = nib.Nifti1Image(
-                        np.array(proxyseg.dataobj),
-                        np.linalg.inv(M_sbj) @ proxyseg.affine,
-                    )
-                    proxyseg = vol_resample_fast(
-                        proxytemplate_mni, proxyseg, mode="nearest"
-                    )
-                    nib.save(proxyseg, dseg_mni_fpath)
-
-        return {"exit_code": 0, "message": "[done] MNI registration complete.\n"}
+        return ProcessResult(
+            exit_code=0,
+            message="[done] registration to MNI completed. Subject is processed\n",
+        )
 
     # ------------------------------------------------------------------ #
     #  Orchestration                                                      #
     # ------------------------------------------------------------------ #
     def process_session(
-        self, subject: str, session: str, force_flag: bool = False, **kwargs
-    ) -> Dict:
+        self, sess_df: pd.DataFrame, force_flag: bool = False, **kwargs
+    ) -> ProcessResult | None:
         """Run the full multimodal pipeline for a single session.
 
         Three phases:
@@ -1749,10 +1338,8 @@ class MultiMRIProcessor(MMProcessor):
 
         Parameters
         ----------
-        subject : str
-            Subject ID.
-        session : str
-            Session ID.
+        sess_df : pd.DataFrame
+            Table with session_id as index and orig_mri and orig_synthseg as columns
         force_flag : bool, optional
             If ``True``, rerun all steps. Default is ``False``.
         **kwargs
@@ -1763,76 +1350,68 @@ class MultiMRIProcessor(MMProcessor):
         dict
             ``{'exit_code': int, 'message': str}`` checkpoint dict.
         """
-        modalities = self._get_modalities(subject, session)
-        checkpoint = self._check_running_session(
-            subject, session, modalities, force_flag
-        )
-        print(
-            "  * Session "
-            + str(session)
-            + " (modalities: "
-            + ", ".join(modalities)
-            + ") -->",
-            checkpoint["message"],
-            end="",
-        )
 
-        if checkpoint["exit_code"] in [-1, 1]:
-            return checkpoint
+        subject = sess_df.subject.iloc[0]
+        session = sess_df['session_id'].iloc[0]
+
+        sess_df.set_index("index_image", inplace=True, drop=False)
+
 
         def_dir = join(self.tmp_dir, "sub-" + subject, "ses-" + str(session))
         create_dir(def_dir)
 
-        # Step 2a: Centre images on their COG.
-        self._compute_cog(subject, session, modalities)
-        self._update_subject_layout(subject)
-
-        # Step 2b: Pairwise rigid registration (centroid SVD).
-        self._init_graph(subject, session, modalities, def_dir, force_flag)
-
-        # Step 2c: Solve the log-space spanning tree (reuses USLR's solver).
-        graph_kwargs = {
-            "n_epochs": 30,
-            "cost": "l1",
-            "lr": 0.1,
-            "dir_results": def_dir,
-            "max_iter": 20,
-        }
-        graph_kwargs.update(kwargs)
-        checkpoint = self._solve_graph(
-            subject, session, modalities, def_dir, **graph_kwargs
-        )
-        self._update_subject_layout(subject)
-        if checkpoint["exit_code"] == -1:
+        checkpoint = self._check_running_session(sess_df, force_flag)
+        if checkpoint["exit_code"] in [-1, 0]:
+            if kwargs.get("verbose", False):
+                print(
+                    "  * Session "
+                    + str(session)
+                    + " (files: "
+                    + ", ".join([i.filename for i in sess_df['orig_synthseg']])
+                    + ") -->",
+                    checkpoint["message"],
+                    end="",
+                )
             return checkpoint
 
-        # Step 2d: Build the unbiased session space and resample every modality.
-        checkpoint = self._create_session_space(subject, session, modalities)
-        self._update_subject_layout(subject)
-        if checkpoint["exit_code"] == -1:
-            return checkpoint
+        # Step 1: Solve the session graph.
+        if checkpoint["exit_code"] in [1]:
+            def_dir = join(self.tmp_dir, "sub-" + subject, "ses-" + str(session))
+            create_dir(def_dir)
+
+            # Step 1a: Pairwise rigid registration (centroid SVD).
+            t_cog_d = self._init_graph(sess_df, def_dir, force_flag)
+
+            # Step 1b: Solve the log-space spanning tree (reuses USLR's solver).
+            graph_kwargs = {
+                "n_epochs": 30,
+                "cost": "l1",
+                "lr": 0.1,
+                "max_iter": 20,
+            }
+            graph_kwargs.update(kwargs)
+
+            checkpoint = self._solve_graph(subject, sess_df, def_dir, t_cog_d, **graph_kwargs)
+            self._update_subject_layout(subject)
+
+
+        # Step 2: Build the unbiased session space.
+        if checkpoint["exit_code"] in [1, 2]:
+            checkpoint = self._create_session_space(sess_df)
+            self._update_subject_layout(subject)
+
+
+        # Step 3: Resample all modalities to the session-space (empty).
+        if checkpoint["exit_code"] in [1, 2, 3]:
+            checkpoint = self._resample_to_session_space(sess_df)
+            self._update_subject_layout(subject)
+
+        # Step 4: Register session-space T1w to MNI and propagate to all modalities.
+        if checkpoint["exit_code"] in [1, 2, 3, 4]:
+            checkpoint = self._register_to_MNI_session(sess_df)
+            self._update_subject_layout(subject)
 
         remove_dir(def_dir)
-
-        # Step 3: Register session-space T1w to MNI and propagate to all modalities.
-        checkpoint = self._register_to_MNI_session(subject, session, modalities)
-        print("  * MNI registration -->", checkpoint["message"], end="")
-
-        # Remove the T1w SynthSeg segmentation that was saved in session space solely
-        # to drive centroid-based MNI alignment; only the SuperSynth dseg is kept.
-        synthseg_fname = self.build_path(
-            {
-                "subject": subject,
-                "session": session,
-                **self.im_graph_entities,
-                "suffix": self._seg_suffix(self.template_modality),
-            }
-        )
-        synthseg_fpath = join(DIR_PIPELINES[self.pipeline_dir], synthseg_fname)
-        if exists(synthseg_fpath):
-            os.remove(synthseg_fpath)
-
-        self._update_subject_layout(subject)
 
         return checkpoint
 
@@ -1842,7 +1421,7 @@ class MultiMRIProcessor(MMProcessor):
         force_flag: bool = False,
         session_list: Optional[List[str]] = None,
         **kwargs
-    ) -> Dict:
+    ) -> ProcessResult:
         """Run multimodal joint registration for every session of one subject.
 
         Parameters
@@ -1862,16 +1441,37 @@ class MultiMRIProcessor(MMProcessor):
         dict
             ``{'exit_code': int, 'message': str}``.
         """
-        print("* Subject: " + subject)
+        print("\nSubject: " + subject, end='\n')
         sessions = self._get_sessions(subject)
         if session_list is not None:
             sessions = [s for s in sessions if s in session_list]
 
+        sess_df = self._get_process_image_file(subject, sessions=sessions)
+        if sess_df.empty:
+            return ProcessResult(exit_code=0, message="subject does not have sessions with multimodal imaging available")
+
+        sess_df.set_index("session_id", drop=False, inplace=True)
+
+        sessions_failed = []
         for session in sessions:
             try:
-                self.process_session(subject, session, force_flag=force_flag, **kwargs)
-            except Exception as e:
-                print("    [error] session " + str(session) + " failed: " + str(e))
+                if session not in sess_df['session_id']: continue # no multimodal data for this session.
+                ret_code = self.process_session(sess_df.loc[session], force_flag=force_flag, **kwargs)
+                if ret_code['exit_code'] != 0:
+                    if kwargs.get("verbose", False):
+                        print(ret_code['message'])
 
-        print("DONE.\n")
-        return {"exit_code": 1, "message": "success"}
+            except Exception as e:
+                if kwargs.get("verbose", False):
+                    print(traceback.format_exc())
+                sessions_failed += [session]
+
+        if len(sessions_failed) > 0:
+            if len(sessions_failed) == len(sessions):
+                return ProcessResult(exit_code=1, message="subject has completely failed")
+            else:
+                return ProcessResult(exit_code=2, message="subject has partially failed; only "
+                                                          + str(len(sessions) - len(sessions_failed)) +
+                                                          ' of ' + str(len(sessions)) + ' could run.')
+
+        return ProcessResult(exit_code=0, message="success")

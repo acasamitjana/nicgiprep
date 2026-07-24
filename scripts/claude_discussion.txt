@@ -1,0 +1,16 @@
+1. Critical ordering constraint: nicgiprep/pipelines/longitudinal.py does from setup import *, and setup.py reads BIDS_DIR from os.environ at import time (and exits if FREESURFER_HOME/FREESURFER_SYNTHMORPH_HOME isn't set). So the script must:
+- Parse CLI args first
+- Set os.environ['BIDS_DIR'] (and optionally DERIVATIVES_DIR) from args before importing anything from nicgiprep or setup
+
+2. Config file (YAML): Use it for the "tunable" pipeline parameters that rarely change per-run (e.g. linear-registration n_epochs/lr/cost, nonlinear cost, svf_shape/net_shape overrides), while CLI args handle per-run things (bids dir, subjects, force flag, verbose). CLI args should override config values if both given.
+
+3. Argument set (mirroring old scripts' conventions):
+- --bids (default from env BIDS_DIR or required)
+- --derivatives (optional, maps to DERIVATIVES_DIR)
+- --subjects (nargs='+', optional)
+- --config (path to YAML, optional)
+- --force (store_true)
+- --cost choices bch-l1/bch-l2
+- --verbose
+
+4. Pipeline construction, following the old scripts' pattern:
