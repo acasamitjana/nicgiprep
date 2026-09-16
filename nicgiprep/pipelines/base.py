@@ -20,7 +20,7 @@ from skimage.morphology import binary_dilation
 from bids.layout import BIDSLayout, BIDSLayoutIndexer, BIDSFile, parse_file_entities
 from scipy.optimize import linprog
 
-from setup import *
+from nicgiprep.config import *
 from nicgiprep.utils.log_utils import LogBIDSLoader
 from nicgiprep.utils.label_utils import SUPERSYNTH_LUT, SYNTHSEG_APARC_LUT, labels_registration
 from nicgiprep.utils.io_utils import create_dir, save_volume, ProcessResult
@@ -69,7 +69,15 @@ class Processor(object):
         Label lookup table mapping integer label IDs to channel indices.
     labels_dict : dict
         Mapping from integer label IDs to human-readable label names.
+    pipeline_name : str
+        Name of the derivatives dataset written by the pipeline. It is also the
+        pybids ``scope`` of its outputs. Defined by the ``PIPELINE_NAME`` class attribute.
+    pipeline_dir : str
+        Absolute path of the derivatives folder where the pipeline writes its outputs.
     """
+
+    #: Derivatives name / pybids scope of the pipeline outputs.
+    PIPELINE_NAME = "nicgiprep-base"
 
     def __init__(
         self, bids_loader: BIDSLayout, subject_list: Optional[list] = None, **kwargs
@@ -83,15 +91,43 @@ class Processor(object):
             Subject IDs to process. If ``None``, all subjects in the layout
             are used.
         **kwargs
-            Forwarded to :meth:`_build_processor`.
+            Optional ``pipeline_dir`` (str) to override the output folder. All
+            keyword arguments are forwarded to :meth:`_build_processor`.
         """
         self.bids_loader = bids_loader
         self.subject_list = (
             bids_loader.get_subjects() if subject_list is None else subject_list
         )
 
+        self.pipeline_name = self.PIPELINE_NAME
+        self.pipeline_dir = kwargs.get("pipeline_dir") or self._get_pipeline_dir(self.pipeline_name)
+
         self.bids_logger = LogBIDSLoader(num_files=1)
-        self._build_processor()
+        self._build_processor(**kwargs)
+
+    def _get_pipeline_dir(self, pipeline_name: str) -> str:
+        """Return the absolute path of a derivatives folder.
+
+        Uses the root of the derivatives dataset added to ``bids_loader`` whose
+        ``GeneratedBy`` name is ``pipeline_name`` (the same name pybids matches
+        against ``scope``), so custom derivatives locations are respected. If no
+        such dataset was added, falls back to ``<DERIVATIVES_DIR>/<pipeline_name>``.
+
+        Parameters
+        ----------
+        pipeline_name : str
+            Derivatives name (``GeneratedBy`` name in ``dataset_description.json``),
+            e.g. ``'nicgiprep-cross'``.
+
+        Returns
+        -------
+        str
+            Absolute path to the derivatives folder.
+        """
+        for derivative in self.bids_loader.derivatives.values():
+            if derivative.source_pipeline == pipeline_name:
+                return str(derivative.root)
+        return join(DERIVATIVES_DIR, pipeline_name)
 
     def _build_processor(self, **kwargs):
         """Initialise pipeline-specific state and BIDS entity filters.
@@ -309,7 +345,7 @@ class Processor(object):
             Subject ID to keep in the layout index.
         """
         rawdir = self.bids_loader.root
-        derivatives = self.bids_loader.derivatives.keys()
+        derivatives_dirs = [der.root for der in self.bids_loader.derivatives.values()]
 
         indexer = BIDSLayoutIndexer(
             validate=False, ignore="sub-(?!" + subject + ")(.*)$", index_metadata=False
@@ -322,7 +358,7 @@ class Processor(object):
 
         bids_loader = BIDSLayout(root=rawdir, **bids_kwargs)
         bids_loader.add_derivatives(
-            [DIR_PIPELINES[d] for d in derivatives], **bids_kwargs
+            derivatives_dirs, **bids_kwargs
         )
 
         self.bids_loader = bids_loader
@@ -335,7 +371,7 @@ class Processor(object):
         """
 
         rawdir = self.bids_loader.root
-        derivatives = self.bids_loader.derivatives.keys()
+        derivatives_dirs = [der.root for der in self.bids_loader.derivatives.values()]
 
         indexer = BIDSLayoutIndexer(validate=False, index_metadata=False)
         bids_kwargs = {
@@ -346,7 +382,7 @@ class Processor(object):
 
         bids_loader = BIDSLayout(root=rawdir, **bids_kwargs)
         bids_loader.add_derivatives(
-            [DIR_PIPELINES[d] for d in derivatives], **bids_kwargs
+            derivatives_dirs, **bids_kwargs
         )
 
         self.bids_loader = bids_loader
@@ -834,7 +870,7 @@ class USLRLinear(Processor):
     #     sss_kwargs["suffix"] = "empty"
     #     sss_kwargs["datatype"] = "utils"
     #
-    #     root_dir = DIR_PIPELINES[self.pipeline_dir]
+    #     root_dir = self.pipeline_dir
     #     sss_filepath = join(
     #         root_dir, self.build_path({"subject": subject, **sss_kwargs})
     #     )
@@ -890,7 +926,7 @@ class USLRLinear(Processor):
     #     sss_kwargs["suffix"] = "empty"
     #     sss_kwargs["datatype"] = "utils"
     #
-    #     root_dir = DIR_PIPELINES[self.pipeline_dir]
+    #     root_dir = self.pipeline_dir
     #     sss_filepath = join(
     #         root_dir, self.build_path({"subject": subject, **sss_kwargs})
     #     )
@@ -935,7 +971,7 @@ class USLRLinear(Processor):
     #         im_proxy = nib.Nifti1Image(im_array, np.linalg.inv(aff) @ im_proxy.affine)
     #         im_proxy = vol_resample_fast(sss_proxy, im_proxy)
     #
-    #         nib.save(im_proxy, join(DIR_PIPELINES[self.pipeline_dir], im_fname))
+    #         nib.save(im_proxy, join(self.pipeline_dir, im_fname))
     #
     #     return ProcessResult(exit_code=0, message="[done] resampling to subject space correctly. \n")
     #
@@ -967,7 +1003,7 @@ class USLRLinear(Processor):
     #     sss_kwargs["suffix"] = "empty"
     #     sss_kwargs["datatype"] = "utils"
     #
-    #     root_dir = DIR_PIPELINES[self.pipeline_dir]
+    #     root_dir = self.pipeline_dir
     #     sss_filepath = join(
     #         root_dir, self.build_path({"subject": subject, **sss_kwargs})
     #     )
@@ -1014,8 +1050,8 @@ class USLRLinear(Processor):
     #         {"subject": subject, "suffix": "T1wetiv", "extension": "npy"}
     #     )
     #
-    #     os.makedirs(dirname(join(DIR_PIPELINES[self.pipeline_dir], etiv_path)), exist_ok=True)
-    #     np.save(join(DIR_PIPELINES[self.pipeline_dir], etiv_path), etiv)
+    #     os.makedirs(dirname(join(self.pipeline_dir, etiv_path)), exist_ok=True)
+    #     np.save(join(self.pipeline_dir, etiv_path), etiv)
     #
     #     return ProcessResult(exit_code=0, message="succeed")
 
@@ -1543,16 +1579,15 @@ class USLRDeformable(Processor,):
         """Return the display name of this pipeline."""
         return "Longitudinal:Deformable-Registration"
 
-    def _build_processor(self):
+    def _build_processor(self, **kwargs):
         """Extend the base processor for nonlinear registration outputs."""
-        super()._build_processor()
+        super()._build_processor(**kwargs)
         self.tmp_dir = join(self.tmp_dir, "long-lin-reg")
         create_dir(self.tmp_dir)
-        self.pipeline_dir = "nicgiprep-long"
         self.trajectory_ent = {
             "space": "subject",
             "task": "linfit",
-            "scope": self.pipeline_dir,
+            "scope": self.pipeline_name,
             "extension": ".nii.gz",
         }
 
@@ -1618,7 +1653,7 @@ class USLRDeformable(Processor,):
             filename_template = self.build_path(
                 {"suffix": "T1w", "subject": subject, **self.template_long_ent}
             )
-            if not exists(join(DIR_PIPELINES[self.pipeline_dir], filename_template)):
+            if not exists(join(self.pipeline_dir, filename_template)):
                 return ProcessResult(
                     exit_code=2,
                     message="[partly done] graph already solved; "
@@ -1642,7 +1677,7 @@ class USLRDeformable(Processor,):
                 return ProcessResult(
                     exit_code=0,
                     message="[done] subject already processed. Check the results in "
-                    "[..]/" + self.pipeline_dir + "/sub-" + subject + ".\n",
+                    + self.pipeline_dir + "/sub-" + subject + ".\n",
                 )
 
         else:
@@ -1878,17 +1913,17 @@ class USLRDeformable(Processor,):
         save_volume(
             im_template_arr,
             sss_proxy.affine,
-            join(DIR_PIPELINES[self.pipeline_dir], image_filename),
+            join(self.pipeline_dir, image_filename),
         )
         save_volume(
             seg_template_arr,
             sss_proxy.affine,
-            join(DIR_PIPELINES[self.pipeline_dir], seg_filename),
+            join(self.pipeline_dir, seg_filename),
         )
         save_volume(
             synthseg_template_arr,
             sss_proxy.affine,
-            join(DIR_PIPELINES[self.pipeline_dir], synthseg_filename),
+            join(self.pipeline_dir, synthseg_filename),
         )
 
     def _compute_mean_trajectories(
@@ -1961,7 +1996,7 @@ class USLRDeformable(Processor,):
         intercept_list = [linreg.intercept_.reshape(self.svf_shape + (3,))]
         results_vol = np.stack(intercept_list + coef_list, axis=-1)
         save_volume(
-            results_vol, svf_v2r, join(DIR_PIPELINES[self.pipeline_dir], svf_filename)
+            results_vol, svf_v2r, join(self.pipeline_dir, svf_filename)
         )
 
         svf = results_vol[..., 1]
@@ -1969,11 +2004,11 @@ class USLRDeformable(Processor,):
             svf = svf * 365.25
         flow = integrate_svf(svf, self.net_shape, scaling_factor=2, int_steps=7)
         save_volume(
-            flow, net_v2r, join(DIR_PIPELINES[self.pipeline_dir], flow_filename)
+            flow, net_v2r, join(self.pipeline_dir, flow_filename)
         )
 
         jac = compute_jacobian(flow)
-        save_volume(jac, net_v2r, join(DIR_PIPELINES[self.pipeline_dir], jac_filename))
+        save_volume(jac, net_v2r, join(self.pipeline_dir, jac_filename))
 
     def process_subject(
         self,
@@ -2054,7 +2089,7 @@ class USLRDeformable(Processor,):
                 filename = self.build_path(
                     {"subject": subject, "session": sess_id, **self.svf_long_ent}
                 )
-                filepath = join(DIR_PIPELINES["nicgiprep-long"], filename)
+                filepath = join(self.pipeline_dir, filename)
                 create_dir(dirname(filepath))
                 save_volume(T_latent[sess_id].astype("float32"), svf_v2r, path=filepath)
 

@@ -24,10 +24,9 @@ import pandas as pd
 from bids.layout import BIDSFile
 from scipy.ndimage import gaussian_filter
 from skimage.morphology import ball, binary_dilation
-from sympy.vector import Cross
 
 from nicgiprep.pipelines import CrossSectionalProcessor
-from setup import *
+from nicgiprep.config import *
 from nicgiprep.pipelines.base import Processor
 from nicgiprep.pipelines.cross_sectional import T1wSegmentationProcessor, T1wBiasCorrectionProcessor
 from nicgiprep.pipelines.longitudinal import USLRLinear
@@ -77,6 +76,9 @@ class MMProcessor(CrossSectionalProcessor):
     #: Modality elected as the session template.
     TEMPLATE_MODALITY = "T1w"
 
+    #: Derivatives name / pybids scope of the multimodal outputs.
+    PIPELINE_NAME = "nicgiprep-mm"
+
 
     def _build_processor(self, **kwargs) -> None:
         """Extend the base processor with multimodal entity templates.
@@ -92,12 +94,15 @@ class MMProcessor(CrossSectionalProcessor):
           per-modality images and masks resampled into the session space.
         - ``template_entities`` — entities for the session template.
         - ``net_v2r_entities`` — entities for the session-space ``v2r`` array.
+        - ``pipeline_cross_name`` / ``pipeline_cross_dir`` — derivatives name and
+          folder of the cross-sectional outputs.
 
         Parameters
         ----------
         **kwargs
-            Optional ``modalities`` (list of str) and ``template_modality``
-            (str) overrides, plus any keyword arguments forwarded to
+            Optional ``modalities`` (list of str), ``template_modality`` (str),
+            ``pipeline_cross_name`` (str) and ``pipeline_cross_dir`` (str)
+            overrides, plus any keyword arguments forwarded to
             :meth:`Processor._build_processor`.
 
         Returns
@@ -137,11 +142,9 @@ class MMProcessor(CrossSectionalProcessor):
         }
 
 
-        #: Derivatives directory key for the cross-sectional preprocessing outputs.
-        self.pipeline_cross_dir = "nicgiprep-cross" if 'pipeline-cross' not in kwargs else kwargs['pipeline-cross']
-
-        #: Derivatives directory key / pybids scope for the multimodal outputs.
-        self.pipeline_dir = "nicgiprep-mm"
+        #: Derivatives name / pybids scope and folder of the cross-sectional preprocessing outputs.
+        self.pipeline_cross_name = kwargs.get("pipeline_cross_name", "nicgiprep-cross")
+        self.pipeline_cross_dir = kwargs.get("pipeline_cross_dir") or self._get_pipeline_dir(self.pipeline_cross_name)
 
     def _name(self) -> str:
         """Return the display name of this pipeline."""
@@ -216,7 +219,7 @@ class MMProcessor(CrossSectionalProcessor):
             BIDS entity filters for the preprocessed modality image.
         """
         entities = {
-            "scope": self.pipeline_cross_dir,
+            "scope": self.pipeline_cross_name,
             "extension": ".nii.gz",
             "suffix": modality,
             "acquisition": [None, "orig"],
@@ -242,7 +245,7 @@ class MMProcessor(CrossSectionalProcessor):
             BIDS entity filters for the modality's SynthSeg segmentation.
         """
         return {
-            "scope": self.pipeline_cross_dir,
+            "scope": self.pipeline_cross_name,
             "extension": ".nii.gz",
             "suffix": self._seg_suffix(modality),
         }
@@ -371,7 +374,7 @@ class MultiModalSegmentationProcessor(MMProcessor, T1wSegmentationProcessor):
             One entry per modality that was selected for this session.
         """
         out_dir = join(
-            DIR_PIPELINES[self.pipeline_cross_dir],
+            self.pipeline_cross_dir,
             "sub-" + subject,
             "ses-" + session,
         )
@@ -446,27 +449,27 @@ class MultiModalSegmentationProcessor(MMProcessor, T1wSegmentationProcessor):
                 "ses-" + sess_id)
 
             cross_anat_dir = join(
-                DIR_PIPELINES[self.pipeline_cross_dir],
+                self.pipeline_cross_dir,
                 "sub-" + subject,
                 "ses-" + sess_id,
                 "anat",
             )
             cross_utils_dir = join(
-                DIR_PIPELINES[self.pipeline_cross_dir],
+                self.pipeline_cross_dir,
                 "sub-" + subject,
                 "ses-" + sess_id,
                 "utils",
             )
 
             mm_anat_dir = join(
-                DIR_PIPELINES[self.pipeline_dir],
+                self.pipeline_dir,
                 "sub-" + subject,
                 "ses-" + sess_id,
                 "anat",
             )
 
             mm_utils_dir = join(
-                DIR_PIPELINES[self.pipeline_dir],
+                self.pipeline_dir,
                 "sub-" + subject,
                 "ses-" + sess_id,
                 "utils",
@@ -623,7 +626,7 @@ class MultiModalBiasCorrectionProcessor(MMProcessor, T1wBiasCorrectionProcessor)
         for sess_id in tqdm.tqdm(sessions, leave=False, desc="Processing sessions"):
             # input segs
             synthseg_entities = copy.copy(self.seg_entities)
-            synthseg_entities["scope"] = [self.pipeline_dir]
+            synthseg_entities["scope"] = [self.pipeline_name]
             synthseg_entities["suffix"] = ["T1wsynthseg", "T2wsynthseg", "FLAIRsynthseg", 'PDsynthseg']
             synthseg_entities["space"] = [None]
             synthseg_entities["desc"] = [None]
@@ -635,14 +638,14 @@ class MultiModalBiasCorrectionProcessor(MMProcessor, T1wBiasCorrectionProcessor)
                 continue
 
             cross_utils = join(
-                DIR_PIPELINES[self.pipeline_cross_dir],
+                self.pipeline_cross_dir,
                 "sub-" + subject,
                 "ses-" + sess_id,
                 "utils",
             )
 
             mm_anat = join(
-                DIR_PIPELINES[self.pipeline_dir],
+                self.pipeline_dir,
                 "sub-" + subject,
                 "ses-" + sess_id,
                 "anat",
@@ -759,14 +762,14 @@ class MultiMRIProcessor(MMProcessor, USLRLinear):
 
         """
         sess_fpath = join(
-            DIR_PIPELINES[self.pipeline_dir],
+            self.pipeline_dir,
             "sub-" + subject,
             "sub-" + subject + "_sessions.tsv",
         )
 
         if exists(
             join(
-                DIR_PIPELINES[self.pipeline_dir],
+                self.pipeline_dir,
                 "sub-" + subject,
                 "sub-" + subject + "_sessions.tsv",
             )
@@ -777,7 +780,7 @@ class MultiMRIProcessor(MMProcessor, USLRLinear):
 
         else:
             os.makedirs(join(
-                DIR_PIPELINES[self.pipeline_dir],
+                self.pipeline_dir,
                 "sub-" + subject
             ), exist_ok=True)
 
@@ -790,7 +793,7 @@ class MultiMRIProcessor(MMProcessor, USLRLinear):
                 "index_image": []
             })
 
-        im_raw_ent = {"scope": "nicgiprep-mm", "extension": ".nii.gz", "suffix": ["T1w", "T2w", "PD", "FLAIR"],
+        im_raw_ent = {"scope": self.pipeline_name, "extension": ".nii.gz", "suffix": ["T1w", "T2w", "PD", "FLAIR"],
                       'space': None,  'datatype': 'anat'}
 
         for sess_id in sessions:
@@ -809,7 +812,7 @@ class MultiMRIProcessor(MMProcessor, USLRLinear):
                 im_ent = im_file.get_entities()
                 seg_ent = im_file.get_entities()
                 seg_ent["suffix"] = [im_ent["suffix"] + "dseg", im_ent["suffix"] + "dseg"]
-                seg_ent["scope"] =  "nicgiprep-mm"
+                seg_ent["scope"] = self.pipeline_name
                 if 'run' not in seg_ent.keys():
                     seg_ent["run"] = None # avoid reading the all runs if run is not in the filename
                 seg_files = self._get_data(**seg_ent)
@@ -930,7 +933,7 @@ class MultiMRIProcessor(MMProcessor, USLRLinear):
                 "space": "MNI",
                 "suffix": "aff",
                 "extension": ".npy",
-                "scope": self.pipeline_dir
+                "scope": self.pipeline_name
             }
             aff_MNI = self._get_data(**mni_aff_entities, verbose=False)
 
@@ -962,7 +965,7 @@ class MultiMRIProcessor(MMProcessor, USLRLinear):
                 return ProcessResult(
                     exit_code=0,
                     message="[done] session already processed. "
-                    "Check the results in [..]/" + self.pipeline_dir
+                    "Check the results in " + self.pipeline_dir
                     + "/sub-" + subject
                     + "/ses-" + str(session)
                     + ".\n",
@@ -1026,7 +1029,7 @@ class MultiMRIProcessor(MMProcessor, USLRLinear):
             affine_matrix = Tres[..., it_mod]
             T_cog = t_cog_d[idx_row]
 
-            output_filepath = join(DIR_PIPELINES[self.pipeline_dir], filename)
+            output_filepath = join(self.pipeline_dir, filename)
             create_dir(dirname(output_filepath))
             np.save(output_filepath, np.linalg.inv(T_cog) @ affine_matrix)
 
@@ -1121,7 +1124,7 @@ class MultiMRIProcessor(MMProcessor, USLRLinear):
         sss_kwargs["subject"] = sess_df["subject"].iloc[0]
         sss_kwargs["session"] = sess_df["session_id"].iloc[0]
 
-        root_dir = DIR_PIPELINES[self.pipeline_dir]
+        root_dir = self.pipeline_dir
         sss_filepath = join(root_dir, self.build_path(sss_kwargs))
 
         sss_kwargs["suffix"] = "T1wsynthseg"
@@ -1236,7 +1239,7 @@ class MultiMRIProcessor(MMProcessor, USLRLinear):
             im_proxy = nib.Nifti1Image(im_array, np.linalg.inv(aff) @ im_proxy.affine)
             im_proxy = vol_resample_fast(sss_proxy, im_proxy)
 
-            nib.save(im_proxy, join(DIR_PIPELINES[self.pipeline_dir], im_fname))
+            nib.save(im_proxy, join(self.pipeline_dir, im_fname))
 
 
         return ProcessResult(exit_code=4,
@@ -1283,7 +1286,7 @@ class MultiMRIProcessor(MMProcessor, USLRLinear):
             "extension": ".npy",
         }
         mni_aff_fname = self.build_path({**extra_kwargs, **mni_aff_entities})
-        mni_aff_fpath = join(DIR_PIPELINES[self.pipeline_dir], mni_aff_fname)
+        mni_aff_fpath = join(self.pipeline_dir, mni_aff_fname)
 
         # Load the session-space template segmentation.
         sss_kwargs = self.template_entities.copy()
