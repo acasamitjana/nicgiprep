@@ -1,7 +1,7 @@
 """Brain segmentation label dictionaries and lookup tables.
 
 This module loads SynthSeg, FreeSurfer aseg, and cortical parcellation labels
-from the repository ``data/`` directory and exposes them as module-level
+from the NicGiPrep data directory (see :mod:`nicgiprep.resources`) and exposes them as module-level
 constants.
 
 Constants
@@ -19,24 +19,19 @@ CSF_LABELS : list of int
 """
 
 import numpy as np
-from importlib.resources import files
+
+from nicgiprep.resources import LABELS_DIR
 
 # --- SuperSYNTH --- #
-path = files("data.labels_classes_priors").joinpath(  #HACK: removed nicgiprep.
-    "supersynth_segmentation_labels.npy"
-)
+path = LABELS_DIR / "supersynth_segmentation_labels.npy"
 supersynth_labels = np.load(path)
 SUPERSYNTH_LUT = {k: it_k for it_k, k in enumerate(np.unique(supersynth_labels))}
 
 # --- SynthSeg --- #
-path = files("data.labels_classes_priors").joinpath(
-    "synthseg_parcellation_labels.npy"
-)
+path = LABELS_DIR / "synthseg_parcellation_labels.npy"
 ctx_labels = np.load(path)
 
-path = files("data.labels_classes_priors").joinpath(
-    "synthseg_segmentation_labels.npy"
-)
+path = LABELS_DIR / "synthseg_segmentation_labels.npy"
 subcortical_labels = np.load(path)
 subcortical_labels = np.concatenate((subcortical_labels, [24]))
 
@@ -71,5 +66,5 @@ SYNTHSEG_GMM_ONTOLOGY = {
 
 CSF_LABELS = [24]
 
-labels_registration = files("data.labels_classes_priors").joinpath("label_list_registration.npy")  #HACK: modified name from labels_registration to current
+labels_registration = LABELS_DIR / "label_list_registration.npy"
 # labels_registration = np.load(path)

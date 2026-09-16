@@ -1,57 +1,79 @@
 [build-system]
-requires = ["setuptools>=82.0.1"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "nicgiprep"  # Or your chosen name (lowercase, no spaces)
+name = "nicgiprep"
 version = "0.1.0"
 authors = [
     {name="Adrià Casamitjana", email="adria.casamitjana@udg.edu"},
     {name="Agustín Cartaya Lathulerie", email="agustin.cartaya@udg.edu"},
     {name="Clara Lisazo", email="clara.lisazo@udg.edu"},
     {name="Rachika E. Hamadache", email="rachika.hamadache@udg.edu"},
-
 ]
-description = "Neuroimaging preprocessing pipeline for corss-sectional, multimodal and longituindal analyses."
+description = "Neuroimaging preprocessing pipeline for cross-sectional, multimodal and longitudinal analyses."
 readme = "README.md"
 license = "Apache-2.0"
-license-files = ["LICENSE*"]
 requires-python = ">=3.10"
 classifiers = [
     "Development Status :: 4 - Beta",
-    "Intended Audience :: Developers",
-    "Topic :: Software Development :: Medical Science applications",
-
+    "Intended Audience :: Science/Research",
     "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
     "Topic :: Scientific/Engineering :: Medical Science Apps.",
 ]
-# List your core dependencies here instead of a separate requirements.txt
+
+# Direct runtime dependencies (single source of truth — replaces requirements.txt).
+# Lower bounds are the versions of the reference environment (Python 3.10).
 dependencies = [
-    "numpy>=2.2.6",
-    "scipy>=1.15.3",
-    "matplotlib>=3.4.0", # For visualizing dwell positions
-    "seaborn>=0.13.2",
-    "scikit-image>=0.25.2",
-    "scikit-learn>=1.7.2",
-    "pillow>=12.1.1",
-    "pyyaml>=6.0"
+    "numpy>=1.26.4,<2",          # torch 2.2 wheels are built against NumPy 1.x
+    "scipy>=1.12",
+    "pandas>=2.2",
+    "nibabel>=5.2.1",
+    "scikit-image>=0.22",
+    "scikit-learn>=1.4.1",
+    "joblib>=1.3.2",
+    "tqdm>=4.66",
+    "pyyaml>=6.0",
+    "munkres>=1.1.4",
+    "h5py>=3.12",
+    "pybids>=0.16.4",
+    "surfa>=0.6.3",
+    "torch>=2.2.1",
+    "tensorflow>=2.18",
+    # SynthMorph backends, pinned to the commits used by the pipeline
+    "neurite @ git+https://github.com/adalca/neurite.git@40c6d0e277b12dc9dddb6e76f2dbdd373b7d22b1",
+    "voxelmorph @ git+https://github.com/voxelmorph/voxelmorph.git@375a1492bb8781cbbaf22f0ca2973e5121484f99",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest", "black"]
+dev = ["pytest", "black", "flake8"]
+tutorials = ["jupyter", "matplotlib>=3.8", "seaborn>=0.13.2"]
+docs = ["sphinx"]
 
 [project.urls]
 "Homepage" = "https://github.com/acasamitjana/nicgiprep"
 "Bug Tracker" = "https://github.com/acasamitjana/nicgiprep/issues"
 
-[tool.setuptools.packages.find]
-include = ["nicgiprep"]
-
 [project.scripts]
-nicgiprep-cross = "nicgiprep.scripts.cross_sectional_pipe:main"
-nicgiprep-long = "nicgiprep.scripts.longitudinal_pipe:main"
-nicgiprep-mm = "nicgiprep.scripts.multimodal_pipe:main"
+nicgiprep-cross = "nicgiprep.scripts.cross_sectional_pipeline:main"
+nicgiprep-long = "nicgiprep.scripts.longitudinal_pipeline:main"
+nicgiprep-mm = "nicgiprep.scripts.multimodal_pipeline:main"
 
+[tool.setuptools.packages.find]
+include = ["nicgiprep*"]
+
+# Static resources are currently read from <repo>/data (see nicgiprep/resources.py),
+# so only editable installs (`pip install -e .`) find them. Once data/ is moved to
+# nicgiprep/data/, the following makes them part of regular installs as well.
 [tool.setuptools.package-data]
-"nicgiprep.data.labels_classes_priors" = ["*.npy"]
-"nicgiprep.data.data_tutorial" = ["*"]
+"nicgiprep" = [
+    "data/atlas/*",
+    "data/config/*.json",
+    "data/labels_classes_priors/*.npy",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+filterwarnings = ["ignore::DeprecationWarning"]

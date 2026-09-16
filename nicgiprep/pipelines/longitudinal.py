@@ -24,7 +24,7 @@ import pandas as pd
 import surfa as sf
 
 
-from setup import *
+from nicgiprep.config import *
 from nicgiprep.pipelines.base import Processor, USLRLinear, USLRDeformable
 from nicgiprep.models import InstanceRigidModelLOG
 
@@ -55,7 +55,10 @@ class LongitudinalProcessor(Processor):
     images, and v2r arrays).
     """
 
-    def _build_processor(self) -> None:
+    #: Derivatives name / pybids scope of the pipeline outputs.
+    PIPELINE_NAME = "nicgiprep-long"
+
+    def _build_processor(self, **kwargs) -> None:
         """Extend the base processing entities with longitudinal entity definition.
 
         Adds the following attributes on top of those set by
@@ -69,7 +72,7 @@ class LongitudinalProcessor(Processor):
         - ``net_shape`` / ``svf_shape`` — default network and SVF spatial shapes.
         - ``net_v2r_ent`` / ``svf_v2r_ent`` — v2r affine file entities.
         """
-        super()._build_processor()
+        super()._build_processor(**kwargs)
         self.long_ent = {"space": "subject", "acquisition": "1", "extension": ".nii.gz"}
         self.aff_long_ent = {"desc": "raw2temp", "suffix": "aff", "extension": ".npy"}
         self.im_long_ent = {"suffix": "T1w", **self.long_ent}
@@ -95,8 +98,6 @@ class LongitudinalProcessor(Processor):
         self.svf_v2r_ent = {"desc": "svf", **self.v2r_ent}
 
         self.tmp_dir = join(self.tmp_dir, "long")
-
-        self.pipeline_dir = "nicgiprep-long"
 
     def _name(self) -> str:
         """Return the display name of this pipeline."""
@@ -124,14 +125,14 @@ class LongitudinalProcessor(Processor):
 
         """
         sess_fpath = join(
-            DIR_PIPELINES[self.pipeline_dir],
+            self.pipeline_dir,
             "sub-" + subject,
             "sub-" + subject + "_sessions.tsv",
         )
 
         if exists(
             join(
-                DIR_PIPELINES[self.pipeline_dir],
+                self.pipeline_dir,
                 "sub-" + subject,
                 "sub-" + subject + "_sessions.tsv",
             )
@@ -140,7 +141,7 @@ class LongitudinalProcessor(Processor):
 
         else:
             os.makedirs(join(
-                DIR_PIPELINES[self.pipeline_dir],
+                self.pipeline_dir,
                 "sub-" + subject,
             ))
 
@@ -335,12 +336,11 @@ class LinearLongitudinalRegistration(LongitudinalProcessor, USLRLinear):
         """Return the display name of this pipeline."""
         return "Longitudinal:Linear-Registration"
 
-    def _build_processor(self):
+    def _build_processor(self, **kwargs):
         """Extend the base processor with linear-registration output entities."""
-        super()._build_processor()
+        super()._build_processor(**kwargs)
         self.tmp_dir = join(self.tmp_dir, "long-lin-reg")
         create_dir(self.tmp_dir)
-        self.pipeline_dir = "nicgiprep-long"
 
     def _check_running_subject(
         self,
@@ -402,7 +402,7 @@ class LinearLongitudinalRegistration(LongitudinalProcessor, USLRLinear):
                 else:
                     return ProcessResult(
                         exit_code=0,
-                        message="[done] subject already processed. Check the results in [..]/"
+                        message="[done] subject already processed. Check the results in "
                         + self.pipeline_dir
                         + "/sub-"
                         + subject
@@ -633,7 +633,7 @@ class LinearLongitudinalRegistration(LongitudinalProcessor, USLRLinear):
             affine_matrix = t_res[..., it_sess_id]
             T_cog = t_cog_d[sess_id]
 
-            output_filepath = join(DIR_PIPELINES[self.pipeline_dir], filename)
+            output_filepath = join(self.pipeline_dir, filename)
             create_dir(dirname(output_filepath))
 
             np.save(output_filepath, np.linalg.inv(T_cog) @ affine_matrix)
@@ -726,7 +726,7 @@ class LinearLongitudinalRegistration(LongitudinalProcessor, USLRLinear):
         sss_kwargs["suffix"] = "empty"
         sss_kwargs["datatype"] = "utils"
 
-        root_dir = DIR_PIPELINES[self.pipeline_dir]
+        root_dir = self.pipeline_dir
         sss_filepath = join(
             root_dir, self.build_path({"subject": subject, **sss_kwargs})
         )
@@ -779,7 +779,7 @@ class LinearLongitudinalRegistration(LongitudinalProcessor, USLRLinear):
         sss_kwargs["suffix"] = "empty"
         sss_kwargs["datatype"] = "utils"
 
-        root_dir = DIR_PIPELINES[self.pipeline_dir]
+        root_dir = self.pipeline_dir
         sss_filepath = join(
             root_dir, self.build_path({"subject": subject, **sss_kwargs})
         )
@@ -824,7 +824,7 @@ class LinearLongitudinalRegistration(LongitudinalProcessor, USLRLinear):
             im_proxy = nib.Nifti1Image(im_array, np.linalg.inv(aff) @ im_proxy.affine)
             im_proxy = vol_resample_fast(sss_proxy, im_proxy)
 
-            nib.save(im_proxy, join(DIR_PIPELINES[self.pipeline_dir], im_fname))
+            nib.save(im_proxy, join(self.pipeline_dir, im_fname))
 
         return ProcessResult(exit_code=0, message="[done] resampling to subject space correctly. \n")
 
@@ -856,7 +856,7 @@ class LinearLongitudinalRegistration(LongitudinalProcessor, USLRLinear):
         sss_kwargs["suffix"] = "empty"
         sss_kwargs["datatype"] = "utils"
 
-        root_dir = DIR_PIPELINES[self.pipeline_dir]
+        root_dir = self.pipeline_dir
         sss_filepath = join(
             root_dir, self.build_path({"subject": subject, **sss_kwargs})
         )
@@ -903,8 +903,8 @@ class LinearLongitudinalRegistration(LongitudinalProcessor, USLRLinear):
             {"subject": subject, "suffix": "T1wetiv", "extension": "npy"}
         )
 
-        os.makedirs(dirname(join(DIR_PIPELINES[self.pipeline_dir], etiv_path)), exist_ok=True)
-        np.save(join(DIR_PIPELINES[self.pipeline_dir], etiv_path), etiv)
+        os.makedirs(dirname(join(self.pipeline_dir, etiv_path)), exist_ok=True)
+        np.save(join(self.pipeline_dir, etiv_path), etiv)
 
         return ProcessResult(exit_code=0, message="succeed")
 
@@ -1501,16 +1501,15 @@ class DeformableLongitudinalRegistration(LongitudinalProcessor, USLRDeformable):
         """Return the display name of this pipeline."""
         return "Longitudinal:Deformable-Registration"
 
-    def _build_processor(self):
+    def _build_processor(self, **kwargs):
         """Extend the base processor for nonlinear registration outputs."""
-        super()._build_processor()
+        super()._build_processor(**kwargs)
         self.tmp_dir = join(self.tmp_dir, "long-lin-reg")
         create_dir(self.tmp_dir)
-        self.pipeline_dir = "nicgiprep-long"
         self.trajectory_ent = {
             "space": "subject",
             "task": "linfit",
-            "scope": self.pipeline_dir,
+            "scope": self.pipeline_name,
             "extension": ".nii.gz",
         }
 
@@ -1576,7 +1575,7 @@ class DeformableLongitudinalRegistration(LongitudinalProcessor, USLRDeformable):
             filename_template = self.build_path(
                 {"suffix": "T1w", "subject": subject, **self.template_long_ent}
             )
-            if not exists(join(DIR_PIPELINES[self.pipeline_dir], filename_template)):
+            if not exists(join(self.pipeline_dir, filename_template)):
                 return ProcessResult(
                     exit_code=2,
                     message="[partly done] graph already solved; "
@@ -1600,7 +1599,7 @@ class DeformableLongitudinalRegistration(LongitudinalProcessor, USLRDeformable):
                 return ProcessResult(
                     exit_code=0,
                     message="[done] subject already processed. Check the results in "
-                    "[..]/" + self.pipeline_dir + "/sub-" + subject + ".\n",
+                    + self.pipeline_dir + "/sub-" + subject + ".\n",
                 )
 
         else:
@@ -1836,17 +1835,17 @@ class DeformableLongitudinalRegistration(LongitudinalProcessor, USLRDeformable):
         save_volume(
             im_template_arr,
             sss_proxy.affine,
-            join(DIR_PIPELINES[self.pipeline_dir], image_filename),
+            join(self.pipeline_dir, image_filename),
         )
         save_volume(
             seg_template_arr,
             sss_proxy.affine,
-            join(DIR_PIPELINES[self.pipeline_dir], seg_filename),
+            join(self.pipeline_dir, seg_filename),
         )
         save_volume(
             synthseg_template_arr,
             sss_proxy.affine,
-            join(DIR_PIPELINES[self.pipeline_dir], synthseg_filename),
+            join(self.pipeline_dir, synthseg_filename),
         )
 
     def _compute_mean_trajectories(
@@ -1920,7 +1919,7 @@ class DeformableLongitudinalRegistration(LongitudinalProcessor, USLRDeformable):
         intercept_list = [linreg.intercept_.reshape(self.svf_shape + (3,))]
         results_vol = np.stack(intercept_list + coef_list, axis=-1)
         save_volume(
-            results_vol, svf_v2r, join(DIR_PIPELINES[self.pipeline_dir], svf_filename)
+            results_vol, svf_v2r, join(self.pipeline_dir, svf_filename)
         )
 
         svf = results_vol[..., 1]
@@ -1928,11 +1927,11 @@ class DeformableLongitudinalRegistration(LongitudinalProcessor, USLRDeformable):
             svf = svf * 365.25
         flow = integrate_svf(svf, self.net_shape, scaling_factor=2, int_steps=7)
         save_volume(
-            flow, net_v2r, join(DIR_PIPELINES[self.pipeline_dir], flow_filename)
+            flow, net_v2r, join(self.pipeline_dir, flow_filename)
         )
 
         jac = compute_jacobian(flow)
-        save_volume(jac, net_v2r, join(DIR_PIPELINES[self.pipeline_dir], jac_filename))
+        save_volume(jac, net_v2r, join(self.pipeline_dir, jac_filename))
 
     def process_subject(
         self,
@@ -2012,7 +2011,7 @@ class DeformableLongitudinalRegistration(LongitudinalProcessor, USLRDeformable):
                 filename = self.build_path(
                     {"subject": subject, "session": sess_id, **self.svf_long_ent}
                 )
-                filepath = join(DIR_PIPELINES["nicgiprep-long"], filename)
+                filepath = join(self.pipeline_dir, filename)
                 create_dir(dirname(filepath))
                 save_volume(T_latent[sess_id].astype("float32"), svf_v2r, path=filepath)
 
@@ -2060,13 +2059,12 @@ class LongitudinalRegistration(LongitudinalProcessor):
             bids_loader=bids_loader, subject_list=subject_list, **kwargs
         )
 
-    def _build_processor(self):
+    def _build_processor(self, **kwargs):
         """Extend the base processor with longitudinal registration tmp and pipeline directories."""
-        super()._build_processor()
+        super()._build_processor(**kwargs)
 
         self.tmp_dir = join(self.tmp_dir, "long-reg")
         create_dir(self.tmp_dir)
-        self.pipeline_dir = "nicgiprep-long"
 
     def _update_subject_layout(self, subject: str) -> None:
         """Rebuild the layout and propagate it to ``linear_reg``/``nonlinear_reg``.
@@ -2134,7 +2132,7 @@ class LongitudinalRegistration(LongitudinalProcessor):
         aff_MNI = getM(
             centroid_ref[:, ok_ref > 0], centroid_flo[:, ok_ref > 0], use_L1=False
         )
-        np.save(join(DIR_PIPELINES[self.pipeline_dir], aff_fname), aff_MNI)
+        np.save(join(self.pipeline_dir, aff_fname), aff_MNI)
 
 
         mni_proxy = nib.load(MNI_TEMPLATE)
@@ -2143,10 +2141,10 @@ class LongitudinalRegistration(LongitudinalProcessor):
             extra_kwargs = {"subject": subject, "session": sess_id}
             aff_file = self._get_data(**{**extra_kwargs, **self.aff_long_ent})
             im_fname = self.build_path(
-                {"session": sess_id, "suffix": "T1w", "extension": ".nii.gz", 'scope': self.pipeline_dir, **mni_ent}
+                {"session": sess_id, "suffix": "T1w", "extension": ".nii.gz", 'scope': self.pipeline_name, **mni_ent}
             )
 
-            if exists(join(DIR_PIPELINES[self.pipeline_dir], im_fname)):
+            if exists(join(self.pipeline_dir, im_fname)):
                 continue
 
             if aff_file is None:
@@ -2179,7 +2177,7 @@ class LongitudinalRegistration(LongitudinalProcessor):
             )
             im_proxy = vol_resample_fast(mni_proxy, im_proxy)
 
-            nib.save(im_proxy, join(DIR_PIPELINES[self.pipeline_dir], im_fname))
+            nib.save(im_proxy, join(self.pipeline_dir, im_fname))
 
         return ProcessResult(exit_code=0, message="succeed")
 
@@ -2234,7 +2232,7 @@ class LongitudinalRegistration(LongitudinalProcessor):
         if (
                 self._get_data(
                     **{"subject": subject, "space": "MNI", "suffix": "T1w", "extension": ".nii.gz",
-                       'scope': self.pipeline_dir},
+                       'scope': self.pipeline_name},
                     curr_len=len(sess_df),
                     verbose=False
                 )
