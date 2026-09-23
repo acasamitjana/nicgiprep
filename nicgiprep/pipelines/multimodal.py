@@ -33,7 +33,6 @@ from nicgiprep.pipelines.longitudinal import USLRLinear
 from nicgiprep.utils.io_utils import create_dir, save_volume, remove_dir, ProcessResult
 from nicgiprep.utils.def_utils import (
     vol_resample_fast,
-    network_space,
     create_empty_template,
     getM,
 )

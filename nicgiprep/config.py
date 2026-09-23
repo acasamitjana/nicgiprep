@@ -58,14 +58,6 @@ BIDS_PATH_PATTERN = [
 ]
 
 
-# ------------ #
-# TF variables #
-# ------------ #
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
-if "NEURITE_BACKEND" not in os.environ:
-    os.environ["NEURITE_BACKEND"] = "tensorflow"
-
-
 # ---------------------- #
 # Project data structure #
 # ---------------------- #

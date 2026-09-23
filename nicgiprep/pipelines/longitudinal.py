@@ -21,7 +21,6 @@ from sklearn.linear_model import LinearRegression
 import numpy as np
 import nibabel as nib
 import pandas as pd
-import surfa as sf
 
 
 from nicgiprep.config import *
@@ -31,10 +30,9 @@ from nicgiprep.models import InstanceRigidModelLOG
 from nicgiprep.utils.label_utils import labels_registration
 from nicgiprep.utils.preprocessing_utils import *
 from nicgiprep.utils.io_utils import create_dir, save_volume, ProcessResult
-from nicgiprep.utils.synthmorph_utils import synthmorph_register, integrate_svf
+from nicgiprep.utils.fireants_utils import fireants_register, integrate_svf
 from nicgiprep.utils.def_utils import (
     vol_resample_fast,
-    network_space,
     create_empty_template,
     compute_jacobian,
     getM,
@@ -69,8 +67,13 @@ class LongitudinalProcessor(Processor):
         - ``mask_long_ent`` — entities for brain masks in USLR space.
         - ``svf_long_ent`` — entities for nonlinear SVF graph files.
         - ``template_long_ent`` — entities for the linear template.
-        - ``net_shape`` / ``svf_shape`` — default network and SVF spatial shapes.
         - ``net_v2r_ent`` / ``svf_v2r_ent`` — v2r affine file entities.
+
+        Network-space and SVF spatial shapes are no longer fixed constants:
+        the subject-space template is sized to each subject's own bounding
+        box (see :meth:`LinearLongitudinalRegistration._create_subject_space`),
+        so callers read the actual shape via :meth:`_get_net_shape` /
+        :meth:`_get_svf_shape`.
         """
         super()._build_processor(**kwargs)
         self.long_ent = {"space": "subject", "acquisition": "1", "extension": ".nii.gz"}
@@ -84,9 +87,6 @@ class LongitudinalProcessor(Processor):
             "datatype": "utils",
         }
         self.template_long_ent = {"desc": "template", "suffix": "T1w", **self.long_ent}
-
-        self.net_shape = (192, 192, 192)
-        self.svf_shape = (96, 96, 96)
 
         self.v2r_ent = {
             "datatype": "utils",
@@ -324,6 +324,53 @@ class LongitudinalProcessor(Processor):
         im_file = files[idx]
 
         return im_file
+
+    def _get_net_shape(self, subject: str) -> tuple[int, ...]:
+        """Return a subject's network-space spatial shape, read from disk.
+
+        The subject-space template is sized to that subject's own bounding
+        box (see :meth:`LinearLongitudinalRegistration._create_subject_space`),
+        so the shape is not a fixed constant and must be read back from the
+        saved "empty" template rather than assumed.
+
+        Parameters
+        ----------
+        subject : str
+            Subject ID.
+
+        Returns
+        -------
+        tuple of int
+            Spatial shape ``(X, Y, Z)`` of the subject's network-space template.
+        """
+        sss_kwargs = self.template_long_ent.copy()
+        sss_kwargs["subject"] = subject
+        sss_kwargs["suffix"] = "empty"
+        sss_kwargs["datatype"] = "utils"
+        sss_file = self._get_data(**sss_kwargs)
+        return nib.load(sss_file.path).shape
+
+    def _get_svf_shape(
+        self, subject: str, net_shape: Optional[tuple[int, ...]] = None
+    ) -> tuple[int, ...]:
+        """Return a subject's SVF-grid spatial shape (half the network-space shape).
+
+        Parameters
+        ----------
+        subject : str
+            Subject ID.
+        net_shape : tuple of int, optional
+            Pre-computed network-space shape, to avoid a redundant disk read.
+            Read via :meth:`_get_net_shape` if ``None``.
+
+        Returns
+        -------
+        tuple of int
+            Spatial shape ``(X, Y, Z)`` of the subject's SVF grid.
+        """
+        if net_shape is None:
+            net_shape = self._get_net_shape(subject)
+        return tuple(int(np.floor(s / 2)) for s in net_shape)
 
 class LinearLongitudinalRegistration(LongitudinalProcessor, USLRLinear):
     """Rigid longitudinal registration via the USLR spanning-tree algorithm.
@@ -646,12 +693,17 @@ class LinearLongitudinalRegistration(LongitudinalProcessor, USLRLinear):
     def _create_subject_space(
         self, subject: str, sess_df: pd.DataFrame
     ) -> ProcessResult | None:
-        """Build a 1 mm isotropic network-space template for the subject.
+        """Build a 1 mm isotropic subject-space template for the subject.
 
-        Computes an average bounding box from all timepoints' brain masks,
-        defines a network space (LIA, 1 mm, 192³), resamples each session's
-        image and segmentation there, takes the median image and majority-vote
-        segmentation, and saves everything to ``uslr-lin``.
+        Computes an average bounding box from all timepoints' brain masks
+        (:func:`~nicgiprep.utils.def_utils.create_empty_template`) and uses it
+        directly as the subject space -- no further reorientation/recentering
+        into a fixed grid is applied, since that step previously existed only
+        to match the canonical "network space" expected by mri_synthmorph, and
+        registration is now performed by FireANTs directly on this grid.
+        Resamples each session's image and segmentation there, takes the
+        median image and majority-vote segmentation, and saves everything to
+        ``uslr-lin``.
 
         Parameters
         ----------
@@ -700,21 +752,10 @@ class LinearLongitudinalRegistration(LongitudinalProcessor, USLRLinear):
         _, template_v2r, template_size = create_empty_template(
             masks_dilated, margin_bb=5
         )
-        save_volume(
-            np.zeros(template_size),
-            template_v2r,
-            join(self.tmp_dir, subject + "_template.nii.gz"),
-        )
 
-        # move subject space to network space.
-        # this is necessary because mri_synthmorph does not output the SVF files needed in this project.
-        # thus, we already initialize subject space in the "network space" so that the longitudinal trajectories
-        # already lie in the subject space.
-        template = sf.load_volume(join(self.tmp_dir, subject + "_template.nii.gz"))
-        net2vox, vox2net, net_v2r = network_space(
-            template, shape=self.net_shape, center=template
-        )
-        svf_v2r = net_v2r.copy()
+        # SVF grid: half the resolution of the subject-space template, with the
+        # affine recentred so voxel centres stay aligned after doubling voxel size.
+        svf_v2r = template_v2r.copy()
         for c in range(3):
             svf_v2r[:-1, c] = svf_v2r[:-1, c] / 0.5
         svf_v2r[:-1, -1] = svf_v2r[:-1, -1] - np.matmul(
@@ -738,15 +779,13 @@ class LinearLongitudinalRegistration(LongitudinalProcessor, USLRLinear):
         )
 
         os.makedirs(dirname(sss_v2r_filepath), exist_ok=True)
-        np.save(sss_v2r_filepath, net_v2r)
+        np.save(sss_v2r_filepath, template_v2r)
 
         os.makedirs(dirname(svf_v2r_filepath), exist_ok=True)
         np.save(svf_v2r_filepath, svf_v2r)
 
         os.makedirs(dirname(sss_filepath), exist_ok=True)
-        save_volume(np.zeros(self.net_shape), net_v2r, sss_filepath)
-
-        subprocess.call(["rm", "-rf", join(self.tmp_dir, subject + "_template.nii.gz")])
+        save_volume(np.zeros(template_size), template_v2r, sss_filepath)
 
         return ProcessResult(
             exit_code=0,
@@ -866,7 +905,7 @@ class LinearLongitudinalRegistration(LongitudinalProcessor, USLRLinear):
             )
 
         sss_proxy = nib.load(sss_filepath)
-        template_mask = np.zeros(self.net_shape)
+        template_mask = np.zeros(sss_proxy.shape)
         for sess_id, sess_files in sess_df.iterrows():
             extra_kwargs = {"subject": subject, "session": sess_id}
             aff_file = self._get_data(**{**extra_kwargs, **self.aff_long_ent})
@@ -1220,7 +1259,7 @@ class DeformableLongitudinalRegistration(LongitudinalProcessor, USLRDeformable):
     """Nonlinear longitudinal registration via BCH-approximated USLR.
 
     Estimates per-timepoint SVFs by solving a spanning-tree problem over
-    pairwise SynthMorph deformation fields using L1 or L2 regression on
+    pairwise FireANTs deformation fields using L1 or L2 regression on
     a control-point grid.
     """
 
@@ -1573,7 +1612,7 @@ class DeformableLongitudinalRegistration(LongitudinalProcessor, USLRDeformable):
         ):
 
             filename_template = self.build_path(
-                {"suffix": "T1w", "subject": subject, **self.template_long_ent}
+                {**self.template_long_ent, "suffix": "T1w", "subject": subject}
             )
             if not exists(join(self.pipeline_dir, filename_template)):
                 return ProcessResult(
@@ -1612,7 +1651,7 @@ class DeformableLongitudinalRegistration(LongitudinalProcessor, USLRDeformable):
         def_dir: str,
         force_flag: bool = False,
     ) -> ProcessResult | None:
-        """Register all pairs of timepoints with SynthMorph and save the SVFs.
+        """Register all pairs of timepoints with FireANTs and save the SVFs.
 
         Parameters
         ----------
@@ -1629,6 +1668,7 @@ class DeformableLongitudinalRegistration(LongitudinalProcessor, USLRDeformable):
         svf_v2r = np.load(
             self._get_data(**{"subject": subject, **self.svf_v2r_ent}).path
         )
+        svf_shape = self._get_svf_shape(subject)
         for sess_ref, sess_flo in itertools.permutations(session_list, 2):
             output_filepath = join(
                 def_dir, str(sess_ref) + "_to_" + str(sess_flo) + ".nii.gz"
@@ -1647,16 +1687,18 @@ class DeformableLongitudinalRegistration(LongitudinalProcessor, USLRDeformable):
             if imref_file is None or imflo_file is None:
                 continue
 
-            fw_svf = synthmorph_register(imref_file, imflo_file)
-            if fw_svf is None:
+            proxysvf = fireants_register(imref_file, imflo_file)
+            if proxysvf is None:
                 return ProcessResult(
                     exit_code=-1, message="[error] deformable registration has failed."
                 )
+
             else:
-                save_volume(fw_svf, svf_v2r, output_filepath)
+                nib.save(proxysvf, output_filepath)
 
     def _solve_graph(
         self,
+        subject: str,
         session_list: list[str],
         def_dir: str,
         cost: Literal["bch-l1", "bch-l2"] = "bch-l2",
@@ -1665,6 +1707,8 @@ class DeformableLongitudinalRegistration(LongitudinalProcessor, USLRDeformable):
 
         Parameters
         ----------
+        subject : str
+            Subject ID.
         session_list : list of str
             Session IDs to include,
         def_dir : str
@@ -1680,7 +1724,7 @@ class DeformableLongitudinalRegistration(LongitudinalProcessor, USLRDeformable):
             shape ``(*svf_shape, 3)``.
         """
         R, M, W, NK = USLRDeformable.init_st2(
-            session_list, def_dir, self.svf_shape, se=None
+            session_list, def_dir, self._get_svf_shape(subject), se=None
         )
 
         if cost == "bch-l2":
@@ -1726,13 +1770,13 @@ class DeformableLongitudinalRegistration(LongitudinalProcessor, USLRDeformable):
 
         # build path template: image, mask, seg
         image_filename = self.build_path(
-            {"suffix": "T1w", "subject": subject, **self.template_long_ent}
+            {**self.template_long_ent, "suffix": "T1w", "subject": subject}
         )
         seg_filename = self.build_path(
-            {"suffix": "T1wdseg", "subject": subject, **self.template_long_ent}
+            {**self.template_long_ent, "suffix": "T1wdseg", "subject": subject, }
         )
         synthseg_filename = self.build_path(
-            {"suffix": "T1wsynthseg", "subject": subject, **self.template_long_ent}
+            {**self.template_long_ent, "suffix": "T1wsynthseg", "subject": subject, }
         )
         # compute template: image, mask, seg
         image_list = []
@@ -1760,12 +1804,14 @@ class DeformableLongitudinalRegistration(LongitudinalProcessor, USLRDeformable):
             synthseg_proxy = nib.load(synthseg_file)
             aff_arr = np.load(aff_file)
             svf_proxy = nib.load(svf_file)
-            flow_arr = integrate_svf(
-                np.array(svf_proxy.dataobj),
-                self.net_shape,
+
+            flow_arr, _ = integrate_svf(
+                sss_proxy,
+                svf_proxy,
                 scaling_factor=2,
                 int_steps=7,
             )
+
             flow_proxy = nib.Nifti1Image(flow_arr, affine=sss_proxy.affine)
 
             # Image
@@ -1864,7 +1910,6 @@ class DeformableLongitudinalRegistration(LongitudinalProcessor, USLRDeformable):
         session_list : list of str
             Session IDs to include
         """
-        # pdb.set_trace()
         linreg = LinearRegression()
         time_list = self._get_session_time(subject, session_list)
 
@@ -1889,6 +1934,8 @@ class DeformableLongitudinalRegistration(LongitudinalProcessor, USLRDeformable):
 
         net_v2r = np.load(net_v2r_file.path)
         svf_v2r = np.load(svf_v2r_file.path)
+        net_shape = self._get_net_shape(subject)
+        svf_shape = self._get_svf_shape(subject, net_shape)
 
         svf_list = []
         features_list = []
@@ -1913,10 +1960,10 @@ class DeformableLongitudinalRegistration(LongitudinalProcessor, USLRDeformable):
         linreg.fit(X, Y)
 
         coef_list = [
-            linreg.coef_[:, it_f].reshape(self.svf_shape + (3,))
+            linreg.coef_[:, it_f].reshape(svf_shape + (3,))
             for it_f in range(len(features_list[0]))
         ]
-        intercept_list = [linreg.intercept_.reshape(self.svf_shape + (3,))]
+        intercept_list = [linreg.intercept_.reshape(svf_shape + (3,))]
         results_vol = np.stack(intercept_list + coef_list, axis=-1)
         save_volume(
             results_vol, svf_v2r, join(self.pipeline_dir, svf_filename)
@@ -1925,7 +1972,10 @@ class DeformableLongitudinalRegistration(LongitudinalProcessor, USLRDeformable):
         svf = results_vol[..., 1]
         if max(time_list.values()) - min(time_list.values()) > 30:
             svf = svf * 365.25
-        flow = integrate_svf(svf, self.net_shape, scaling_factor=2, int_steps=7)
+
+        flow, _ = integrate_svf(nib.Nifti1Image(np.zeros(net_shape), net_v2r),
+                                nib.Nifti1Image(svf, svf_v2r),
+                                scaling_factor=2, int_steps=7)
         save_volume(
             flow, net_v2r, join(self.pipeline_dir, flow_filename)
         )
@@ -1942,7 +1992,7 @@ class DeformableLongitudinalRegistration(LongitudinalProcessor, USLRDeformable):
     ) -> ProcessResult:
         """Run the full nonlinear USLR pipeline for one subject.
 
-        Orchestrates: SVF graph initialisation (pairwise SynthMorph),
+        Orchestrates: SVF graph initialisation (pairwise FireANTs),
         spanning-tree solve, template construction, mean SVF fitting,
         and optional MNI registration. Skips completed steps.
 
@@ -2006,7 +2056,7 @@ class DeformableLongitudinalRegistration(LongitudinalProcessor, USLRDeformable):
             self._update_subject_layout(subject)
 
             # solve spanning tree
-            T_latent = self._solve_graph(session_list, def_dir, cost)
+            T_latent = self._solve_graph(subject, session_list, def_dir, cost)
             for sess_id in sess_df.index:
                 filename = self.build_path(
                     {"subject": subject, "session": sess_id, **self.svf_long_ent}

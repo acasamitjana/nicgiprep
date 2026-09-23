@@ -4,8 +4,9 @@ Base Processing pipeline schematic for neuroimage preprocessing.
 Provides base classe that implements basic and necessary functions
 """
 import pdb
+import re
 import traceback
-from typing import Optional, Union, Literal
+from typing import Optional, Union, Literal, List
 from os.path import join, exists, dirname
 from joblib import delayed, Parallel
 import itertools
@@ -20,12 +21,20 @@ from skimage.morphology import binary_dilation
 from bids.layout import BIDSLayout, BIDSLayoutIndexer, BIDSFile, parse_file_entities
 from scipy.optimize import linprog
 
+try:
+    # Newer pybids only merges DEFAULT_LOCATIONS_TO_IGNORE into the indexer's
+    # ignore list when ignore=None, so a custom ignore pattern must include it
+    # explicitly to keep excluding code/models/sourcedata/stimuli.
+    from bids.layout.validation import DEFAULT_LOCATIONS_TO_IGNORE
+except ImportError:
+    DEFAULT_LOCATIONS_TO_IGNORE = ()
+
 from nicgiprep.config import *
 from nicgiprep.utils.log_utils import LogBIDSLoader
 from nicgiprep.utils.label_utils import SUPERSYNTH_LUT, SYNTHSEG_APARC_LUT, labels_registration
 from nicgiprep.utils.io_utils import create_dir, save_volume, ProcessResult
 from nicgiprep.models import InstanceRigidModelLOG
-from nicgiprep.utils.synthmorph_utils import synthmorph_register, integrate_svf
+from nicgiprep.utils.fireants_utils import fireants_register, integrate_svf
 from nicgiprep.utils.fn_utils import (
     one_hot_encoding,
     compute_centroids_ras,
@@ -255,7 +264,7 @@ class Processor(object):
         curr_len: Optional[int] = None,
         verbose: bool = True,
         **kwargs
-    ) -> list[BIDSFile]:
+    ) -> BIDSFile|List[BIDSFile]:
         """Query the BIDS layout for a single file matching the given entities.
 
         Parameters
@@ -348,7 +357,10 @@ class Processor(object):
         derivatives_dirs = [der.root for der in self.bids_loader.derivatives.values()]
 
         indexer = BIDSLayoutIndexer(
-            validate=False, ignore="sub-(?!" + subject + ")(.*)$", index_metadata=False
+            validate=False,
+            ignore=[re.compile(r"^/sub-(?!" + subject + r")(.*)$")]
+            + list(DEFAULT_LOCATIONS_TO_IGNORE),
+            index_metadata=False,
         )
         bids_kwargs = {
             "validate": False,
@@ -1294,7 +1306,7 @@ class USLRLinear(Processor):
         return T
 
 
-class USLRDeformable(Processor,):
+class USLRDeformable(Processor):
     """Nonlinear longitudinal registration via BCH-approximated USLR.
 
     Estimates per-timepoint SVFs by solving a spanning-tree problem over
@@ -1683,6 +1695,48 @@ class USLRDeformable(Processor,):
         else:
             return ProcessResult(exit_code=1, message="Subject needs to be processed")
 
+    @NotImplementedError
+    def _get_net_shape(self, subject: str) -> tuple[int, ...]:
+        """Return a subject's network-space spatial shape, read from disk.
+
+        The subject-space template is sized to that subject's own bounding
+        box (see :meth:`LinearLongitudinalRegistration._create_subject_space`),
+        so the shape is not a fixed constant and must be read back from the
+        saved "empty" template rather than assumed.
+
+        Parameters
+        ----------
+        subject : str
+            Subject ID.
+
+        Returns
+        -------
+        tuple of int
+            Spatial shape ``(X, Y, Z)`` of the subject's network-space template.
+        """
+        return ()
+
+    @NotImplementedError
+    def _get_svf_shape(
+            self, subject: str, net_shape: Optional[tuple[int, ...]] = None
+    ) -> tuple[int, ...]:
+        """Return a subject's SVF-grid spatial shape (half the network-space shape).
+
+        Parameters
+        ----------
+        subject : str
+            Subject ID.
+        net_shape : tuple of int, optional
+            Pre-computed network-space shape, to avoid a redundant disk read.
+            Read via :meth:`_get_net_shape` if ``None``.
+
+        Returns
+        -------
+        tuple of int
+            Spatial shape ``(X, Y, Z)`` of the subject's SVF grid.
+        """
+        return ()
+
     def _init_graph(
         self,
         subject: str,
@@ -1707,6 +1761,7 @@ class USLRDeformable(Processor,):
         svf_v2r = np.load(
             self._get_data(**{"subject": subject, **self.svf_v2r_ent}).path
         )
+        svf_shape = self._get_svf_shape(subject)
         for sess_ref, sess_flo in itertools.permutations(session_list, 2):
             output_filepath = join(
                 def_dir, str(sess_ref) + "_to_" + str(sess_flo) + ".nii.gz"
@@ -1725,7 +1780,7 @@ class USLRDeformable(Processor,):
             if imref_file is None or imflo_file is None:
                 continue
 
-            fw_svf = synthmorph_register(imref_file, imflo_file)
+            fw_svf = fireants_register(imref_file, imflo_file, svf_shape, svf_v2r)
             if fw_svf is None:
                 return ProcessResult(
                     exit_code=-1, message="[error] deformable registration has failed."
@@ -1735,6 +1790,7 @@ class USLRDeformable(Processor,):
 
     def _solve_graph(
         self,
+        subject: str,
         session_list: list[str],
         def_dir: str,
         cost: Literal["bch-l1", "bch-l2"] = "bch-l2",
@@ -1743,6 +1799,8 @@ class USLRDeformable(Processor,):
 
         Parameters
         ----------
+        subject : str
+            Subject ID.
         session_list : list of str
             Session IDs to include,
         def_dir : str
@@ -1758,7 +1816,7 @@ class USLRDeformable(Processor,):
             shape ``(*svf_shape, 3)``.
         """
         R, M, W, NK = USLRDeformable.init_st2(
-            session_list, def_dir, self.svf_shape, se=None
+            session_list, def_dir, self._get_svf_shape(subject), se=None
         )
 
         if cost == "bch-l2":
@@ -1840,7 +1898,7 @@ class USLRDeformable(Processor,):
             svf_proxy = nib.load(svf_file)
             flow_arr = integrate_svf(
                 np.array(svf_proxy.dataobj),
-                self.net_shape,
+                sss_proxy.shape,
                 scaling_factor=2,
                 int_steps=7,
             )
@@ -1966,6 +2024,8 @@ class USLRDeformable(Processor,):
 
         net_v2r = np.load(net_v2r_file.path)
         svf_v2r = np.load(svf_v2r_file.path)
+        net_shape = self._get_net_shape(subject)
+        svf_shape = self._get_svf_shape(subject, net_shape)
 
         svf_list = []
         features_list = []
@@ -1990,10 +2050,10 @@ class USLRDeformable(Processor,):
         linreg.fit(X, Y)
 
         coef_list = [
-            linreg.coef_[:, it_f].reshape(self.svf_shape + (3,))
+            linreg.coef_[:, it_f].reshape(svf_shape + (3,))
             for it_f in range(len(features_list[0]))
         ]
-        intercept_list = [linreg.intercept_.reshape(self.svf_shape + (3,))]
+        intercept_list = [linreg.intercept_.reshape(svf_shape + (3,))]
         results_vol = np.stack(intercept_list + coef_list, axis=-1)
         save_volume(
             results_vol, svf_v2r, join(self.pipeline_dir, svf_filename)
@@ -2002,7 +2062,7 @@ class USLRDeformable(Processor,):
         svf = results_vol[..., 1]
         if max(time_list.values()) - min(time_list.values()) > 30:
             svf = svf * 365.25
-        flow = integrate_svf(svf, self.net_shape, scaling_factor=2, int_steps=7)
+        flow = integrate_svf(svf, net_shape, scaling_factor=2, int_steps=7)
         save_volume(
             flow, net_v2r, join(self.pipeline_dir, flow_filename)
         )
@@ -2084,7 +2144,7 @@ class USLRDeformable(Processor,):
             self._update_subject_layout(subject)
 
             # solve spanning tree
-            T_latent = self._solve_graph(session_list, def_dir, cost)
+            T_latent = self._solve_graph(subject, session_list, def_dir, cost)
             for sess_id in sess_df.index:
                 filename = self.build_path(
                     {"subject": subject, "session": sess_id, **self.svf_long_ent}

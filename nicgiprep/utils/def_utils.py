@@ -1,9 +1,8 @@
-from typing import Optional, Union, Sequence, Tuple
+from typing import Optional, Union, Tuple
 from pathlib import Path
 import nibabel as nib
 
 import numpy as np
-import surfa as sf
 from nibabel import Nifti1Image
 from scipy.optimize import linprog
 import torch
@@ -518,51 +517,6 @@ def svf_to_ras(proxysvf: Nifti1Image) -> Nifti1Image:
     # svf_ras = svf_ras.reshape((4,) + ref_shape)[:3]
 
     return nib.Nifti1Image(np.transpose(svf_ras, axes=(1, 2, 3, 0)), proxysvf.affine)
-
-
-def network_space(
-    im: sf.Volume, shape: Sequence[int], center: Optional[sf.Volume] = None
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Construct transform from network space to the voxel space of an image.
-
-    Constructs a coordinate transform from the space the network will operate
-    in to the zero-based image index space. The network space has isotropic
-    1-mm voxels, left-inferior-anterior (LIA) orientation, and no shear. It is
-    centered on the field of view, or that of a reference image. This space is
-    an indexed voxel space, not world space.
-
-    Parameters
-    ----------
-    im : surfa.Volume
-        Input image to construct the transform for.
-    shape : (3,) array-like
-        Spatial shape of the network space.
-    center : surfa.Volume, optional
-        Center the network space on the center of a reference image.
-
-    Returns
-    -------
-    out : tuple of (3, 4) NumPy arrays
-        Transform from network to input-image space and its inverse, thinking
-        coordinates.
-
-    """
-    old = im.geom
-    new = sf.ImageGeometry(
-        shape=shape,
-        voxsize=1,
-        rotation="LIA",
-        center=old.center if center is None else center.geom.center,
-        shear=None,
-    )
-
-    net_to_vox = old.world2vox @ new.vox2world
-    vox_to_net = new.world2vox @ old.vox2world
-    return (
-        np.float32(net_to_vox.matrix),
-        np.float32(vox_to_net.matrix),
-        new.vox2world.matrix,
-    )
 
 
 def getM(ref: np.ndarray, mov: np.ndarray, use_L1: bool = False) -> np.ndarray:

@@ -36,14 +36,11 @@ dependencies = [
     "tqdm>=4.66",
     "pyyaml>=6.0",
     "munkres>=1.1.4",
-    "h5py>=3.12",
     "pybids>=0.16.4",
-    "surfa>=0.6.3",
-    "torch>=2.2.1",
-    "tensorflow>=2.18",
-    # SynthMorph backends, pinned to the commits used by the pipeline
-    "neurite @ git+https://github.com/adalca/neurite.git@40c6d0e277b12dc9dddb6e76f2dbdd373b7d22b1",
-    "voxelmorph @ git+https://github.com/voxelmorph/voxelmorph.git@375a1492bb8781cbbaf22f0ca2973e5121484f99",
+    "torch>=2.3.0",       # required by fireants
+    "fireants==1.4.0",    # 1.5.0's GreedyRegistration.optimize() calls warp.step(loss), but
+                          # StationaryVelocity.step() (deformation_type="geodesic") takes no
+                          # argument -- breaks the SVF path we rely on. Pinned until fixed upstream.
 ]
 
 [project.optional-dependencies]

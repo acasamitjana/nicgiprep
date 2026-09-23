@@ -7,3 +7,4 @@ data/data_tutorial/BIDS-raw.db
 build/
 *.egg-info/
 *Claude*
+CLAUDE.md
