@@ -108,7 +108,21 @@ def _array_to_fireants_image(array: np.ndarray, affine: np.ndarray, device: str)
     itk_image.SetOrigin(origin)
     return FAImage(itk_image, device=device)
 
-def _grad_penalty(input_tensor):
+def _grad_penalty(input_tensor: torch.Tensor) -> torch.Tensor:
+    '''
+    Calculates the magnitude of the partial gradients in every dimension
+
+    Parameters
+    ----------
+    input_tensor: torch.Tensor
+        deformation/displacement/warp/svf field. It expects 5-D input tensor with number of channels equivalent to
+        the number of spatial dimensions
+
+    Returns
+    -------
+    torch.Tensor
+        gradient calculation
+    '''
     num_spatial = input_tensor.ndim - 2
     assert num_spatial >= 1, f"Need at least 1 spatial dim to compute gradients, got {num_spatial}"
     gradients = []
