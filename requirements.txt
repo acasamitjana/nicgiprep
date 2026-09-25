@@ -1,3 +1,5 @@
+# Frozen reference environment (Python 3.10) — kept for reproducibility only.
+# Dependencies are declared in pyproject.toml: install with `pip install -e .`
 absl-py==2.1.0
 astor==0.8.1
 asttokens==3.0.0

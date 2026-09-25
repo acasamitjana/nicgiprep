@@ -1,7 +1,7 @@
 Pipelines
 =========
 
-.. automodule:: pipelines
+.. automodule:: nicgiprep.pipelines
    :members:
    :show-inheritance:
    :undoc-members:
@@ -9,7 +9,7 @@ Pipelines
 Base
 ----
 
-.. automodule:: pipelines.base
+.. automodule:: nicgiprep.pipelines.base
    :members:
    :show-inheritance:
    :undoc-members:
@@ -17,7 +17,7 @@ Base
 Cross-sectional
 ---------------
 
-.. automodule:: pipelines.cross_sectional
+.. automodule:: nicgiprep.pipelines.cross_sectional
    :members:
    :show-inheritance:
    :undoc-members:
@@ -25,7 +25,7 @@ Cross-sectional
 Longitudinal
 ------------
 
-.. automodule:: pipelines.longitudinal
+.. automodule:: nicgiprep.pipelines.longitudinal
    :members:
    :show-inheritance:
    :undoc-members:
@@ -33,7 +33,7 @@ Longitudinal
 Multimodal
 ----------
 
-.. automodule:: pipelines.multimodal
+.. automodule:: nicgiprep.pipelines.multimodal
    :members:
    :show-inheritance:
    :undoc-members:

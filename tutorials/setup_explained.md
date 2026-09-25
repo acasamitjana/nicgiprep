@@ -1,145 +1,88 @@
-# `setup.py` — What it does
+# `nicgiprep/config.py` and `nicgiprep/resources.py` — what they do
 
-`setup.py` is **not** a packaging file. It is a shared configuration module imported by every script in `scripts/` via `from setup import *`. Its job is to read environment variables, build all the path constants the pipeline needs, and create output directories on disk.
+The old root-level `setup.py` (imported with `from setup import *`) has been split in two modules inside the package. `setup.py` at the repository root is now only a setuptools shim; all packaging metadata lives in `pyproject.toml`.
 
----
+| Module | Side effects on import | Use it for |
+|--------|------------------------|------------|
+| `nicgiprep.resources` | none | paths to atlases, label lists and the pybids config |
+| `nicgiprep.config` | reads env vars, creates folders, prints banner, checks FreeSurfer | everything the pipelines need at run time |
 
-## 1  Backend configuration
-
-```python
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-os.environ.setdefault('NEURITE_BACKEND', 'tensorflow')
-```
-
-Silences TensorFlow C++ warnings and sets the backend for the `neurite` library (used by SynthMorph) to TensorFlow unless already overridden.
+Install the package once with `pip install -e .` from the repository root. `PYTHONPATH` is no longer needed.
 
 ---
 
-## 2  BIDS filename entities and path patterns
+## 1  `nicgiprep.resources` — static resources
 
-```python
-filename_entities = ['subject', 'session', 'run', 'acquisition', ...]
-BIDS_PATH_PATTERN = [...]
-```
+The data folder is located automatically, in this order:
 
-### `filename_entities`
-A whitelist of BIDS key names that are allowed to appear in output filenames. Used throughout the pipeline when converting a `BIDSFile.entities` dict into a filename — any key not in this list is stripped before calling `build_path()`.
-
-### `BIDS_PATH_PATTERN`
-A list of four PyBIDS path-pattern strings, one per imaging modality (`anat`, `func`, `pet`, and a second `anat` pattern for scalar/transform files like affines and v2r matrices). The pipeline calls `bids_loader.build_path(entities, path_patterns=BIDS_PATH_PATTERN)` to construct output file paths in a BIDS-compliant way. Each pattern encodes:
-- Mandatory entities (`subject`, `suffix`, `extension`)
-- Optional entities in square brackets (`session`, `run`, `space`, …)
-- Allowed values for constrained fields via `<opt1|opt2>` syntax
-
----
-
-## 3  Repository root and data paths
-
-```python
-repo_home = os.environ.get('PYTHONPATH')
-```
-
-Reads `PYTHONPATH` as the repository root. This is expected to point to the `nicgiprep/` directory so that data files under `data/` can be located with absolute paths:
+1. `$NICGIPREP_DATA_DIR` (if set)
+2. `nicgiprep/data/` (if the data folder is moved inside the package)
+3. `<repo>/data/` (current layout — works with editable installs)
 
 | Constant | Path | Purpose |
 |----------|------|---------|
-| `labels_registration` | `data/labels_classes_priors/label_list_registration.npy` | Brain-structure labels used for centroid-based rigid registration |
+| `DATA_DIR` | `data/` | Root of the resources |
+| `BIDS_CONFIG` | `data/config/nicgiprep_bids.json` | Custom pybids config (`config=[str(BIDS_CONFIG), "derivatives"]`) |
 | `MNI_TEMPLATE` | `data/atlas/mni_icbm152_t1norm_*.nii.gz` | MNI152 T1w atlas |
 | `MNI_TEMPLATE_SEG` | `data/atlas/mni_icbm152_synthseg_*.nii.gz` | SynthSeg parcellation of the MNI atlas |
 | `MNI_TEMPLATE_MASK` | `data/atlas/mni_icbm152_mask_*.nii.gz` | Brain mask of the MNI atlas |
-| `MNI_SM_V2R` | `data/atlas/mni_to_synthmorph_space.v2r.npy` | Vox-to-RAS for SynthMorph network space aligned to MNI |
-| `MNI_ATLAS_TEMPLATE` / `_SEG` | `data/atlas/mni_reg_to_synthmorph_atlas.*` | MNI atlas registered into SynthMorph network space |
+| `MNI_SM_V2R` | see note in the module | Vox-to-RAS for SynthMorph space aligned to MNI |
+| `MNI_ATLAS_TEMPLATE` / `_SEG` / `_MASK` | `data/atlas/mni_reg_to_synthmorph_atlas.*` | MNI atlas in SynthMorph space |
+
+Label lists (`labels_registration`, SynthSeg / SuperSynth LUTs) are exposed by `nicgiprep.utils.label_utils`.
 
 ---
 
-## 4  Dataset directories
+## 2  `nicgiprep.config` — run-time configuration
 
-### Required environment variable
+### Environment variables
 
-```python
-BIDS_DIR = os.environ['BIDS_DIR']   # e.g. /data/project/rawdata
-```
+| Variable | Required | Meaning |
+|----------|----------|---------|
+| `BIDS_DIR` | yes (or `--bids`) | rawdata root of the BIDS dataset |
+| `DERIVATIVES_DIR` | no | defaults to `<ROOT_DIR>/derivatives` |
+| `FREESURFER_HOME` | yes | FreeSurfer installation (SynthSeg / SynthMorph). The process exits if it is not set. |
 
-The pipeline expects `BIDS_DIR` to point to the **rawdata** root of a BIDS dataset.  
-`ROOT_DIR` is derived as the parent of `BIDS_DIR` (i.e. the dataset root).
+Set them **before** importing `nicgiprep.config` or any `nicgiprep.pipelines` module (the command-line tools do this for you from `--bids` / `--derivatives`).
 
-### Optional environment variable
+### Constants
 
-```python
-DERIVATIVES_DIR = os.environ.get('DERIVATIVES_DIR', ROOT_DIR + '/derivatives')
-```
+| Name | Description |
+|------|-------------|
+| `BIDS_DIR` | Path to rawdata |
+| `ROOT_DIR` | Dataset root (parent of rawdata) |
+| `DERIVATIVES_DIR` | Root of all derivative outputs |
+| `LOGS_DIR`, `TMP_DIR` | `<ROOT_DIR>/logs`, `<ROOT_DIR>/tmp` |
+| `DIR_PIPELINES` | Output folder per pipeline: `nicgiprep-cross`, `nicgiprep-long`, `nicgiprep-mm` |
+| `DESC_PIPELINES` | Description written to each `dataset_description.json` |
+| `BIDS_PATH_PATTERN` | PyBIDS path patterns for `build_path()` |
+| `filename_entities` | BIDS entity keys allowed in output filenames |
+| all `nicgiprep.resources` constants | re-exported |
 
-Where pipeline outputs are written. Defaults to `<ROOT_DIR>/derivatives/` if not set explicitly.
-
-### Scratch directories (always relative to `ROOT_DIR`)
-
-| Constant | Path | Purpose |
-|----------|------|---------|
-| `LOGS_DIR` | `<ROOT_DIR>/logs/` | Log files |
-| `TMP_DIR`  | `<ROOT_DIR>/tmp/`  | Intermediate files (file lists, checkpoints, temporary templates) |
-
-All three directories are **created immediately** if they do not exist.
-
----
-
-## 5  Pipeline output directories
-
-```python
-DIR_PIPELINES = {
-    'preproc':   DERIVATIVES_DIR + '/preproc',
-    'uslr-lin':  DERIVATIVES_DIR + '/uslr-lin',
-    'uslr':      DERIVATIVES_DIR + '/uslr',
-    'uslr-mni':  DERIVATIVES_DIR + '/uslr-mni',
-}
-```
-
-Each entry corresponds to one stage of the USLR pipeline:
-
-| Key | Produced by | Contents |
-|-----|-------------|----------|
-| `preproc` | `scripts/preprocess.py` | SynthSeg segmentations, bias-corrected T1w images, brain masks |
-| `uslr-lin` | `scripts/linear_registration.py` | Per-session rigid affines, images/segs in subject space, subject template, eTIV |
-| `uslr` | `scripts/nonlinear_registration.py` | Per-session SVFs, images/segs after deformable registration, nonlinear template |
-| `uslr-mni` | any script with `--reg_MNI` | MNI-space images, segmentations, and affines |
-
-Every directory is **created on import** and receives a `dataset_description.json` (BIDS-compliant metadata) the first time it is created.
+On import, the derivatives, logs and tmp folders are created, and each pipeline folder gets a `dataset_description.json` the first time.
 
 ---
 
-## 6  First-run banner and FreeSurfer check
+## 3  Command-line tools
 
-```python
-if 'USLR_RUNNING' not in os.environ:
-    # ... print ASCII logo ...
-    if 'FREESURFER_HOME' not in os.environ:
-        exit()
-    os.environ['USLR_RUNNING'] = 'True'
-```
+`pip install -e .` installs:
 
-When imported for the first time in a process (i.e. `USLR_RUNNING` is not yet set), `setup.py`:
-1. Clears the terminal and prints the USLR ASCII logo.
-2. Checks for a FreeSurfer installation (`FREESURFER_HOME` or `FREESURFER_SYNTHMORPH_HOME`). **Exits if neither is found.**
-3. Prints the dataset and derivatives paths being used.
-4. Sets `USLR_RUNNING=True` so subsequent imports within the same process skip the banner.
+| Command | Module |
+|---------|--------|
+| `nicgiprep-cross` | `nicgiprep/scripts/cross_sectional_pipeline.py` |
+| `nicgiprep-long` | `nicgiprep/scripts/longitudinal_pipeline.py` |
+| `nicgiprep-mm` | `nicgiprep/scripts/multimodal_pipeline.py` |
 
-> **In notebooks**, set `os.environ['USLR_RUNNING'] = 'True'` **before** `from setup import *` to suppress the banner and the FreeSurfer exit check.
+The files in the top-level `scripts/` folder are thin wrappers around these modules.
 
 ---
 
-## 7  Summary of exported names
+## 4  In notebooks
 
-After `from setup import *`, every script/notebook has access to:
+```python
+import os
+os.environ["BIDS_DIR"] = "/path/to/rawdata"
+os.environ["FREESURFER_HOME"] = "/path/to/freesurfer"
 
-| Name | Type | Description |
-|------|------|-------------|
-| `BIDS_DIR` | `str` | Path to rawdata |
-| `ROOT_DIR` | `str` | Dataset root (parent of rawdata) |
-| `DERIVATIVES_DIR` | `str` | Root of all derivative outputs |
-| `TMP_DIR` | `str` | Scratch space |
-| `DIR_PIPELINES` | `dict` | Per-stage output directories |
-| `BIDS_PATH_PATTERN` | `list[str]` | PyBIDS path patterns for `build_path()` |
-| `filename_entities` | `list[str]` | Allowed BIDS entity keys for filenames |
-| `labels_registration` | `str` | Path to label list `.npy` |
-| `MNI_TEMPLATE` | `str` | Path to MNI T1w atlas |
-| `MNI_TEMPLATE_SEG` | `str` | Path to MNI atlas segmentation |
-| `MNI_TEMPLATE_MASK` | `str` | Path to MNI atlas brain mask |
+from nicgiprep.config import *
+```
