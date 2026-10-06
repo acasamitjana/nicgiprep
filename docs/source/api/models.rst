@@ -1,7 +1,7 @@
 Models
 ======
 
-.. automodule:: models
+.. automodule:: nicgiprep.models
    :members:
    :show-inheritance:
    :undoc-members:

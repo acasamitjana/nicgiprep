@@ -18,7 +18,7 @@ import pandas as pd
 import nibabel as nib
 from skimage.morphology import ball, binary_dilation
 
-from setup import *
+from nicgiprep.config import *
 from nicgiprep.pipelines.base import Processor
 from nicgiprep.utils.preprocessing_utils import *
 from nicgiprep.utils.fn_utils import one_hot_encoding, rescale_voxel_size
@@ -31,19 +31,11 @@ class CrossSectionalProcessor(Processor):
     """Base class for cross-sectional neuroimaging processing pipelines.
 
     Thin wrapper around :class:`~nicgiprep.pipelines.base.Processor` that
-    initialises common cross-sectional pipeline state via
-    :meth:`_build_processor`.
+    writes its outputs to the ``nicgiprep-cross`` derivatives.
     """
 
-    def _build_processor(self, **kwargs):
-        """Builds cross-sectional pipeline, by initialising relevant variables.
-
-        Subclasses should call ``super()._build_processor()``
-        and then extend or override these attributes.
-        """
-
-        super()._build_processor(**kwargs)
-        self.pipeline_dir = 'nicgiprep-cross'
+    #: Derivatives name / pybids scope of the pipeline outputs.
+    PIPELINE_NAME = "nicgiprep-cross"
 
     def _select_images(self,
                        subject: str,
@@ -312,7 +304,7 @@ class T1wSegmentationProcessor(CrossSectionalProcessor):
             input_file, tmp_dir =  row['input_file'], row['tmp_dir']
 
             proc_sess_dir = join(
-                DIR_PIPELINES[self.pipeline_dir],
+                self.pipeline_dir,
                 "sub-" + str(subject_id),
             )
 
@@ -344,8 +336,8 @@ class T1wSegmentationProcessor(CrossSectionalProcessor):
                 continue
 
             # save original SuperSynth in the utils
-            if not exists(join(DIR_PIPELINES[self.pipeline_dir], seg_1x1x1_fname)):
-                subprocess.call(['cp', seg_file, join(DIR_PIPELINES[self.pipeline_dir], seg_1x1x1_fname)])
+            if not exists(join(self.pipeline_dir, seg_1x1x1_fname)):
+                subprocess.call(['cp', seg_file, join(self.pipeline_dir, seg_1x1x1_fname)])
 
             # copy the volumes and qc data
             vols_df = pd.read_csv(csv_file, dtype=str)
@@ -384,7 +376,7 @@ class T1wSegmentationProcessor(CrossSectionalProcessor):
                 seg_res_arr[seg_argmax_res_arr == it_ul] = ul
 
             # save anat and utils files
-            save_volume(seg_res_arr, aff=onehot_proxy.affine, path=join(DIR_PIPELINES[self.pipeline_dir], seg_fname))
+            save_volume(seg_res_arr, aff=onehot_proxy.affine, path=join(self.pipeline_dir, seg_fname))
 
             # remove supersynth directory
             subprocess.call(['rm', '-rf', tmp_dir])
@@ -463,14 +455,14 @@ class T1wSegmentationProcessor(CrossSectionalProcessor):
                 "ses-" + sess_id)
 
             proc_anat_dir = join(
-                DIR_PIPELINES[self.pipeline_dir],
+                self.pipeline_dir,
                 "sub-" + str(subject),
                 "ses-" + str(sess_id),
                 "anat",
             )
 
             proc_utils_dir = join(
-                DIR_PIPELINES[self.pipeline_dir],
+                self.pipeline_dir,
                 "sub-" + subject,
                 "ses-" + sess_id,
                 "utils",
@@ -566,7 +558,7 @@ class T1wBiasCorrectionProcessor(CrossSectionalProcessor):
 
         if not resampled_file:
             resampled_filepath = join(
-                DIR_PIPELINES[self.pipeline_dir], self.build_path(resampled_entities)
+                self.pipeline_dir, self.build_path(resampled_entities)
             )
             proxyraw = nib.load(raw_file.path)
             pixdim = np.sqrt(np.sum(proxyraw.affine * proxyraw.affine, axis=0))[:-1]
@@ -687,7 +679,7 @@ class T1wBiasCorrectionProcessor(CrossSectionalProcessor):
         sess_id = seg_file.entities['session']
 
         preproc_dirname = join(
-            DIR_PIPELINES[self.pipeline_dir],
+            self.pipeline_dir,
             "sub-" + subject,
             "ses-" + sess_id,
             "utils",
@@ -704,7 +696,7 @@ class T1wBiasCorrectionProcessor(CrossSectionalProcessor):
         # build T1w corrected and resampled entities
         resampled_entities = copy.copy(raw_entities)
         resampled_entities["acquisition"] = "1"
-        resampled_entities["scope"] = self.pipeline_dir
+        resampled_entities["scope"] = self.pipeline_name
         resampled_entities["datatype"] = "utils"
 
         # # build output paths
@@ -897,7 +889,7 @@ class T1wBiasCorrectionProcessor(CrossSectionalProcessor):
         for sess_id in tqdm.tqdm(sessions, leave=False):
             # input segs
             synthseg_entities = copy.copy(self.seg_entities)
-            synthseg_entities["scope"] = [self.pipeline_dir]
+            synthseg_entities["scope"] = [self.pipeline_name]
             synthseg_entities["suffix"] = ["T1wsynthseg", "synthseg"]
             synthseg_entities["datatype"] = ["utils"]
             seg_files = self._get_data(
@@ -907,7 +899,7 @@ class T1wBiasCorrectionProcessor(CrossSectionalProcessor):
                 continue
 
             cross_anat = join(
-                DIR_PIPELINES[self.pipeline_dir],
+                self.pipeline_dir,
                 "sub-" + subject,
                 "ses-" + sess_id,
                 "anat",
@@ -992,7 +984,7 @@ class MNIRegistrationProcessor(CrossSectionalProcessor):
 
             # input segs
             synthseg_entities = copy.copy(self.seg_entities)
-            synthseg_entities["scope"] = [self.pipeline_dir]
+            synthseg_entities["scope"] = [self.pipeline_name]
             synthseg_entities["datatype"] = ["utils"]
             synthseg_entities["suffix"] = ["T1wsynthseg", "synthseg"]
             seg_files = self._get_data(
@@ -1010,7 +1002,7 @@ class MNIRegistrationProcessor(CrossSectionalProcessor):
                 raw_entities["suffix"] = "T1w"
                 raw_entities["datatype"] = "anat"
                 raw_entities["acquisition"] = [None, 'orig']
-                raw_entities["scope"] = self.pipeline_dir
+                raw_entities["scope"] = self.pipeline_name
                 raw_entities["space"] = [None, 'subject']
                 raw_entities.pop("datatype", None)
                 if 'run' not in raw_entities: raw_entities['run'] = None
@@ -1027,13 +1019,13 @@ class MNIRegistrationProcessor(CrossSectionalProcessor):
                 output_entities['space'] = 'MNI'
                 output_entities['acquisition'] = None
                 output_filename = self.build_path(output_entities)
-                output_filepath = join(DIR_PIPELINES[self.pipeline_dir], output_filename)  ## Saving the final result in /anat
+                output_filepath = join(self.pipeline_dir, output_filename)  ## Saving the final result in /anat
 
                 output_entities['suffix'] = 'aff'
                 output_entities['desc'] = None
                 output_entities['extension'] = '.npy'
                 output_aff_filename = self.build_path(output_entities)
-                output_aff_filepath = join(DIR_PIPELINES[self.pipeline_dir], output_aff_filename)  ## Saving the final result in /anat
+                output_aff_filepath = join(self.pipeline_dir, output_aff_filename)  ## Saving the final result in /anat
 
                 if exists(output_filepath) and not force_flag:
                     exit_dict['images_processed'] += [seg_file.path]

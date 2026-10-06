@@ -128,7 +128,8 @@ jobs:
       - name: Install test dependencies
         run: |
           pip install codecov==2.1.13
-          pip install pytest numpy nibabel scikit-image torch surfa munkres
+          pip install pytest "numpy<2" nibabel scikit-image torch surfa munkres
+          pip install --no-deps -e .
       - name: Run tests
         run: |
           pytest -q tests/
