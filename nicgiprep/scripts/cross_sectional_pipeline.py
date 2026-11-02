@@ -113,7 +113,7 @@ def main():
     print("\n\nLOADING Dataset ...", end=" ", flush=True)
     db_file = join(ROOT_DIR, "BIDS-raw.db")
     if not exists(db_file):
-        bids_loader = bids.layout.BIDSLayout(root=BIDS_DIR, validate=False, config=bids_config)
+        bids_loader = bids.layout.BIDSLayout(root=BIDS_DIR, validate=False, config=bids_config, index_metadata=False)
         try:
             bids_loader.save(db_file)
         except:
@@ -121,7 +121,7 @@ def main():
             pass
     else:
         bids_loader = bids.layout.BIDSLayout(
-            root=BIDS_DIR, validate=False, database_path=db_file, config=bids_config
+            root=BIDS_DIR, validate=False, database_path=db_file, config=bids_config, index_metadata=False
         )
 
     bids_loader.add_derivatives(DIR_PIPELINES["nicgiprep-cross"], **{'config': bids_config})

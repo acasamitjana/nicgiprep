@@ -102,11 +102,11 @@ def main():
     print("\n\nLOADING Dataset ...", end=" ", flush=True)
     db_file = join(ROOT_DIR, "BIDS-raw.db")
     if not exists(db_file):
-        bids_loader = bids.layout.BIDSLayout(root=BIDS_DIR, validate=False, config=bids_config)
+        bids_loader = bids.layout.BIDSLayout(root=BIDS_DIR, validate=False, config=bids_config, index_metadata=False)
         bids_loader.save(db_file)
     else:
         bids_loader = bids.layout.BIDSLayout(
-            root=BIDS_DIR, validate=False, database_path=db_file, config=bids_config
+            root=BIDS_DIR, validate=False, database_path=db_file, config=bids_config, index_metadata=False
         )
 
     # Register all derivative directories needed by the multimodal pipeline.
