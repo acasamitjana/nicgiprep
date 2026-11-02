@@ -21,7 +21,7 @@ from skimage.morphology import ball, binary_dilation
 from nicgiprep.config import *
 from nicgiprep.pipelines.base import Processor
 from nicgiprep.utils.preprocessing_utils import *
-from nicgiprep.utils.fn_utils import one_hot_encoding, rescale_voxel_size
+from nicgiprep.utils.fn_utils import one_hot_encoding, rescale_voxel_size, crop_label, apply_crop, apply_crop_v2r
 from nicgiprep.utils.io_utils import save_volume, remove_duplicates_csv
 from nicgiprep.utils.def_utils import vol_resample_fast, register_to_MNI
 from nicgiprep.utils.label_utils import SYNTHSEG_LUT, CSF_LABELS, SYNTHSEG_GMM_ONTOLOGY, labels_registration
@@ -174,7 +174,7 @@ class T1wSegmentationProcessor(CrossSectionalProcessor):
         return self.process(**kwargs)
 
     def process(
-        self, prefix: str = "", gpu_flag: bool = False, threads: int = 16, **kwargs
+        self, prefix: str = "", gpu_flag: bool = False, threads: int = 16, skip_synthseg: bool = False, **kwargs
     ):
         """Collect all input/output paths and invoke SynthSeg in one batch call.
 
@@ -187,10 +187,15 @@ class T1wSegmentationProcessor(CrossSectionalProcessor):
             If ``True``, enable GPU inference. Default is ``False``.
         threads : int, optional
             Number of CPU threads for SynthSeg. Default is 16.
+        skip_synthseg : bool, optional
+            Whether to skip SynthSeg for speeeeeed. SynthSeg segmentations are used only for linear registration
         **kwargs
             Forwarded to :meth:`process_subject`.
+
         """
         self._on_pipeline_init()
+
+        device = 'cuda' if gpu_flag else 'cpu'
 
         # self.bids_loader.get(**{"session": sess_id, "subject": subject, 'suffix': ['T1wsynthseg', 'synthseg']})
         csv_file = join(TMP_DIR, "files_to_process_supersynth.csv")  ## CSV file for SuperSynth batch processing
@@ -238,7 +243,7 @@ class T1wSegmentationProcessor(CrossSectionalProcessor):
         run_df = copy.deepcopy(supersynth_df)
         run_df = run_df[run_df['run']]
 
-        if len(synthseg_files) >= 1:
+        if len(synthseg_files) >= 1 and not skip_synthseg:
             gpu_cmd = [] if gpu_flag else ["--cpu"]
             ## Run SynthSeg
             subprocess.call(
@@ -336,8 +341,12 @@ class T1wSegmentationProcessor(CrossSectionalProcessor):
                 continue
 
             # save original SuperSynth in the utils
+            utils_dir = dirname(join(self.pipeline_dir, seg_1x1x1_fname))
+            if not exists(utils_dir):
+                os.makedirs(utils_dir)
+
             if not exists(join(self.pipeline_dir, seg_1x1x1_fname)):
-                subprocess.call(['cp', seg_file, join(self.pipeline_dir, seg_1x1x1_fname)])
+                subprocess.call(['mri_convert', seg_file, join(self.pipeline_dir, seg_1x1x1_fname)])
 
             # copy the volumes and qc data
             vols_df = pd.read_csv(csv_file, dtype=str)
@@ -359,14 +368,16 @@ class T1wSegmentationProcessor(CrossSectionalProcessor):
             im_proxy = nib.load(input_file)
             seg_proxy = nib.load(seg_file)
             seg_arr = np.array(seg_proxy.dataobj)
+            seg_arr_crop, crop_coords = crop_label(seg_arr, margin=3)
+            seg_v2r = apply_crop_v2r(seg_proxy.affine, crop_coords)
 
             # resample labelmaps to original resolution
-            onehot_arr, onehot_lut = one_hot_encoding(seg_arr, return_lut=True)
-            onehot_proxy = nib.Nifti1Image(
-                onehot_arr.astype('float'), seg_proxy.affine
+            onehot_arr_crop, onehot_lut = one_hot_encoding(seg_arr_crop, return_lut=True)
+            onehot_proxy_crop = nib.Nifti1Image(
+                onehot_arr_crop.astype('float'), seg_v2r
             )
             onehot_proxy = vol_resample_fast(
-                im_proxy, onehot_proxy,
+                im_proxy, onehot_proxy_crop, device=device
             )
 
             onehot_res_arr = np.array(onehot_proxy.dataobj)
@@ -388,6 +399,7 @@ class T1wSegmentationProcessor(CrossSectionalProcessor):
         print("-" * 15 + "  SUMMARY  " + "-" * 14)
         print("=" * 40)
         print(f"Total Number of images found: {len(images_found)}")
+        print(f"Total Number of images already processed: {len(images_found)-len(supersynth_df)}/{len(images_found)}")
         print(f"Total Number of images processed: {len(supersynth_df)}")
         print(f"SUCCESS:                  {len(supersynth_df) - len(supersynth_failed)}/{len(supersynth_df)}")
         print(f"FAILED:                   {len(supersynth_failed)}/{len(supersynth_df)}")
@@ -744,6 +756,7 @@ class T1wBiasCorrectionProcessor(CrossSectionalProcessor):
             return resampled_flag
 
         proxyres = nib.load(resampled_flag["filepath"])
+        proxymask = nib.load(output_mask_filepath)
 
         # ------------------------ #
         # Bias field correction    #
@@ -764,27 +777,42 @@ class T1wBiasCorrectionProcessor(CrossSectionalProcessor):
                 proxyseg = vol_resample_fast(proxyres, proxyseg, mode="nearest")
 
             seg = np.array(proxyseg.dataobj)
-            soft_seg = one_hot_encoding(seg, categories=SYNTHSEG_LUT)
-            soft_seg = self._posterior2generative_labelmap(
-                soft_seg, lut=SYNTHSEG_LUT
+            mask = np.array(proxymask.dataobj) > 0
+
+            # crop images for speeeeeeeed
+            mask_crop, crop_coord = crop_label(mask, margin=2)
+            seg_crop = apply_crop(seg, crop_coord)
+            mri_acq_crop = apply_crop(mri_acq, crop_coord)
+
+            soft_seg_crop = one_hot_encoding(seg_crop, categories=SYNTHSEG_LUT)
+            soft_seg_crop = self._posterior2generative_labelmap(
+                soft_seg_crop, lut=SYNTHSEG_LUT
             )
             try:
-                mri_acq_corr, bias_field = bias_field_corr(
-                    mri_acq,
-                    soft_seg,
+                mri_acq_corr_crop, bias_field_crop = bias_field_corr(
+                    mri_acq_crop,
+                    soft_seg_crop,
                     penalty=1,
                     VERBOSE=False,
                     filter_exceptions=True,
                 )
+                mri_acq_corr = np.zeros_like(mri_acq)
+                bias_field = np.zeros_like(mri_acq)
+                mri_acq_corr[crop_coord[0][0]: crop_coord[0][1],
+                             crop_coord[1][0]: crop_coord[1][1],
+                             crop_coord[2][0]: crop_coord[2][1]] = mri_acq_corr_crop
+                bias_field[crop_coord[0][0]: crop_coord[0][1],
+                           crop_coord[1][0]: crop_coord[1][1],
+                           crop_coord[2][0]: crop_coord[2][1]] = bias_field_crop
+
             except:
                 return {
                     "exit_code": -1,
                     "message": "bias field cannot be computed.",
                 }
 
-            del soft_seg
+            del soft_seg_crop
 
-            mask = seg > 0
             wm_mask = (seg == 2) | (seg == 41)
 
             del seg

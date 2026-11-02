@@ -20,6 +20,7 @@ import pdb
 from os.path import exists, join, dirname
 from argparse import ArgumentParser
 import copy
+import time
 
 import yaml
 
@@ -47,6 +48,9 @@ def parse_args():
                         help="Enable GPU for SuperSynth/SynthSeg.")
     parser.add_argument("--gpu_num", default=0,
                         help="Specific GPU number to be used (default uses CUDA_VISIBLE_DEVICES)")
+    parser.add_argument("--skip_synthseg", action="store_true",
+                        help="Skip slow CPU SynthSeg (util file for cortical parcellation, used in longitudinal "
+                             "and in the MNI registration steps)")
     parser.add_argument("--num_cores", default=1, type=int,
                         help="number of parallel cores to run in SynthSeg and SuperSynth segmentation (default: 1).")
 
@@ -89,6 +93,7 @@ def main():
     if args.derivatives is not None:
         os.environ["DERIVATIVES_DIR"] = args.derivatives
 
+    t_init = time.time()
     # ── Imports ───────────────────────────────────────────────────────────────
     import bids
     from nicgiprep.config import BIDS_DIR, ROOT_DIR, BIDS_CONFIG, DIR_PIPELINES
@@ -108,11 +113,15 @@ def main():
     print("\n\nLOADING Dataset ...", end=" ", flush=True)
     db_file = join(ROOT_DIR, "BIDS-raw.db")
     if not exists(db_file):
-        bids_loader = bids.layout.BIDSLayout(root=BIDS_DIR, validate=False, config=bids_config)
-        bids_loader.save(db_file)
+        bids_loader = bids.layout.BIDSLayout(root=BIDS_DIR, validate=False, config=bids_config, index_metadata=False)
+        try:
+            bids_loader.save(db_file)
+        except:
+            # no writing permissions to rawdata
+            pass
     else:
         bids_loader = bids.layout.BIDSLayout(
-            root=BIDS_DIR, validate=False, database_path=db_file, config=bids_config
+            root=BIDS_DIR, validate=False, database_path=db_file, config=bids_config, index_metadata=False
         )
 
     bids_loader.add_derivatives(DIR_PIPELINES["nicgiprep-cross"], **{'config': bids_config})
@@ -130,6 +139,7 @@ def main():
     proces_seg_kwargs["gpu_flag"] = args.gpu
     proces_seg_kwargs["threads"] = args.num_cores
     proces_seg_kwargs["verbose"] = args.verbose
+    proces_seg_kwargs["skip_synthseg"] = args.skip_synthseg
 
 
     # ── Step 1: SynthSeg and SuperSynth for T1w modality ──────────────────────
@@ -148,6 +158,9 @@ def main():
 
     # ── Step 3: MNI Registration for T1w modality ─────────────────────────────
     print("\n=== Step 3: MNI Registration for T1w modality ===")
+    if args.skip_synthseg:
+        print(' Skipping MNI registration: found skip_MNI=True')
+        return
 
     processing_mni = MNIRegistrationProcessor(
         bids_loader=bids_loader,
@@ -156,6 +169,14 @@ def main():
 
     processing_mni.process(force_flag=args.force, session_list=args.sessions)
 
+    t_fi = time.time()
+    print(" +++ CROSS-SECTIONAL Pipeline DONE +++")
+    print(" OUTPUT_DIR: ", os.environ["DERIVATIVES_DIR"])
+    print(" Number of subjects to process: ",  str(len(processing_seg.subject_list)))
+    print(" Processing time:               ", t_fi - t_init)
+    print(" Processing time/subject:       ", str((t_fi - t_init)/len(processing_seg.subject_list)))
+    print(" +++ CROSS-SECTIONAL Pipeline DONE +++")
+    print(" +++++++++++++++++++++++++++++++++++++")
 
 if __name__ == "__main__":
     main()
