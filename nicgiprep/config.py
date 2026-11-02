@@ -75,8 +75,8 @@ else:
     DERIVATIVES_DIR = os.path.join(ROOT_DIR, "derivatives")
 os.environ["DERIVATIVES_DIR"] = DERIVATIVES_DIR
 
-LOGS_DIR = os.path.join(ROOT_DIR, "logs")
-TMP_DIR = os.path.join(ROOT_DIR, "tmp")
+LOGS_DIR = os.path.join(os.path.dirname(DERIVATIVES_DIR), "logs")
+TMP_DIR = os.path.join(os.path.dirname(DERIVATIVES_DIR), "tmp")
 
 os.makedirs(DERIVATIVES_DIR, exist_ok=True)
 os.makedirs(LOGS_DIR, exist_ok=True)

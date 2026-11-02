@@ -553,6 +553,33 @@ def apply_crop(image: np.ndarray, crop_coord: list[list[int]]) -> np.ndarray:
     ]
 
 
+def apply_crop_v2r(v2r: np.ndarray, crop_coord: list[list[int]]) -> np.ndarray:
+    """Update a voxel-to-RAS affine to account for a bounding-box crop.
+
+    Voxel ``(0, 0, 0)`` of the cropped volume corresponds to voxel
+    ``(crop_coord[0][0], crop_coord[1][0], crop_coord[2][0])`` of the
+    original volume, so only the translation column changes (by the linear
+    part of ``v2r`` applied to the crop's lower corner); the
+    rotation/scaling block is unaffected by cropping.
+
+    Parameters
+    ----------
+    v2r : np.ndarray
+        Voxel-to-RAS affine of the uncropped volume, shape ``(4, 4)``.
+    crop_coord : list of [int, int]
+        Crop coordinates as returned by :func:`crop_label`.
+
+    Returns
+    -------
+    np.ndarray
+        Voxel-to-RAS affine of the cropped volume, shape ``(4, 4)``.
+    """
+    low = np.asarray([c[0] for c in crop_coord])
+    v2r_crop = v2r.copy()
+    v2r_crop[:3, 3] = v2r[:3, :3] @ low + v2r[:3, 3]
+    return v2r_crop
+
+
 def compute_centroids_ras(
     seg_file: str, labelfile: str
 ) -> tuple[np.ndarray, np.ndarray]:
